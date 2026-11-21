@@ -426,7 +426,9 @@
       const prev = GD.loadConfig();
       patch.folderId = parsedId;
       if (parsedId !== prev.folderId) {
-        patch.folderName = parsedId === 'root' ? 'My Drive (Root)' : '';
+        patch.folderName = parsedId === 'root'
+          ? 'My Drive (Di Luar Folder)'
+          : (parsedId === 'all' ? 'Seluruh Drive (Semua Lokasi)' : '');
       }
     }
     if (fnEl) patch.fileName = fnEl.value.trim();

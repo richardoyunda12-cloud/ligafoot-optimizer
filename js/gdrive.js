@@ -14,11 +14,11 @@
   const DRIVE_API = 'https://www.googleapis.com/drive/v3';
   const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
-  // Client ID OAuth Web bawaan (publik & dibatasi origin GitHub Pages di Google Cloud Console)
+  // Client ID OAuth Web & lokasi default (root = My Drive di luar folder mana pun)
   const DEFAULT_CFG = {
     clientId: '838675130193-1fdugv6f859tv7euqqgtv092b3m71ae6.apps.googleusercontent.com',
-    folderId: '',
-    folderName: '',
+    folderId: 'root',
+    folderName: 'My Drive (Di Luar Folder)',
     fileName: 'ligafoot_slot1.ligafoot',
     autoSync: true,
     lastFileId: '',
@@ -67,8 +67,10 @@
 
   function parseFolderId(input) {
     const raw = String(input || '').trim();
-    if (!raw) return '';
-    if (raw.toLowerCase() === 'root' || raw.toLowerCase() === 'mydrive') return 'root';
+    if (!raw) return 'root';
+    const low = raw.toLowerCase();
+    if (low === 'root' || low === 'mydrive' || low === 'my drive') return 'root';
+    if (low === 'all' || low === 'semua' || low === '*') return 'all';
     // Cocokkan URL Google Drive folder:
     // https://drive.google.com/drive/folders/<ID>?usp=...
     // https://drive.google.com/drive/u/0/folders/<ID>
@@ -82,7 +84,7 @@
 
   function isConfigured(cfg) {
     const c = cfg || loadConfig();
-    return Boolean(c.clientId && c.folderId);
+    return Boolean(c.clientId && (c.folderId || c.fileName));
   }
 
   function loadToken() {
@@ -358,22 +360,26 @@
   }
 
   async function listSavesInFolder(token, folderId, fileName = '') {
-    const fid = parseFolderId(folderId);
-    if (!fid) throw new Error('Folder ID Google Drive belum diisi.');
+    const fid = parseFolderId(folderId || 'root');
+    const targetName = String(fileName || '').trim();
     const parts = [
-      `'${escapeDriveQueryStr(fid)}' in parents`,
       'trashed = false',
       "mimeType != 'application/vnd.google-apps.folder'",
     ];
-    const targetName = String(fileName || '').trim();
+    if (fid && fid !== 'all') {
+      parts.unshift(`'${escapeDriveQueryStr(fid)}' in parents`);
+    }
     if (targetName) {
       parts.push(`name = '${escapeDriveQueryStr(targetName)}'`);
+    } else if (fid === 'all') {
+      // Saat cari di seluruh Drive tanpa nama spesifik, batasi ke file .ligafoot agar tidak mengambil file non-save
+      parts.push("(name contains '.ligafoot' or name contains 'ligafoot_')");
     }
     const params = new URLSearchParams({
       q: parts.join(' and '),
       orderBy: 'modifiedTime desc',
       pageSize: '15',
-      fields: 'files(id,name,mimeType,size,modifiedTime,md5Checksum)',
+      fields: 'files(id,name,mimeType,size,modifiedTime,md5Checksum,parents)',
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
     });
@@ -421,9 +427,7 @@
     if (!cfg.clientId) {
       throw new Error('Client ID Google OAuth belum diatur. Buka Pengaturan Google Drive Sync terlebih dahulu.');
     }
-    if (!cfg.folderId) {
-      throw new Error('Folder Google Drive belum dipilih atau diisi.');
-    }
+    const targetFolder = cfg.folderId || 'root';
 
     let token = await requestAccessToken(cfg.clientId, {
       prompt: options.interactive ? (options.prompt || '') : '',
@@ -432,14 +436,14 @@
 
     let files;
     try {
-      files = await listSavesInFolder(token, cfg.folderId, cfg.fileName);
+      files = await listSavesInFolder(token, targetFolder, cfg.fileName);
     } catch (err) {
       if (err && err.code === 401) {
         token = await requestAccessToken(cfg.clientId, {
           forceRefresh: true,
           prompt: options.interactive ? 'consent' : '',
         });
-        files = await listSavesInFolder(token, cfg.folderId, cfg.fileName);
+        files = await listSavesInFolder(token, targetFolder, cfg.fileName);
       } else {
         throw err;
       }

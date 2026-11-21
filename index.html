@@ -75,9 +75,11 @@
           </label>
         </div>
         <div style="margin-top:7px">
-          <label class="calc-field">Folder Google Drive <span class="c-muted">(tempel Link Folder Drive atau ID, atau klik Cari Folder)</span>
+          <label class="calc-field">Lokasi di Google Drive <span class="c-muted">(<code>root</code> = di luar folder / My Drive utama, <code>all</code> = seluruh Drive, atau link folder)</span>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
-              <input id="gd-folder-input" class="input mono" type="text" style="flex:1;min-width:180px" placeholder="https://drive.google.com/drive/folders/... atau Folder ID" />
+              <input id="gd-folder-input" class="input mono" type="text" style="flex:1;min-width:160px" placeholder="root (di luar folder) atau link/ID folder" />
+              <button type="button" class="btn btn-sm" onclick="LFApp.pickGDriveFolder('root','My Drive (Di Luar Folder)')" title="File disimpan langsung di halaman utama My Drive">🏠 Tanpa Folder</button>
+              <button type="button" class="btn btn-sm" onclick="LFApp.pickGDriveFolder('all','Seluruh Drive (Semua Lokasi)')" title="Cari save dengan nama di atas di mana saja dalam Drive">🌐 Semua Lokasi</button>
               <button type="button" class="btn btn-sm" onclick="LFApp.openGDriveFolderPicker()">📁 Cari Folder</button>
             </div>
           </label>
@@ -853,7 +855,8 @@
     <div class="qs-input-wrap">
       <input id="gd-folder-search" class="input" type="text" placeholder="Cari nama folder (mis. LigaFoot)..." onkeydown="if(event.key==='Enter')LFApp.searchGDriveFolders()" />
       <button type="button" class="btn btn-sm btn-green" onclick="LFApp.searchGDriveFolders()">Cari</button>
-      <button type="button" class="btn btn-sm" onclick="LFApp.pickGDriveFolder('root','My Drive (Root)')">Root</button>
+      <button type="button" class="btn btn-sm" onclick="LFApp.pickGDriveFolder('root','My Drive (Di Luar Folder)')">🏠 Tanpa Folder</button>
+      <button type="button" class="btn btn-sm" onclick="LFApp.pickGDriveFolder('all','Seluruh Drive (Semua Lokasi)')">🌐 Semua Lokasi</button>
     </div>
     <div id="gd-folder-list" style="overflow-y:auto;max-height:56vh;display:flex;flex-direction:column;gap:6px;font-size:12px"></div>
   </div>
