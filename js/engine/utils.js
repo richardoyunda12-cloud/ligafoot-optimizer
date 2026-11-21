@@ -479,24 +479,91 @@
   }
 
   /**
-   * Normalisasi record pemain dari static_db:
-   * Mendukung format compact array `[name, pos, foot, nat, s1, s2]` maupun object penuh.
+   * Parser referensi teruji untuk playerDynamic (user = object, AI = array[6..7]).
+   */
+  function parseDynamicRow(row) {
+    if (row && typeof row === 'object' && !Array.isArray(row)) {
+      return [row.id || row.playerId || null, { ...row }];
+    }
+    if (Array.isArray(row) && row.length >= 6) {
+      const extra = (row.length > 6 && row[6] && typeof row[6] === 'object' && !Array.isArray(row[6]))
+        ? row[6]
+        : {};
+      const d = {
+        ...extra,
+        id: row[0],
+        age: row[1],
+        force: row[2],
+        contractYears: row[3],
+        salary: row[4],
+        marketValue: row[5],
+      };
+      return [row[0], d];
+    }
+    return [null, null];
+  }
+
+  /**
+   * Parser referensi teruji untuk extraRows (regen/transfer: object atau array[14..16]).
+   */
+  function parseExtraRow(row) {
+    if (row && typeof row === 'object' && !Array.isArray(row)) {
+      const d = { ...row, _source: 'regen' };
+      return [d.id || d.playerId || null, d];
+    }
+    if (Array.isArray(row) && row.length >= 14) {
+      const extra = (row.length > 15 && row[15] && typeof row[15] === 'object' && !Array.isArray(row[15]))
+        ? row[15]
+        : {};
+      const d = {
+        id: row[0],
+        name: row[1],
+        position: row[2],
+        age: row[3],
+        nationality: row[4],
+        foot: row[5],
+        force: row[6],
+        potential: row[7],
+        skill1: row[8],
+        skill2: row[9],
+        star: row[10],
+        salary: row[11],
+        marketValue: row[12],
+        contractYears: row[13],
+        photo: row.length > 14 ? row[14] : '',
+        _source: 'regen',
+        ...extra,
+      };
+      return [d.id || null, d];
+    }
+    return [null, null];
+  }
+
+  /**
+   * Adapter universal Static DB: mendukung baik objek JSON asli ligafoot_static_db.json
+   * MAUPUN format array kompak static_db.min.json.gz:
+   *   Player: ["Name", "Pos", "S1", "S2", "Nat", "Foot", age, force, starInt, hashInt]
    */
   function getStaticPlayer(staticPlayers, pid) {
     if (!staticPlayers || !pid) return {};
-    const rec = staticPlayers[pid];
-    if (!rec) return {};
-    if (Array.isArray(rec)) {
+    const entry = staticPlayers[pid];
+    if (!entry) return {};
+    if (Array.isArray(entry)) {
       return {
-        name: rec[0] || '',
-        pos: rec[1] || 'MC',
-        foot: rec[2] || 'D',
-        nationality: rec[3] || '',
-        s1: rec[4] || '',
-        s2: rec[5] || '',
+        id: pid,
+        name: entry[0] || pid,
+        pos: entry[1] || '',
+        s1: entry[2] || '',
+        s2: entry[3] || '',
+        nationality: entry[4] || '',
+        foot: entry[5] || 'D',
+        age: entry[6],
+        force: entry[7],
+        star: Boolean(entry[8]),
+        hash: entry[9] || 0,
       };
     }
-    return rec;
+    return entry;
   }
 
   /**
@@ -509,7 +576,9 @@
     if (!rec) return {};
     if (Array.isArray(rec)) {
       return {
-        name: rec[0] || '',
+        id: cid,
+        name: rec[0] || cid,
+        short: rec[1] || '',
         shortName: rec[1] || '',
         country: rec[2] || '',
         level: safeInt(rec[3], 0),
@@ -552,6 +621,8 @@
     translatePhaseName,
     translateCompName,
     translateRoundName,
+    parseDynamicRow,
+    parseExtraRow,
     getStaticPlayer,
     getStaticClub,
   };

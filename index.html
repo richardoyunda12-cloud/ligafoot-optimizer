@@ -355,10 +355,10 @@
           <select id="s-pos-mob" onchange="syncScoutQuick('pos', this.value)">
             <option value="">Pos: All</option>
             <option value="G">GK</option><option value="LD">RB</option><option value="LE">LB</option>
-            <option value="Z">CB</option><option value="V">DM</option>
+            <option value="ZD">RCB</option><option value="ZE">LCB</option><option value="VOL">CDM</option>
             <option value="MC">CM</option><option value="MD">RM</option><option value="ME">LM</option>
-            <option value="MO">AM</option><option value="PD">RW</option>
-            <option value="PE">LW</option><option value="SA">SS</option><option value="A">ST</option>
+            <option value="MA">CAM</option><option value="PD">RW</option>
+            <option value="PE">LW</option><option value="SA">SS</option><option value="ATA">ST</option>
           </select>
           <select id="s-sort-mob" onchange="syncScoutQuick('sort', this.value)">
             <option value="SMART">Urut: Pintar</option>
@@ -379,11 +379,11 @@
               <select id="s-pos" onchange="syncScoutDesktopToMob();resetScoutLimitAndRender()">
                 <option value="">Semua Posisi</option>
                 <option value="G">GK — Kiper</option><option value="LD">RB — Bek Kanan</option><option value="LE">LB — Bek Kiri</option>
-                <option value="Z">CB — Bek Tengah</option><option value="V">DM — Gelandang Bertahan</option>
-                <option value="MC">CM — Gelandang Tengah</option><option value="MD">RM — Gelandang Kanan</option>
-                <option value="ME">LM — Gelandang Kiri</option><option value="MO">AM — Gelandang Serang</option>
-                <option value="PD">RW — Sayap Kanan</option><option value="PE">LW — Sayap Kiri</option>
-                <option value="SA">SS — Second Striker</option><option value="A">ST — Striker</option>
+                <option value="ZD">RCB — Bek Tengah Kanan</option><option value="ZE">LCB — Bek Tengah Kiri</option>
+                <option value="VOL">CDM — Gelandang Bertahan</option><option value="MC">CM — Gelandang Tengah</option>
+                <option value="MD">RM — Gelandang Kanan</option><option value="ME">LM — Gelandang Kiri</option>
+                <option value="MA">CAM — Gelandang Serang</option><option value="PD">RW — Sayap Kanan</option>
+                <option value="PE">LW — Sayap Kiri</option><option value="SA">SS — Second Striker</option><option value="ATA">ST — Striker</option>
               </select>
               <select id="s-foot" onchange="resetScoutLimitAndRender()">
                 <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>

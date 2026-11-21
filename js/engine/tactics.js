@@ -23,82 +23,103 @@
 
   /**
    * Bytecode #35011 & #21893: Evaluasi bonus skill di Match Engine v1.2.0.
-   * - DES/MAR (+2%) hanya dihitung di DEF (cat===1), TIDAK di MID.
-   * - GK SAI: +3% di s1, +1% di s2.
+   * - Mendukung kode posisi penuh: G, LD, LE, LAT, ZD, ZE, ZAG, Z, VOL, V, MC, MD, ME, MA, MO, MEI, PD, PE, SA, ATA, A.
+   * - Mendukung kode skill penuh: REF, COL, SAI, DPE, PEN, DES, MAR, CAB, VEL, RES, CRU, PAS, ARM, DRI, FIN.
+   * - DES+MAR di DEF tidak menumpuk (cuma +5% sekali); PAS+ARM di MID tidak menumpuk (cuma +3% sekali).
+   * - GK SAI: +3% di s1, +1% di s2 (#35011).
    */
-  function evalSkillStacking(posCode, s1, s2) {
-    const cat = U.posCategory(posCode);
-    const sk1 = (s1 || '').trim().toUpperCase();
-    const sk2 = (s2 || '').trim().toUpperCase();
+  function evalSkillStacking(posCode, s1Raw, s2Raw) {
+    const pos = String(posCode || 'MC').toUpperCase();
+    const cat = (C.EXACT_CAT && (pos in C.EXACT_CAT)) ? C.EXACT_CAT[pos] : U.posCategory(pos);
+    const s1 = String(s1Raw || '').trim().toUpperCase();
+    const s2 = String(s2Raw || '').trim().toUpperCase();
+    const skills = new Set([s1, s2].filter(Boolean));
 
-    function singleBonus(sk, slotIdx) {
-      if (!sk) return 0.0;
-      const w = slotIdx === 1 ? 1.0 : 0.55;
-      if (cat === 0) { // GK
-        if (sk === 'REF') return slotIdx === 1 ? 4.0 : 2.2;
-        if (sk === 'SAI') return slotIdx === 1 ? 3.0 : 1.0; // #35011: s1=+3%, s2=+1%
-        if (sk === 'PEN') return slotIdx === 1 ? 2.5 : 1.5;
-        if (sk === 'LID' || sk === 'PAS' || sk === 'RES') return 1.0 * w;
-        return 0.0;
+    if (cat === 0) {
+      let bonus = 1.0;
+      const notes = [];
+      if (s1 === 'REF' || s1 === 'COL') {
+        bonus *= 1.04;
+        notes.push(`${U.skillEn(s1)}(s1)+4%`);
+      } else if (s1 === 'SAI') {
+        bonus *= 1.03; // #35011: s1 SAI = +3%
+        notes.push('RUS(s1)+3%');
       }
-      if (cat === 1) { // DEF (Z, LD, LE)
-        if (posCode === 'Z') {
-          if (sk === 'DES' || sk === 'MAR' || sk === 'CAB' || sk === 'FOR') return 3.2 * w;
-          if (sk === 'VEL' || sk === 'PAS' || sk === 'LID' || sk === 'RES') return 2.0 * w;
-        } else { // Fullbacks LD/LE
-          if (sk === 'VEL' || sk === 'CRU' || sk === 'DES' || sk === 'MAR') return 3.2 * w;
-          if (sk === 'PAS' || sk === 'RES' || sk === 'DRI' || sk === 'FOR') return 2.0 * w;
-        }
-        return 0.5 * w;
+      if (s2 === 'REF' || s2 === 'COL') {
+        bonus *= 1.02;
+        notes.push(`${U.skillEn(s2)}(s2)+2%`);
+      } else if (s2 === 'SAI') {
+        bonus *= 1.01; // #35011: s2 SAI = +1%
+        notes.push('RUS(s2)+1%');
       }
-      if (cat === 2) { // MID (V, MC, MD, ME) — #35011: DES/MAR tidak memberi +2% sector power di MID
-        if (posCode === 'V') {
-          if (sk === 'PAS' || sk === 'FOR' || sk === 'RES') return 3.2 * w;
-          if (sk === 'CAB' || sk === 'VEL' || sk === 'LID') return 2.0 * w;
-          if (sk === 'DES' || sk === 'MAR') return 1.0 * w;
-        } else if (posCode === 'MD' || posCode === 'ME') {
-          if (sk === 'VEL' || sk === 'CRU' || sk === 'PAS' || sk === 'DRI') return 3.2 * w;
-          if (sk === 'RES' || sk === 'FIN') return 2.0 * w;
-        } else { // MC
-          if (sk === 'PAS' || sk === 'RES') return 3.2 * w;
-          if (sk === 'DRI' || sk === 'VEL' || sk === 'FIN' || sk === 'FOR' || sk === 'LID') return 2.2 * w;
-        }
-        return 0.6 * w;
-      }
-      if (cat === 3) { // AM (MO)
-        if (sk === 'PAS' || sk === 'DRI' || sk === 'FIN') return 3.4 * w;
-        if (sk === 'VEL' || sk === 'CRU' || sk === 'RES') return 2.2 * w;
-        return 0.6 * w;
-      }
-      if (cat === 4) { // ATK (PD, PE, SA, A)
-        if (posCode === 'PD' || posCode === 'PE') {
-          if (sk === 'VEL' || sk === 'DRI' || sk === 'CRU' || sk === 'FIN') return 3.5 * w;
-          if (sk === 'PAS' || sk === 'RES') return 2.0 * w;
-        } else { // SA, A
-          if (sk === 'FIN' || sk === 'VEL' || sk === 'CAB' || sk === 'DRI' || sk === 'FOR') return 3.5 * w;
-          if (sk === 'PAS' || sk === 'PEN') return 2.0 * w;
-        }
-        return 0.5 * w;
-      }
-      return 0.0;
+      if (skills.has('DPE') || skills.has('PEN')) notes.push('PEN(+8% penalti)');
+      const pct = U.roundTo((bonus - 1.0) * 100, 2);
+      const grade = pct >= 5.0 ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD');
+      return { stackPct: pct, pct, grade, nonStack: false, note: notes.join(' ') || 'Standar' };
     }
 
-    const b1 = singleBonus(sk1, 1);
-    const b2 = singleBonus(sk2, 2);
-    const nonStack = Boolean(sk1 && sk2 && sk1 === sk2);
-    const totalPct = nonStack ? b1 : (b1 + b2);
+    if (cat === 1 || cat === 2) {
+      const nonStack = (skills.has('DES') && skills.has('MAR')) || (s1 && s2 && s1 === s2);
+      let bonus = 1.0;
+      const notes = [];
+      if (skills.has('DES') || skills.has('MAR')) {
+        bonus *= 1.05;
+        notes.push('TCK/MRK+5%');
+      }
+      if (skills.has('CAB')) {
+        bonus *= 1.04;
+        notes.push('HDG+4%');
+      }
+      if (skills.has('VEL')) {
+        bonus *= 1.02;
+        notes.push('PAC+2%');
+      }
+      if (skills.has('RES')) notes.push('STA(-40% lelah)');
+      if (skills.has('CRU') && cat === 1) notes.push('CRS(Corner)');
+      const pct = U.roundTo((bonus - 1.0) * 100, 2);
+      if (nonStack) {
+        return { stackPct: pct, pct, grade: 'NON-STACK', nonStack: true, note: 'TCK+MRK tidak stack (cuma +5%)' };
+      }
+      const grade = (pct >= 7.0 || (pct >= 5.0 && skills.has('RES'))) ? 'GOD' : (pct >= 4.0 ? 'GOOD' : 'STD');
+      return { stackPct: pct, pct, grade, nonStack: false, note: notes.join(' ') || 'Standar' };
+    }
 
-    let grade = 'C';
-    if (nonStack) grade = 'DUP!';
-    else if (totalPct >= 5.0) grade = 'GOD';
-    else if (totalPct >= 3.8) grade = 'A';
-    else if (totalPct >= 2.2) grade = 'B';
+    if (cat === 3) {
+      const nonStack = (skills.has('PAS') && skills.has('ARM')) || (s1 && s2 && s1 === s2);
+      let bonus = 1.0;
+      const notes = [];
+      if (skills.has('PAS') || skills.has('ARM')) {
+        bonus *= 1.03;
+        notes.push('PAS/PLY+3%');
+      }
+      if (skills.has('DRI')) {
+        bonus *= 1.02;
+        notes.push('DRI+2%');
+      }
+      // #35011: DES/MAR di MID tidak menambah sector power +2%
+      if (skills.has('RES')) notes.push('STA(-40% lelah)');
+      if (skills.has('FIN')) notes.push('FIN(+5% konv)');
+      const pct = U.roundTo((bonus - 1.0) * 100, 2);
+      if (nonStack) {
+        return { stackPct: pct, pct, grade: 'NON-STACK', nonStack: true, note: 'PAS+PLY tidak stack (cuma +3%)' };
+      }
+      const grade = (pct >= 5.0 || (pct >= 3.0 && skills.has('RES'))) ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD');
+      return { stackPct: pct, pct, grade, nonStack: false, note: notes.join(' ') || 'Standar' };
+    }
 
-    return {
-      stackPct: U.roundTo(totalPct, 2),
-      nonStack,
-      grade,
-    };
+    // cat === 4: Penyerang / Sayap (PD, PE, SA, ATA, A)
+    const nonStack = Boolean(s1 && s2 && s1 === s2);
+    let bonus = 1.0;
+    const notes = [];
+    if (skills.has('DRI')) { bonus *= 1.03; notes.push('DRI+3%'); }
+    if (skills.has('CAB')) { bonus *= 1.03; notes.push('HDG+3%'); }
+    if (skills.has('VEL')) { bonus *= 1.02; notes.push('PAC+2%'); }
+    if (skills.has('FIN')) { bonus *= 1.035; notes.push('FIN(+5% konv)'); }
+    if (skills.has('RES')) notes.push('STA(-40% lelah)');
+    if (skills.has('CRU')) notes.push('CRS(Corner)');
+    const pct = U.roundTo((bonus - 1.0) * 100, 2);
+    const grade = nonStack ? 'NON-STACK' : (pct >= 5.5 ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD'));
+    return { stackPct: pct, pct, grade, nonStack, note: notes.join(' ') || 'Standar' };
   }
 
   // Bytecode #21995–#22002: Team Chemistry (integration ent[0] & rhythm bitmask rx)
@@ -266,17 +287,20 @@
     if (targetSlot === 'G' || playerPos === 'G') {
       return playerPos === targetSlot ? 1.00 : 0.25;
     }
+    if (playerPos === targetSlot) {
+      return 1.00;
+    }
     if (ruleId !== null && ruleId !== undefined && C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[ruleId]) {
       const ri = C.RULE_SLOT_INFO[ruleId];
       if (ri.wildcard) {
         return 1.00; // #3575: Slot 10 & 17 wildcard menerima semua non-GK tanpa penalti outOfPosition
       }
       if (Array.isArray(ri.exact) && ri.exact.includes(playerPos)) {
-        return 1.00;
+        return 0.995; // Sedikit di bawah exact match 1.00 agar VOL->VOL dan MC->MC terpasang di kursinya masing-masing
       }
     }
     const row = C.POS_COMPAT_MATRIX[playerPos] || {};
-    return row[targetSlot] !== undefined ? row[targetSlot] : 0.78;
+    return row[targetSlot] !== undefined ? row[targetSlot] : 0.70;
   }
 
   function isPlayerStar(p) {
@@ -349,18 +373,18 @@
     }
 
     const capRanked = [...xiPlayers].sort((a, b) => {
-      const lidA = (a.s1 === 'LID' || a.s2 === 'LID') ? 1 : 0;
-      const lidB = (b.s1 === 'LID' || b.s2 === 'LID') ? 1 : 0;
+      const lidA = (a.s1 === 'LID' || a.s2 === 'LID' || a.age >= 28) ? 1 : 0;
+      const lidB = (b.s1 === 'LID' || b.s2 === 'LID' || b.age >= 28) ? 1 : 0;
       return (lidB - lidA) || (b.force - a.force) || (b.age - a.age);
     });
 
     const fkRanked = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + (p.s1 === 'PAS' ? 6 : (p.s2 === 'PAS' ? 4 : 0)) + ((p.s1 === 'FIN' || p.s2 === 'FIN') ? 3 : 0);
+      const score = p => p.force + ((p.s1 === 'PAS' || p.s1 === 'ARM') ? 6 : ((p.s2 === 'PAS' || p.s2 === 'ARM') ? 4 : 0)) + ((p.s1 === 'FIN' || p.s2 === 'FIN') ? 3 : 0);
       return score(b) - score(a);
     });
 
     const ckRanked = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + (p.s1 === 'CRU' ? 7 : (p.s2 === 'CRU' ? 4.5 : 0)) + ((p.s1 === 'PAS' || p.s2 === 'PAS') ? 3 : 0);
+      const score = p => p.force + (p.s1 === 'CRU' ? 7 : (p.s2 === 'CRU' ? 4.5 : 0)) + ((p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM') ? 3 : 0);
       return score(b) - score(a);
     });
 
@@ -557,6 +581,31 @@
       }
     }
 
+    // 2-opt internal swap untuk menghilangkan salah kaki (LD<->LE) & memaksimalkan total skor
+    for (let pass = 0; pass < 3; pass++) {
+      let improved = false;
+      for (let i = 1; i < assigned.length; i++) {
+        for (let j = i + 1; j < assigned.length; j++) {
+          if (!assigned[i] || !assigned[j]) continue;
+          const pi = assigned[i].player;
+          const pj = assigned[j].player;
+          const si = assigned[i].slot;
+          const sj = assigned[j].slot;
+          const ri = assigned[i].ruleId;
+          const rj = assigned[j].ruleId;
+          const curSum = assigned[i].score + assigned[j].score;
+          const evI = evalPlayerForSlot(pj, si, true, repLevel, ri);
+          const evJ = evalPlayerForSlot(pi, sj, true, repLevel, rj);
+          if (evI.score + evJ.score > curSum + 0.01) {
+            assigned[i] = { ...assigned[i], player: pj, score: U.roundTo(evI.score, 2), wrongFoot: evI.wrongFoot, compat: evI.compat };
+            assigned[j] = { ...assigned[j], player: pi, score: U.roundTo(evJ.score, 2), wrongFoot: evJ.wrongFoot, compat: evJ.compat };
+            improved = true;
+          }
+        }
+      }
+      if (!improved) break;
+    }
+
     const xiClean = assigned.filter(Boolean);
     const gkScores = [];
     const defScores = [];
@@ -572,11 +621,15 @@
       else if (sec === 'M') midScores.push(item.score);
       else if (sec === 'A') atkScores.push(item.score);
       // Catatan: sec === 'X' (slot ke-11 pada 3-4-3, rule 18) diabaikan oleh #34992 slotSector!
-      if (p.pos === 'A' || p.pos === 'SA') {
+      if (p.pos === 'ATA' || p.pos === 'A' || p.pos === 'SA') {
         hasDedicatedStriker = true;
       }
     }
 
+    const f9Players = xiClean
+      .map(x => x.player)
+      .filter(p => (p.pos === 'ATA' || p.pos === 'A' || p.pos === 'SA') && (p.s1 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'PAS' || p.s2 === 'ARM'))
+      .map(p => p.name);
     const falseNinePen = hasDedicatedStriker ? 1.00 : 0.90;
     const avg = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0.0);
 
@@ -627,7 +680,9 @@
       formationBugInfo: bugInfo,
       foreignCount: foreignUsed,
       hasLeader,
-      falseNine: !hasDedicatedStriker,
+      falseNine: f9Players.length >= 2,
+      falseNinePlayers: f9Players,
+      noDedicatedStriker: !hasDedicatedStriker,
       wrongFootCount: xiClean.filter(x => x.wrongFoot).length,
       setPieces: spAudit,
       setPieceWarnings: spAudit.warnings,
@@ -674,7 +729,7 @@
       sumA = U.safeNum(sec.ATK, 15) * shape.A; cntA = shape.A;
     }
 
-    const falseNineMul = (xiObj && xiObj.falseNine) ? 0.90 : 1.00;
+    const falseNineMul = (xiObj && xiObj.noDedicatedStriker) ? 0.90 : 1.00;
     const leaderMul = (xiObj && xiObj.hasLeader === false) ? 1.00 : 1.015;
     const lockerMul = Math.max(0.92, 1.0 - lockerHitPct / 100.0);
     const chem = (xiObj && xiObj.chemistry !== undefined) ? xiObj.chemistry : 100;
@@ -765,11 +820,11 @@
       const pos = p.pos || '';
       const s1 = p.s1 || '';
       const s2 = p.s2 || '';
-      if (['LD', 'LE', 'MD', 'ME', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU' || s1 === 'VEL' || s2 === 'VEL')) {
+      if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU' || s1 === 'VEL' || s2 === 'VEL')) {
         wingTags++;
         if (wingNames.length < 3) wingNames.push(`${p.name || U.posEn(pos)}(${U.skillEn(s1)})`);
       }
-      if (['MC', 'MO', 'SA', 'A'].includes(pos) && (s1 === 'PAS' || s2 === 'PAS' || s1 === 'DRI' || s2 === 'DRI')) {
+      if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(pos) && (s1 === 'PAS' || s2 === 'PAS' || s1 === 'ARM' || s2 === 'ARM' || s1 === 'DRI' || s2 === 'DRI')) {
         centerTags++;
         if (centerNames.length < 3) centerNames.push(`${p.name || U.posEn(pos)}(${U.skillEn(s1)})`);
       }
@@ -971,10 +1026,10 @@
     let uWings = 0;
     let uCenter = 0;
     for (const item of best.xi) {
-      if (['LD', 'LE', 'MD', 'ME', 'PD', 'PE'].includes(item.pos) && ['CRU', 'VEL'].includes(item.s1)) uWings += 2;
-      else if (['LD', 'LE', 'MD', 'ME', 'PD', 'PE'].includes(item.pos) && ['CRU', 'VEL'].includes(item.s2)) uWings += 1;
-      if (['MC', 'MO', 'SA', 'A'].includes(item.pos) && ['PAS', 'DRI', 'FIN'].includes(item.s1)) uCenter += 2;
-      else if (['MC', 'MO', 'SA', 'A'].includes(item.pos) && ['PAS', 'DRI', 'FIN'].includes(item.s2)) uCenter += 1;
+      if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(item.pos) && ['CRU', 'VEL'].includes(item.s1)) uWings += 2;
+      else if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(item.pos) && ['CRU', 'VEL'].includes(item.s2)) uWings += 1;
+      if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(item.pos) && ['PAS', 'ARM', 'DRI', 'FIN'].includes(item.s1)) uCenter += 2;
+      else if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(item.pos) && ['PAS', 'ARM', 'DRI', 'FIN'].includes(item.s2)) uCenter += 1;
     }
 
     let recFocus = 'Center';

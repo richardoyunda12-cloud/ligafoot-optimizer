@@ -19,39 +19,43 @@
     return Math.round(grossFee * (1.0 - tax));
   }
 
-  function buildPlayerRecord(dyn, staticPlayers, isUserTeam = false, teamId = '', teamName = '', teamCountry = '', userDiv = 1) {
+  function buildPlayerRecord(dynRaw, staticPlayers, isUserTeam = false, teamId = '', teamName = '', teamCountry = '', userDiv = 1) {
+    const dyn = (dynRaw && typeof dynRaw === 'object') ? dynRaw : {};
     const pid = String(dyn.id || dyn.playerId || '');
     const stat = U.getStaticPlayer(staticPlayers, pid);
 
     const name = dyn.name || stat.name || pid || 'Unknown';
-    const pos = dyn.pos || stat.pos || 'MC';
-    const foot = (dyn.foot || stat.foot || 'D').toUpperCase();
-    const nationality = (dyn.nationality || stat.nationality || teamCountry || '').toUpperCase();
-    const s1 = (dyn.s1 || stat.s1 || '').toUpperCase();
-    const s2 = (dyn.s2 || stat.s2 || '').toUpperCase();
+    let pos = String(dyn.position || dyn.pos || stat.pos || 'MC').toUpperCase();
+    if (C.EXACT_CAT && !(pos in C.EXACT_CAT)) pos = 'MC';
+    const foot = String(dyn.foot || stat.foot || 'D').toUpperCase();
+    const nationality = String(dyn.nationality || stat.nationality || teamCountry || '').toUpperCase();
+    const s1 = String(dyn.skill1 || dyn.s1 || stat.s1 || '').toUpperCase();
+    const s2 = String(dyn.skill2 || dyn.s2 || stat.s2 || '').toUpperCase();
 
-    const age = U.safeInt(dyn.age, 22);
-    const force = U.safeInt(dyn.force, 20);
-    const potential = U.safeInt(dyn.potential, force);
+    const age = U.safeInt((dyn.age !== undefined && dyn.age !== null) ? dyn.age : stat.age, 22);
+    const force = U.safeInt(dyn.force, U.safeInt(stat.force, 20));
+    const potential = U.safeInt(dyn.potential, Math.max(force, U.safeInt(dyn.potCap, force)));
     const potCap = U.safeInt(dyn.potCap, potential);
-    const hashVal = U.safeInt(dyn.hash, Math.max(1, Math.min(10, Math.round(potCap / 10))));
+    const hashVal = U.safeInt(('hash' in dyn && dyn.hash !== null && dyn.hash !== undefined) ? dyn.hash : stat.hash, Math.max(1, Math.min(10, Math.round(potCap / 10))));
     const growthFrac = U.roundTo(U.safeNum(dyn.growthFrac, 0.0), 3);
     const effForce = U.roundTo(force + growthFrac, 2);
 
     const salary = Math.round(U.safeNum(dyn.salary, 0));
     const marketValue = Math.round(U.safeNum(dyn.marketValue, 0));
-    const contractDays = U.safeInt(dyn.contractDays, 365);
-    const contractYears = U.safeInt(dyn.contractYears, Math.max(1, Math.round(contractDays / 365)));
+    const contractYears = U.safeInt(dyn.contractYears, 1);
+    const contractDays = (dyn.contractDays !== undefined && dyn.contractDays !== null)
+      ? U.safeInt(dyn.contractDays, contractYears * 365)
+      : (contractYears * 365);
     const energy = U.safeInt(dyn.energy, 100);
 
     const injured = Boolean(dyn.injured);
-    const injuryDays = U.safeInt(dyn.injuryDays, 0);
+    const injuryDays = U.safeInt(dyn.injuryDays, U.safeInt(dyn.injuryWeeks, 0) * 7);
     const injTier = U.injuryTier(injuryDays);
     const injurySaleMul = injured ? U.injurySaleFactor(injuryDays) : 1.0;
 
     const suspended = Boolean(dyn.suspended);
     const starAwarded = Boolean(dyn.starAwarded);
-    const star = Boolean(dyn.star || stat.star || starAwarded);
+    const star = Boolean((('star' in dyn) ? dyn.star : stat.star) || starAwarded);
     const top = Boolean(dyn.top);
     const forSale = Boolean(dyn.forSale);
     const loanable = Boolean(dyn.loanable);
@@ -70,8 +74,8 @@
     const rx = (dyn.rx !== undefined && dyn.rx !== null) ? U.safeInt(dyn.rx, 7) : 7;
     const rhythm = U.roundTo(T.rhythmOf(dyn), 2);
 
-    const seasonGoals = U.safeInt(dyn.seasonGoals, 0);
-    const seasonAssists = U.safeInt(dyn.seasonAssists, 0);
+    const seasonGoals = U.safeInt(dyn.seasonGoals !== undefined ? dyn.seasonGoals : dyn.goals, 0);
+    const seasonAssists = U.safeInt(dyn.seasonAssists !== undefined ? dyn.seasonAssists : dyn.assists, 0);
     const careerGoals = U.safeInt(dyn.careerGoals, 0);
     const careerGames = U.safeInt(dyn.careerGames, 0);
     const seasonMinutes = Math.round(U.safeNum(dyn.seasonMinutes, 0));
@@ -90,13 +94,13 @@
 
     const stackInfo = T.evalSkillStacking(pos, s1, s2);
     const cat = U.posCategory(pos);
-    const declineAge = U.getDeclineAge(pos);
-    const sellWarnAge = U.getSellWarnAge(pos);
-    const isDeclining = age >= declineAge;
+    const declineAge = (C.DECLINE_START_AGE && C.DECLINE_START_AGE[pos]) || U.getDeclineAge(pos);
+    const sellWarnAge = declineAge - 1;
+    const isDeclining = (age >= declineAge) || (growthFrac <= -0.15);
 
     const potGap = potCap - force;
-    const isTrap = (potential - potCap >= 4) && (potGap <= 2) && (age <= 24);
-    const isGem = (potGap >= 6) && (age <= 23) && !stackInfo.nonStack;
+    const isTrap = (potential - potCap) >= 4;
+    const isGem = (potCap - potential) >= 4 || (age <= 22 && potGap >= 8) || (age <= 23 && potGap >= 6 && !stackInfo.nonStack);
 
     // Arbitrase Jual Counter +39% & +40% & Arab 1.4x + Jual Langsung v9 (INJURED_SALE + Pajak)
     const gross39 = Math.round(marketValue * C.COUNTER_AVG_REALIZED * injurySaleMul);
@@ -132,10 +136,17 @@
       marketValue,
     });
 
-    const gamesPlayed = Math.max(0, Math.round(seasonMinutes / 90.0));
-    const avgRating = matchRatings.length
-      ? U.roundTo(matchRatings.reduce((s, x) => s + U.safeNum(x, 6.5), 0) / matchRatings.length, 2)
-      : '-';
+    const gamesPlayed = U.safeInt(dyn.gamesPlayed, Math.max(0, Math.round(seasonMinutes / 90.0)));
+    const rawAvgR = U.safeNum(dyn.avgRating, 0.0);
+    const avgRating = rawAvgR > 0
+      ? U.roundTo(rawAvgR, 2)
+      : (matchRatings.length
+        ? U.roundTo(matchRatings.reduce((s, x) => s + U.safeNum(Array.isArray(x) ? x[0] : (x && x.rating), 6.5), 0) / matchRatings.length, 2)
+        : 0.0);
+    const salPerForce = Math.round(salary / Math.max(1, force));
+    const clubHistory = Array.isArray(dyn.clubHistory) ? dyn.clubHistory : [];
+    const honors = Array.isArray(dyn.honors) ? dyn.honors : [];
+    const moodFrom = dyn.moodFrom || null;
     const nearDrop = growthFrac <= -0.75;
     const stackNote = stackInfo.nonStack
       ? 'Skill duplikat (tidak menumpuk di Match Engine v1.2.0)'
@@ -164,6 +175,7 @@
       stackGrade: stackInfo.grade,
       stackNote,
       salary,
+      salPerForce,
       marketValue,
       contractDays,
       contractYears,
@@ -207,6 +219,9 @@
       boughtPrice,
       boughtDate,
       cardsByComp,
+      clubHistory,
+      honors,
+      moodFrom,
       declineAge,
       sellWarnAge,
       isDeclining,
@@ -285,34 +300,41 @@
   }
 
   function extractTeamRoster(teamObj, staticPlayers, isUserTeam = false, teamId = '', teamName = '', teamCountry = '', userDiv = 1) {
-    const rawDyn = (teamObj && teamObj.playerDynamic && typeof teamObj.playerDynamic === 'object')
-      ? teamObj.playerDynamic
-      : {};
-    const extraRows = Array.isArray(teamObj && teamObj.extraRows) ? teamObj.extraRows : [];
+    const tobj = (teamObj && typeof teamObj === 'object') ? teamObj : {};
     const seenIds = new Set();
     const roster = [];
 
-    for (const [pid, dObj] of Object.entries(rawDyn)) {
-      if (!dObj || typeof dObj !== 'object') continue;
-      const merged = { ...dObj, id: dObj.id || pid };
-      const rec = buildPlayerRecord(merged, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
-      seenIds.add(rec.id);
-      roster.push(rec);
+    const rawDyn = tobj.playerDynamic;
+    if (Array.isArray(rawDyn)) {
+      for (const row of rawDyn) {
+        const [pid, d] = U.parseDynamicRow(row);
+        if (pid && !seenIds.has(pid)) {
+          seenIds.add(pid);
+          roster.push(buildPlayerRecord(d, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
+        }
+      }
+    } else if (rawDyn && typeof rawDyn === 'object') {
+      for (const [pid, dObj] of Object.entries(rawDyn)) {
+        if (!dObj || typeof dObj !== 'object') continue;
+        const merged = { ...dObj, id: dObj.id || pid };
+        const rec = buildPlayerRecord(merged, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
+        seenIds.add(rec.id);
+        roster.push(rec);
+      }
     }
 
-    for (const row of extraRows) {
-      if (!row || typeof row !== 'object') continue;
-      const rid = String(row.id || row.playerId || '');
-      if (rid && seenIds.has(rid)) continue;
-      const rec = buildPlayerRecord(row, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
-      seenIds.add(rec.id);
-      roster.push(rec);
+    for (const row of (Array.isArray(tobj.extraRows) ? tobj.extraRows : [])) {
+      const [pid, d] = U.parseExtraRow(row);
+      if (pid && !seenIds.has(pid)) {
+        seenIds.add(pid);
+        roster.push(buildPlayerRecord(d, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
+      }
     }
 
     const youth = [];
-    for (const yRow of (Array.isArray(teamObj && teamObj.youthPlayers) ? teamObj.youthPlayers : [])) {
+    for (const yRow of (Array.isArray(tobj.youthPlayers) ? tobj.youthPlayers : [])) {
       if (!yRow || typeof yRow !== 'object') continue;
-      const yRec = buildPlayerRecord(yRow, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
+      const yRec = buildPlayerRecord({ ...yRow, isYouth: true }, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
       yRec.development = U.safeInt(yRow.development, 50);
       yRec.isYouth = true;
       youth.push(yRec);
