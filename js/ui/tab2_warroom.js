@@ -422,6 +422,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
       <div class="wr-cheat-chips">
         ${rec ? `<span class="badge b-good mono" style="font-size:11px">⚽ ${esc(fmtForm(rec.formation))}</span>` : ''}
+        ${rec && rec.winPct !== undefined ? `<span class="badge ${rec.winPct >= rec.lossPct ? 'b-good' : 'b-warn'} mono" style="font-size:11px">📊 ${rec.winPct}% W · ${rec.drawPct}% D · ${rec.lossPct}% L</span>` : ''}
         <span class="badge b-info" style="font-size:11px">${esc(shortStyle)}</span>
         <span class="badge ${refObj ? refObj.badge : 'b-muted'}" style="font-size:11px">Marking: ${esc(shortMark)}</span>
         ${tkt ? `<span class="badge ${tkt.diffs && tkt.diffs.length ? 'b-warn' : 'b-good'} mono" style="font-size:11px">🎟️ ${tktCompact}</span>` : '<span class="badge b-muted" style="font-size:11px">✈️ Tanpa Tiket</span>'}
@@ -435,7 +436,20 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
     </div>`;
 
-  // H2H Visual Bar
+  // H2H Visual Bar + Peluang Menang (#48031)
+  const simBar = (rec && rec.winPct !== undefined) ? `
+    <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+      <div class="flex-between" style="font-size:10.5px;margin-bottom:4px;gap:6px;flex-wrap:wrap">
+        <span><b>📊 Peluang Hasil (#48031)</b> · <span class="c-muted">Ball ${rec.possPct}% · Shot ${rec.uShots} vs ${rec.oShots} · xG ${rec.xGF}–${rec.xGA}</span></span>
+        <span class="mono"><b class="c-green">${rec.winPct}%</b> / <b class="c-amber">${rec.drawPct}%</b> / <b class="c-red">${rec.lossPct}%</b></span>
+      </div>
+      <div style="display:flex;height:7px;border-radius:99px;overflow:hidden;background:var(--card)">
+        <div style="width:${rec.winPct}%;background:var(--green)"></div>
+        <div style="width:${rec.drawPct}%;background:var(--amber)"></div>
+        <div style="width:${rec.lossPct}%;background:var(--red)"></div>
+      </div>
+    </div>` : '';
+
   const h2hBlock = (m && rec) ? `
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:10px 11px;margin-bottom:10px">
       <div class="flex-between mb-8">
@@ -443,6 +457,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
         <span class="mono c-muted" style="font-size:11px">Kita <b class="c-sky">${rec.avgScore}</b> vs Lawan <b>${fx.oppAvg}</b> (${effEdge >= 0 ? '+' : ''}${effEdge})</span>
       </div>
       ${renderH2HBars(rec.enginePow, m.oppPow)}
+      ${simBar}
     </div>` : '';
 
   // Kartu 1: Formasi Rekomendasi + Intip 11 XI + Top 3 (5 kolom pas 360px + tombol XI)
@@ -453,8 +468,8 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
           <span class="kpi-lbl">1. Formasi Rekomendasi</span>
           <div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-size:19px;font-weight:900" class="mono c-green">${esc(fmtForm(rec.formation))}</span>
-            <span class="badge ${m.keepActive ? 'b-good' : 'b-info'}">${m.keepActive ? '✓ PERTAHANKAN' : `🔄 GANTI (+${m.scoreGain})`}</span>
-            <span class="badge b-muted mono">A${fmtMod(rec.enginePow.atkMod)}/D${fmtMod(rec.enginePow.defMod)}</span>
+            <span class="badge ${m.keepActive ? 'b-good' : 'b-info'}">${m.keepActive ? '✓ PERTAHANKAN' : `🔄 GANTI (+${m.scoreGain}% W)`}</span>
+            ${rec.winPct !== undefined ? `<span class="badge b-good mono">${rec.winPct}% Win</span>` : ''}
             ${rec.falseNine ? '<span class="badge b-accent">⚡ FALSE NINE</span>' : ''}
           </div>
         </div>
@@ -463,17 +478,17 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       <div style="font-size:11px;margin-bottom:8px">${(m.reasons || []).map(r => `<div>• ${esc(r)}</div>`).join('')}</div>
       ${renderXiPeekHtml(rec, fx)}
       <div class="tbl-wrap"><table class="wr-top3-tbl"><thead><tr>
-        <th>Top 3</th><th class="col-hide-mob">Mod</th><th>MID</th><th>ATK</th><th>DEF</th><th class="col-hide-mob">FB-WF</th><th>Skor</th><th>XI</th>
+        <th>Top 3</th><th class="col-hide-mob">Fokus</th><th>MID</th><th>ATK</th><th>DEF</th><th class="col-hide-mob">FB-WF</th><th>Win%</th><th>XI</th>
       </tr></thead><tbody>
         ${(m.top3 || []).map((tf, ti) => `<tr class="${tf.formation === rec.formation ? 'hl-user' : ''}">
           <td>
             <b>#${ti + 1} ${esc(fmtForm(tf.formation))}</b>
-            <span class="wr-form-mod-sub mono">A${fmtMod(tf.atkMod)}/D${fmtMod(tf.defMod)}${tf.wrongFootCount ? ' · ⚠FB' : ''}</span>
+            <span class="wr-form-mod-sub mono">${esc(tf.optFocus || rec.optFocus || 'Center')} · xG ${tf.xGF ?? '-'}${tf.wrongFootCount ? ' · ⚠FB' : ''}</span>
           </td>
-          <td class="mono col-hide-mob">${fmtMod(tf.atkMod)}/${fmtMod(tf.defMod)}</td>
+          <td class="mono col-hide-mob">${esc(tf.optFocus || '-')}</td>
           <td>${fmtDelta(tf.dMid)}</td><td>${fmtDelta(tf.dAtk)}</td><td>${fmtDelta(tf.dDef)}</td>
           <td class="mono col-hide-mob ${tf.wrongFootCount ? 'c-amber' : 'c-green'}">${tf.wrongFootCount}</td>
-          <td class="mono c-green"><b>${tf.matchupScore >= 0 ? '+' : ''}${tf.matchupScore}</b></td>
+          <td class="mono ${tf.winPct >= tf.lossPct ? 'c-green' : 'c-amber'}"><b>${tf.winPct !== undefined ? tf.winPct + '%' : (tf.matchupScore >= 0 ? '+' : '') + tf.matchupScore}</b></td>
           <td><button type="button" class="btn btn-sm" onclick="openFormInTab3('${escJs(tf.formation)}', ${fx.safeRotate ? 'true' : 'false'})">XI</button></td>
         </tr>`).join('')}
       </tbody></table></div>

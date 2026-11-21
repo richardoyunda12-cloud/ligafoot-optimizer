@@ -781,13 +781,53 @@
     const totalPower = rawDef + rawMid + rawAtk + rawGk * 0.35;
     const bugInfo = (C.FORMATION_BUGS && C.FORMATION_BUGS[fk]) || null;
 
+    // Hitung jumlah pengumpan silang sayap & perkiraan skor penembak (#21822 + #21835)
+    let wingCrossers = 0;
+    let shooterNum = 0;
+    let shooterDen = 0;
+    if (xiList.length) {
+      for (const item of xiList) {
+        const p = item.player || item;
+        const pos = p.pos || item.slot || '';
+        const s1 = p.s1 || '';
+        const s2 = p.s2 || '';
+        if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU')) {
+          wingCrossers++;
+        }
+        const sec = item.sectorCode || 'M';
+        if (sec !== 'G' && sec !== 'X') {
+          const w = sec === 'A' ? 5.0 : sec === 'M' ? 2.0 : 0.4;
+          const sc = U.safeNum(item.score !== undefined ? item.score : p.force, 0);
+          shooterNum += sc * w;
+          shooterDen += w;
+        }
+      }
+    }
+    const shooterVal = shooterDen > 0
+      ? shooterNum / shooterDen
+      : U.safeNum(xiObj && xiObj.avgScore, (rawGk + rawDef + rawMid + rawAtk) / 4);
+
+    // #21822 effectiveSectors: Focus Center (0.8*ATK + 0.2*MID) vs Focus Wings (+2%/crosser up to +6%, atau -4% jika 0 crosser)
+    const focusOpt = String(opts.focus || opts.attackFocus || '').toLowerCase();
+    const atkCenter = (rawAtk > 0 && rawMid > 0) ? (rawAtk * 0.8 + rawMid * 0.2) : rawAtk;
+    const wingMul = wingCrossers > 0 ? (1.0 + 0.02 * Math.min(3, wingCrossers)) : 0.96;
+    const atkWings = rawAtk * wingMul;
+    let effAtk = rawAtk;
+    if (focusOpt.includes('wing') || focusOpt.includes('sayap')) effAtk = atkWings;
+    else if (focusOpt.includes('center') || focusOpt.includes('tengah')) effAtk = atkCenter;
+
     return {
       formation: fk,
       shape: { D: cntD, M: cntM, A: cntA },
       GK: U.roundTo(rawGk, 1),
       DEF: U.roundTo(rawDef, 1),
       MID: U.roundTo(rawMid, 1),
-      ATK: U.roundTo(rawAtk, 1),
+      ATK: U.roundTo(effAtk, 1),
+      rawATK: U.roundTo(rawAtk, 1),
+      atkCenter: U.roundTo(atkCenter, 1),
+      atkWings: U.roundTo(atkWings, 1),
+      wingCrossers,
+      shooterVal: U.roundTo(shooterVal, 1),
       totalPower: U.roundTo(totalPower, 1),
       convBonusPct,
       cardRiskLabel,
@@ -795,6 +835,132 @@
       chemistry: chem,
       hasFormationBug: Boolean(bugInfo && bugInfo.hasBug),
       formationBugInfo: bugInfo,
+    };
+  }
+
+  // #21806 gapDamp: skala engine (/10 dari skor tampilan): linear s.d. knee 1.6 (16 di tampilan), lalu slope 0.8
+  function gapDamp(diffEngine) {
+    const abs = Math.abs(diffEngine);
+    if (abs <= 1.6) return diffEngine;
+    return (diffEngine < 0 ? -1 : 1) * (1.6 + (abs - 1.6) * 0.8);
+  }
+
+  /**
+   * Model Markov Analitik #21813 + #21822 + #48031 (_loop5):
+   * Menghitung peluang menang/seri/kalah, ekspektasi gol (xG), penguasaan bola, dan jumlah tembakan
+   * sesuai formula bytecode asli:
+   *   1) Duel MID: (55 * pAtt) / (55 * pAtt + 45 * pDef) dengan div=8 & homeBonus=+0.3
+   *   2) Shot Attempt (jika menang MID): sAtt / (sAtt + sDef)
+   *   3) Goal vs GK Save vs Miss: gkVal - shooterVal (base 35.55 / 40.55 + 15 miss vs 5.5 / 4.5 / 3.0)
+   */
+  function simulateMatchExpectation(uPow, oPow, opts = {}) {
+    const isHome = Boolean(opts.isHome);
+    const neutral = Boolean(opts.neutral);
+    const focus = String(opts.focus || 'Center').toLowerCase();
+    const oFocus = String(opts.oppFocus || 'Center').toLowerCase();
+    const uStyle = String(opts.style || 'Balanced').toLowerCase();
+    const oStyle = String(opts.oppStyle || 'Balanced').toLowerCase();
+
+    const uAtk = focus.includes('wing')
+      ? U.safeNum(uPow.atkWings, uPow.ATK)
+      : U.safeNum(uPow.atkCenter, (uPow.ATK * 0.8 + uPow.MID * 0.2));
+    const oAtk = oFocus.includes('wing')
+      ? U.safeNum(oPow.atkWings, oPow.ATK)
+      : U.safeNum(oPow.atkCenter, (oPow.ATK * 0.8 + oPow.MID * 0.2));
+
+    const uSec = {
+      GK: U.safeNum(uPow.GK, 35) / 10,
+      DEF: U.safeNum(uPow.DEF, 30) / 10,
+      MID: U.safeNum(uPow.MID, 30) / 10,
+      ATK: uAtk / 10,
+      shooter: U.safeNum(uPow.shooterVal, 40) / 10,
+    };
+    const oSec = {
+      GK: U.safeNum(oPow.GK, 35) / 10,
+      DEF: U.safeNum(oPow.DEF, 30) / 10,
+      MID: U.safeNum(oPow.MID, 30) / 10,
+      ATK: oAtk / 10,
+      shooter: U.safeNum(oPow.shooterVal, 40) / 10,
+    };
+
+    const uConvMul = uStyle.includes('counter') ? 1.07 : 1.0;
+    const oConvMul = oStyle.includes('counter') ? 1.07 : 1.0;
+    const hU = (!neutral && isHome) ? 0.3 : 0.0;
+    const hO = (!neutral && !isHome) ? 0.3 : 0.0;
+    const nPerSide = 48; // 96 total lances rata-rata per laga (#21844: 45+stop1 + 45+stop2)
+
+    function sideRates(att, def, attHomeBonus, attIsHome, convMul) {
+      const midD = gapDamp(att.MID - def.MID);
+      const pAtt = Math.max(0.2, 1 + midD / 8 + attHomeBonus);
+      const pDef = Math.max(0.2, 1 - midD / 8);
+      const duelProb = (55 * pAtt) / (55 * pAtt + 45 * pDef);
+
+      const atkD = gapDamp(att.ATK - def.DEF);
+      const sAtt = Math.max(0.2, 1 + atkD / 8 + attHomeBonus);
+      const sDef = Math.max(0.2, 1 - atkD / 8);
+      const shotGivenDuel = sAtt / (sAtt + sDef);
+
+      const diffGk = def.GK - att.shooter;
+      const dampGk = diffGk < 0 ? gapDamp(diffGk) : diffGk;
+      const sideHomeAdj = (!neutral && attIsHome) ? 0.1 : 0.0;
+      const gkF = Math.max(0.2, 1 + dampGk / 8 + sideHomeAdj);
+      const missF = Math.max(0.2, 1 - dampGk / 8 + sideHomeAdj);
+
+      const conv0 = (5.5 * convMul) / (5.5 * convMul + 35.55 * gkF + 15 * missF);
+      const conv2 = (4.5 * convMul) / (4.5 * convMul + 40.55 * gkF + 15 * missF);
+      return { duelProb, shotProb: duelProb * shotGivenDuel, conv0, conv2 };
+    }
+
+    const rU = sideRates(uSec, oSec, hU, isHome, uConvMul);
+    const rO = sideRates(oSec, uSec, hO, !isHome, oConvMul);
+
+    function goalDist(r) {
+      const maxG = 8;
+      let dp = new Array(maxG + 1).fill(0);
+      dp[0] = 1;
+      for (let i = 0; i < nPerSide; i++) {
+        const early = i < 3 ? 0.35 : 1.0;
+        const ndp = new Array(maxG + 1).fill(0);
+        for (let g = 0; g <= maxG; g++) {
+          if (dp[g] === 0) continue;
+          const baseC = g >= 3 ? r.conv2 * 0.65 : (g >= 2 ? r.conv2 : r.conv0);
+          const pGoal = r.shotProb * Math.min(0.8, baseC * early);
+          ndp[g] += dp[g] * (1 - pGoal);
+          if (g < maxG) ndp[g + 1] += dp[g] * pGoal;
+          else ndp[g] += dp[g] * pGoal;
+        }
+        dp = ndp;
+      }
+      return dp;
+    }
+
+    const dpU = goalDist(rU);
+    const dpO = goalDist(rO);
+    let pWin = 0, pDraw = 0, pLoss = 0, xGF = 0, xGA = 0;
+    for (let gu = 0; gu <= 8; gu++) {
+      xGF += gu * dpU[gu];
+      for (let go = 0; go <= 8; go++) {
+        const p = dpU[gu] * dpO[go];
+        if (gu > go) pWin += p;
+        else if (gu === go) pDraw += p;
+        else pLoss += p;
+      }
+    }
+    for (let go = 0; go <= 8; go++) xGA += go * dpO[go];
+
+    const possPct = (rU.duelProb / Math.max(0.01, rU.duelProb + rO.duelProb)) * 100;
+    return {
+      winPct: U.roundTo(pWin * 100, 1),
+      drawPct: U.roundTo(pDraw * 100, 1),
+      lossPct: U.roundTo(pLoss * 100, 1),
+      xPts: U.roundTo(pWin * 3 + pDraw, 3),
+      xGF: U.roundTo(xGF, 2),
+      xGA: U.roundTo(xGA, 2),
+      possPct: U.roundTo(possPct, 1),
+      uShots: U.roundTo(nPerSide * rU.shotProb, 1),
+      oShots: U.roundTo(nPerSide * rO.shotProb, 1),
+      effAtkUser: U.roundTo(uAtk, 1),
+      effAtkOpp: U.roundTo(oAtk, 1),
     };
   }
 
@@ -893,6 +1059,7 @@
 
     const oppAi = predictAiTacticsDetail(oppAvg, oppAvg, !isHome, oppXiPlayers);
     const oppStyle = oppAi.aiStyle;
+    const oppFocus = oppAi.aiFocus || 'Center';
     const oppPow = computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
       isHome: !isHome,
       crowdOver70: true,
@@ -916,23 +1083,30 @@
         marking: trialMark,
       });
 
-      const atkVsDef = uPow.ATK - oppPow.DEF;
+      // Evaluasi kedua opsi Attack Focus (#21822): Center (0.8*ATK + 0.2*MID) vs Wings (+2%/crosser)
+      const simC = simulateMatchExpectation(uPow, oppPow, {
+        isHome, neutral: false, focus: 'Center', oppFocus, style: trialStyle, oppStyle,
+      });
+      const simW = simulateMatchExpectation(uPow, oppPow, {
+        isHome, neutral: false, focus: 'Wings', oppFocus, style: trialStyle, oppStyle,
+      });
+      const optFocus = simC.xPts >= simW.xPts ? 'Center' : 'Wings';
+      const sim = optFocus === 'Center' ? simC : simW;
+
+      const effAtk = sim.effAtkUser;
+      const atkVsDef = effAtk - oppPow.DEF;
       const midVsMid = uPow.MID - oppPow.MID;
       const defVsAtk = uPow.DEF - oppPow.ATK;
 
-      // Penalti kuat untuk formasi 3-4-3 yang terkena bug #34992 (-33% ATK)
-      const bugPenalty = res.hasFormationBug ? -25.0 : 0.0;
-      const h2hScore = res.avgScore * 1.4
-        + atkVsDef * 0.45
-        + midVsMid * 0.40
-        + defVsAtk * 0.45
-        - res.wrongFootCount * 0.8
-        + (res.falseNine ? -3.0 : 0.0)
-        + bugPenalty;
+      // Penalti untuk bug #34992 (3-4-3 membuang slot ke-11 ke sektor 'X') & wrong-foot fullback
+      const bugPenalty = res.hasFormationBug ? -18.0 : 0.0;
+      const wfPenalty = res.wrongFootCount * 0.45;
+      const h2hScore = sim.xPts * 40.0 + res.avgScore * 0.05 - wfPenalty + bugPenalty;
 
       const mods = (C.FORMATION_MODS && C.FORMATION_MODS[fk]) || { atkMod: 0, defMod: 0 };
       const enginePow = {
         ...uPow,
+        ATK: effAtk,
         atkMod: mods.atkMod,
         defMod: mods.defMod,
       };
@@ -954,7 +1128,18 @@
         dMid: U.roundTo(midVsMid, 1),
         dAtk: U.roundTo(atkVsDef, 1),
         dDef: U.roundTo(defVsAtk, 1),
-        matchupScore: U.roundTo(h2hScore - oppAvg * 1.4, 1),
+        matchupScore: U.roundTo(sim.winPct - sim.lossPct, 1),
+        winPct: sim.winPct,
+        drawPct: sim.drawPct,
+        lossPct: sim.lossPct,
+        xPts: sim.xPts,
+        xGF: sim.xGF,
+        xGA: sim.xGA,
+        possPct: sim.possPct,
+        uShots: sim.uShots,
+        oShots: sim.oShots,
+        optFocus,
+        optStyle: trialStyle,
         wrongFootCount: res.wrongFootCount,
         falseNine: res.falseNine,
         hasLeader: res.hasLeader,
@@ -996,50 +1181,48 @@
     const recEdge = U.roundTo(best.avgScore - oppAvg, 1);
     const activeEdge = U.roundTo(activeComp.avgScore - oppAvg, 1);
 
+    // Uji 3 Play Style resmi pada formasi terbaik via Markov #48031
+    const bestXiObj = solveBestXi(userRoster, best.formation, foreignCap, userCountry, excludeForRec, safeRotate, repLevel);
+    const bestMark = (recEdge >= 4.0 && !isKnockout && !isBig) ? 'Light' : 'Heavy';
+    const styleSims = {};
+    for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack']) {
+      const pTry = computeEngineSectorPower(bestXiObj, best.formation, {
+        isHome, crowdOver70: true, style: stTry, marking: bestMark,
+      });
+      styleSims[stTry] = simulateMatchExpectation(pTry, oppPow, {
+        isHome, neutral: false, focus: best.optFocus, oppFocus, style: stTry, oppStyle: finalAi.aiStyle,
+      });
+    }
+
     let recStyle = 'Balanced';
-    let recStyleWhy = '';
-    if (finalAi.aiStyle === 'Offensive') {
+    let bestStylePts = styleSims.Balanced.xPts;
+    if (styleSims.Offensive.xPts >= bestStylePts + 0.012) {
+      recStyle = 'Offensive';
+      bestStylePts = styleSims.Offensive.xPts;
+    }
+    if (styleSims['Counter-Attack'].xPts >= bestStylePts + 0.012) {
       recStyle = 'Counter-Attack';
-      recStyleWhy = `Lawan diprediksi main Offensive (+8% ATK, -8% DEF). Counter-Attack memberimu +6..12% bonus konversi peluang langsung ke pertahanan lawan yang terbuka!`;
-    } else if (finalAi.aiStyle === 'Counter-Attack') {
-      if (recEdge >= 1.8) {
-        recStyle = 'Offensive';
-        recStyleWhy = `Lawan parkir bus (Counter-Attack, -6% MID). Kamu unggul +${recEdge.toFixed(1)} Force → gunakan Offensive (+8% ATK) untuk membongkar blok rendah mereka.`;
-      } else {
-        recStyle = 'Balanced';
-        recStyleWhy = `Lawan main Counter-Attack tapi selisih Force tipis (${recEdge >= 0 ? '+' : ''}${recEdge.toFixed(1)}). Mulai dengan Balanced agar DEF tidak bocor (-8%), baru ubah ke Offensive di menit 60 jika masih 0-0.`;
-      }
+    }
+
+    let recStyleWhy = '';
+    if (recStyle === 'Counter-Attack') {
+      recStyleWhy = `Uji simulasi memberi ekspektasi poin tertinggi (${styleSims['Counter-Attack'].winPct}% Win) vs AI ${finalAi.aiStyle}: +6..12% bonus konversi peluang sangat efektif saat transisi cepat.`;
+    } else if (recStyle === 'Offensive') {
+      recStyleWhy = `Uji simulasi unggul di Offensive (${styleSims.Offensive.winPct}% Win, xG ${styleSims.Offensive.xGF} vs Balanced ${styleSims.Balanced.xGF}): +8% ATK memaksimalkan volume gol tanpa mengorbankan dominasi MID.`;
+    } else if (finalAi.aiStyle === 'Offensive') {
+      recStyleWhy = `Lawan diprediksi Offensive (+8% ATK, -8% DEF). Balanced menjaga DEF tetap rapat; siapkan Counter-Attack jika tertekan.`;
     } else {
-      if (recEdge >= 3.0 && isHome) {
-        recStyle = 'Offensive';
-        recStyleWhy = `Laga kandang & unggul kualitas +${recEdge.toFixed(1)} Force → tekan penuh dengan Offensive (+8% ATK).`;
-      } else if (recEdge <= -2.0) {
-        recStyle = 'Counter-Attack';
-        recStyleWhy = `Underdog (${recEdge.toFixed(1)} Force) → amankan lini belakang dan curi gol lewat Counter-Attack (+6..12% konversi).`;
-      } else {
-        recStyle = 'Balanced';
-        recStyleWhy = `Pertandingan berimbang (${recEdge >= 0 ? '+' : ''}${recEdge.toFixed(1)} Force) → Balanced menjaga keseimbangan 3 sektor tanpa penalti DEF/MID.`;
-      }
+      recStyleWhy = `Balanced paling stabil (${styleSims.Balanced.winPct}% Win · ${styleSims.Balanced.drawPct}% Seri · xPts ${styleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive) maupun -6% MID (Counter).`;
     }
 
-    // Attack Focus (#3492: HANYA 'Wings' atau 'Center', tidak ada 'Mixed')
-    let uWings = 0;
-    let uCenter = 0;
-    for (const item of best.xi) {
-      if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(item.pos) && ['CRU', 'VEL'].includes(item.s1)) uWings += 2;
-      else if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(item.pos) && ['CRU', 'VEL'].includes(item.s2)) uWings += 1;
-      if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(item.pos) && ['PAS', 'ARM', 'DRI', 'FIN'].includes(item.s1)) uCenter += 2;
-      else if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(item.pos) && ['PAS', 'ARM', 'DRI', 'FIN'].includes(item.s2)) uCenter += 1;
-    }
-
-    let recFocus = 'Center';
+    // Attack Focus (#21822 effectiveSectors): Center (20% MID -> ATK) vs Wings (+2%/crosser)
+    const recFocus = best.optFocus;
     let recFocusWhy = '';
-    if (uWings > uCenter) {
-      recFocus = 'Wings';
-      recFocusWhy = `Sayap XI kamu memiliki skor spesialis CRO/PAC tinggi (${uWings} vs tengah ${uCenter}) — eksploitasi lewat umpan silang & overlap sayap.`;
+    if (recFocus === 'Center') {
+      const bonus = U.roundTo(best.uPow.atkCenter - best.uPow.rawATK, 1);
+      recFocusWhy = `Center (#21822 centerBlend 20% MID → ATK) menaikkan ATK efektif dari ${best.uPow.rawATK} menjadi ${best.uPow.atkCenter} (${bonus >= 0 ? '+' : ''}${bonus}) berkat kekuatan MID ${best.uPow.MID}, lebih tinggi dari Wings (${best.uPow.atkWings}).`;
     } else {
-      recFocus = 'Center';
-      recFocusWhy = `Lini tengah & depan kamu dominan di skill PAS/DRI/FIN (skor tengah ${uCenter} >= sayap ${uWings}) — tembus lewat umpan terobosan poros tengah.`;
+      recFocusWhy = `Wings lebih unggul (ATK efektif ${best.uPow.atkWings} dengan ${best.uPow.wingCrossers} crosser CRU vs Center ${best.uPow.atkCenter} yang tertarik turun oleh MID ${best.uPow.MID}).`;
     }
 
     // Marking (#3492: HANYA Light (0%), Heavy (+4% DEF), Very Heavy (+8% DEF))
@@ -1080,13 +1263,14 @@
     ];
 
     const keepActive = best.formation === activeFormation;
-    const scoreGain = U.roundTo(Math.max(0, best.h2hScore - activeComp.h2hScore), 1);
+    const scoreGain = U.roundTo(Math.max(0, best.winPct - activeComp.winPct), 1);
+    const ptsGain = U.roundTo(Math.max(0, best.xPts - activeComp.xPts), 2);
     const reasons = [
-      `Skor H2H terbaik (${best.avgScore} Avg · Chemistry ${best.chemistry}/100) vs ${oppXi.formation || '4-4-2'} lawan`,
-      `Duel Sektor Engine (#21891): ATK vs DEF ${best.atkVsDef >= 0 ? '+' : ''}${best.atkVsDef} · MID ${best.midVsMid >= 0 ? '+' : ''}${best.midVsMid} · DEF vs ATK ${best.defVsAtk >= 0 ? '+' : ''}${best.defVsAtk}`,
+      `Peluang Simulasi (#48031): ${best.winPct}% Menang · ${best.drawPct}% Seri · ${best.lossPct}% Kalah (xG ${best.xGF}–${best.xGA} · Ball ${best.possPct}%)`,
+      `Duel Sektor Engine (#21822): MID ${best.midVsMid >= 0 ? '+' : ''}${best.midVsMid} (Penentu Ball/Shot!) · ATK vs DEF ${best.atkVsDef >= 0 ? '+' : ''}${best.atkVsDef} · DEF vs ATK ${best.defVsAtk >= 0 ? '+' : ''}${best.defVsAtk}`,
       best.wrongFootCount === 0
-        ? 'Bebas penalti salah kaki Fullback/Wingback (-5%)'
-        : `Terdapat ${best.wrongFootCount} slot Fullback/Wingback salah kaki (-5%)`,
+        ? `Bebas penalti salah kaki Fullback (-5%) · Chemistry ${best.chemistry}/100`
+        : `Terdapat ${best.wrongFootCount} slot Fullback salah kaki (-5%) · Chemistry ${best.chemistry}/100`,
     ];
 
     const refereePlan = {
@@ -1132,6 +1316,14 @@
       formation: c.formation,
       h2hScore: c.h2hScore,
       matchupScore: c.matchupScore,
+      winPct: c.winPct,
+      drawPct: c.drawPct,
+      lossPct: c.lossPct,
+      xPts: c.xPts,
+      xGF: c.xGF,
+      xGA: c.xGA,
+      possPct: c.possPct,
+      optFocus: c.optFocus,
       avgScore: c.avgScore,
       uPow: c.uPow,
       atkMod: c.atkMod,
@@ -1151,9 +1343,28 @@
       activeComp,
       keepActive,
       scoreGain,
+      ptsGain,
       reasons,
       top3: top3List,
       top3Formations: top3List,
+      allCandidates: candidates.map(c => ({
+        formation: c.formation,
+        winPct: c.winPct,
+        drawPct: c.drawPct,
+        lossPct: c.lossPct,
+        xPts: c.xPts,
+        xGF: c.xGF,
+        xGA: c.xGA,
+        possPct: c.possPct,
+        optFocus: c.optFocus,
+        dMid: c.dMid,
+        dAtk: c.dAtk,
+        dDef: c.dDef,
+        h2hScore: c.h2hScore,
+        avgScore: c.avgScore,
+        wrongFootCount: c.wrongFootCount,
+        hasFormationBug: c.hasFormationBug,
+      })),
       oppPow,
       aiInfo: finalAi,
       recEdge,
@@ -1421,6 +1632,7 @@
     auditSetPieces,
     solveBestXi,
     computeEngineSectorPower,
+    simulateMatchExpectation,
     predictAiTacticsDetail,
     predictAiTactics,
     recommendMatchupForOpponent,
