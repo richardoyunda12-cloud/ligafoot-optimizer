@@ -14,9 +14,9 @@
   const DRIVE_API = 'https://www.googleapis.com/drive/v3';
   const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
-  // Opsional: bisa diisi default Client ID / Folder ID jika ingin tertanam permanen di repo
+  // Client ID OAuth Web bawaan (publik & dibatasi origin GitHub Pages di Google Cloud Console)
   const DEFAULT_CFG = {
-    clientId: '',
+    clientId: '838675130193-1fdugv6f859tv7euqqgtv092b3m71ae6.apps.googleusercontent.com',
     folderId: '',
     folderName: '',
     fileName: 'ligafoot_slot1.ligafoot',
@@ -37,8 +37,14 @@
     try {
       const raw = typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_CFG_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        return Object.assign({}, DEFAULT_CFG, parsed || {});
+        const parsed = JSON.parse(raw) || {};
+        const merged = Object.assign({}, DEFAULT_CFG, parsed);
+        if (!merged.clientId) merged.clientId = DEFAULT_CFG.clientId;
+        if (!merged.folderId && DEFAULT_CFG.folderId) {
+          merged.folderId = DEFAULT_CFG.folderId;
+          merged.folderName = merged.folderName || DEFAULT_CFG.folderName;
+        }
+        return merged;
       }
     } catch (_) {}
     return Object.assign({}, DEFAULT_CFG);
