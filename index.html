@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#070c12" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
+<title>LigaFoot Optimizer v8.0 — Web App &amp; PWA</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ==================== LAYAR UPLOAD / WELCOME WEB APP ==================== -->
+<div id="webapp-loader-screen" class="loader-screen">
+  <div class="loader-card">
+    <div class="flex-between">
+      <div class="brand">
+        <div class="brand-ico">⚽</div>
+        <div>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.0 PWA</span></h1>
+          <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 • Tanpa Upload</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="btn-install-pwa" class="btn btn-sm btn-green app-hidden" onclick="LFApp.installPwa()">📲 Install App</button>
+        <button id="btn-back-dashboard" class="btn btn-sm app-hidden" onclick="LFApp.resumeLastDashboard()">← Kembali</button>
+      </div>
+    </div>
+
+    <!-- Resume Save Terakhir (IndexedDB) -->
+    <div id="loader-resume-box" class="app-hidden" style="margin-top:14px;background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.42);border-radius:12px;padding:11px 13px">
+      <div class="flex-between">
+        <div>
+          <div class="kpi-lbl c-green">⚡ Save Terakhir Tersimpan di HP</div>
+          <div id="loader-resume-info" style="font-size:12px;margin-top:2px"></div>
+        </div>
+        <button class="btn btn-green" onclick="LFApp.resumeLastDashboard()">Buka Dashboard →</button>
+      </div>
+    </div>
+
+    <!-- File Picker & Drop Zone (tanpa accept ketat agar Android selalu mengizinkan .ligafoot) -->
+    <input type="file" id="lf-file-input" class="app-hidden" />
+    <div id="lf-drop-zone" class="drop-zone">
+      <div class="drop-zone-ico">📂</div>
+      <div style="font-size:15px;font-weight:800;color:#fff">Pilih File Save <code>.ligafoot</code></div>
+      <div class="kpi-sub" style="margin-top:4px">
+        Ketuk di sini (atau tarik file di PC) lalu pilih <code>ligafoot_slot1.ligafoot</code> dari folder <b>Download</b> HP.
+      </div>
+      <div style="margin-top:10px">
+        <span class="badge b-good">⚡ Proses &lt; 1,5 Detik</span>
+        <span class="badge b-info">🔒 100% Privasi Lokal</span>
+        <span class="badge b-accent">📶 Bisa Offline</span>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div id="loader-prog-wrap" class="prog-wrap app-hidden">
+      <div class="flex-between" style="font-size:12px">
+        <b id="loader-prog-txt">Memproses save...</b>
+        <span id="loader-prog-pct" class="mono c-green">0%</span>
+      </div>
+      <div class="prog-bar-bg"><div id="loader-prog-bar" class="prog-bar-fill"></div></div>
+      <div class="kpi-sub">Membedah skuad, 15 formasi War Room, &amp; Global Auto-Scout langsung di browser...</div>
+    </div>
+
+    <!-- Error Box -->
+    <div id="loader-err" class="loader-err app-hidden"></div>
+
+    <!-- Status Cache Static DB -->
+    <input type="file" id="lf-db-file-input" class="app-hidden" />
+    <div class="db-status-box">
+      <div class="flex-between">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <b>Database Pemain Statis</b>
+          <span id="db-status-badge" class="badge b-info">⏳ MEMERIKSA...</span>
+        </div>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-sm" onclick="LFApp.refreshStaticDb()" title="Unduh ulang static_db.min.json.gz dari server">↻ Sync</button>
+          <button class="btn btn-sm" onclick="LFApp.triggerDbUpload()" title="Muat ligafoot_static_db.json / .gz manual dari penyimpanan HP">📁 Manual</button>
+        </div>
+      </div>
+      <div id="db-status-detail" class="kpi-sub" style="margin-top:5px">Memeriksa cache IndexedDB...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SHELL DASHBOARD v8.0 ==================== -->
+<div id="webapp-dashboard-shell" class="app-hidden">
+  <header>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="brand">
+          <div class="brand-ico">⚽</div>
+          <div>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.0</h1>
+            <div class="sub" id="hdr-sub">Memuat data...</div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="btn btn-green" onclick="LFApp.openSavePicker()" title="Muat file save .ligafoot terbaru">📂 Ganti Save</button>
+          <button class="btn" onclick="openSearch()">🔍 Cari</button>
+          <button class="btn" onclick="openGlossary()">📖 Kamus</button>
+          <button class="btn" id="btn-density" onclick="toggleDensity()" title="Ganti kepadatan tampilan tabel &amp; kartu">↕️ Mode: Lega</button>
+          <span class="badge b-good" id="hdr-badge">v8.0 PWA</span>
+        </div>
+      </div>
+      <nav class="tabs" id="nav-tabs">
+        <button class="tab active" data-tab="t1" onclick="goToView('t1')">1. 🏠 Beranda</button>
+        <button class="tab" data-tab="t2" onclick="goToView('t2')">2. ⚔️ War Room</button>
+        <button class="tab" data-tab="t3" onclick="goToView('t3')">3. ⚽ Skuad &amp; Taktik</button>
+        <button class="tab" data-tab="t4" onclick="goToView('t4')">4. 🛒 Transfer &amp; Scout</button>
+        <button class="tab" data-tab="t5" onclick="goToView('t5')">5. 💰 Keuangan &amp; Klub</button>
+        <button class="tab" data-tab="t6" onclick="goToView('t6')">6. 🏆 Liga &amp; Alat</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+  <!-- ==================== TAB 1: BERANDA (HARI INI) ==================== -->
+  <section id="panel-t1" class="panel active">
+    <div id="t1-hero"></div>
+    <div class="grid g4" id="t1-kpis"></div>
+    <div id="t1-autoguard-wrap"></div>
+
+    <div class="grid g-main-side mt-12">
+      <div class="card">
+        <h2>
+          <span>📋 Daftar Aksi Hari Ini (Action Queue)</span>
+          <span style="display:flex;gap:6px;align-items:center">
+            <span id="t1-alert-cnt" class="badge b-good">0</span>
+            <button class="btn btn-sm" onclick="resetChecklist()">Reset Centang</button>
+          </span>
+        </h2>
+        <div id="t1-action-queue"></div>
+      </div>
+
+      <div class="grid" style="align-content:start">
+        <div class="card">
+          <h2>🏆 Klasemen Ringkas <button class="btn btn-sm" onclick="goToView('t6','t6-lg')">Lihat Penuh →</button></h2>
+          <div id="t1-mini-title" class="mb-8"></div>
+          <div class="tbl-wrap"><table id="t1-mini-standings"></table></div>
+        </div>
+        <div class="card">
+          <h2>🎯 Target Presiden &amp; Delta Save</h2>
+          <div id="t1-pres-goals" style="font-size:12px" class="mb-8"></div>
+          <div id="t1-deltas" style="font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB 2: WAR ROOM (MATCHDAY FOKUS) ==================== -->
+  <section id="panel-t2" class="panel">
+    <div class="card mb-8">
+      <div class="flex-between mb-8">
+        <div>
+          <h2 style="margin:0">⚔️ War Room Matchday — Fokus 1 Laga per Klik</h2>
+          <div class="kpi-sub">Pilih jadwal di bawah, lalu cocokkan <b>Wasit</b> &amp; <b>Cuaca</b> sesuai layar pra-pertandingan di game.</div>
+        </div>
+        <div class="pill-row" style="margin:0">
+          <span class="kpi-lbl" style="align-self:center">Wasit:</span>
+          <button id="wr-ref-strict" class="btn btn-sm" onclick="setWarCond('ref','strict')">🟥 Ketat</button>
+          <button id="wr-ref-normal" class="btn btn-sm btn-green" onclick="setWarCond('ref','normal')">🟨 Normal</button>
+          <button id="wr-ref-lenient" class="btn btn-sm" onclick="setWarCond('ref','lenient')">🟩 Longgar</button>
+          <span class="kpi-lbl" style="align-self:center;margin-left:6px">Cuaca:</span>
+          <button id="wr-w-clear" class="btn btn-sm btn-green" onclick="setWarCond('weather','clear')">☀️ Cerah</button>
+          <button id="wr-w-rain" class="btn btn-sm" onclick="setWarCond('weather','rain')">🌧️ Hujan</button>
+          <button id="wr-w-heat" class="btn btn-sm" onclick="setWarCond('weather','heat')">🔥 Panas</button>
+        </div>
+      </div>
+
+      <div id="t2-selector" class="match-selector"></div>
+      <div id="t2-active-match"></div>
+    </div>
+
+    <details class="glossary-inline" style="padding:11px 14px">
+      <summary>📣 Laci Live Coaching, Halftime Talk &amp; Tactical Orders (Klik untuk buka/tutup)</summary>
+      <div class="grid g2 mt-12">
+        <div>
+          <h3>🗣️ Halftime Talk &amp; 3 Shouts (Anti-Repeat 100% → 50% → 0%)</h3>
+          <div id="t2-halftime" class="mb-8" style="font-size:12px"></div>
+          <div id="t2-shouts"></div>
+        </div>
+        <div>
+          <h3>⏱️ Tactical Orders Menit Akhir</h3>
+          <div id="t2-orders"></div>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- ==================== TAB 3: SKUAD & TAKTIK (4 SUB-TAB) ==================== -->
+  <section id="panel-t3" class="panel">
+    <div class="subtabs" data-group="t3">
+      <button class="subtab active" data-sub="t3-xi" onclick="goToView('t3','t3-xi')">⚽ Lapangan &amp; Dual XI</button>
+      <button class="subtab" data-sub="t3-squad" onclick="goToView('t3','t3-squad')">🧾 Audit Skuad Senior</button>
+      <button class="subtab" data-sub="t3-train" onclick="goToView('t3','t3-train')">🏋️ Training &amp; Ruang Ganti</button>
+      <button class="subtab" data-sub="t3-acad" onclick="goToView('t3','t3-acad')">🌱 Akademi</button>
+    </div>
+
+    <!-- Sub-tab 3A: Lapangan & Dual XI -->
+    <div id="sub-t3-xi" class="subpanel active">
+      <div class="card mb-8">
+        <div class="flex-between mb-8">
+          <div class="pill-row" style="margin:0">
+            <button id="xi-mode-best" class="btn btn-green" onclick="setXiMode('best')">⚡ Best XI (Full Power)</button>
+            <button id="xi-mode-rot" class="btn" onclick="setXiMode('rot')">🔄 Rotation XI (Laga Ringan)</button>
+            <select id="t3-form-select" onchange="onFormationChange()"></select>
+          </div>
+          <div id="t3-xi-summary" class="mono" style="font-size:12px"></div>
+        </div>
+        <div class="grid g2">
+          <div>
+            <div id="t3-rot-diff"></div>
+            <div class="pitch" id="t3-pitch">
+              <div class="pitch-line"></div>
+              <div class="pitch-circle"></div>
+            </div>
+          </div>
+          <div>
+            <h3>🎯 Set-Piece &amp; Kapten Optimal</h3>
+            <div id="t3-setpieces" class="mb-8" style="font-size:12px"></div>
+            <h3>🪑 Bangku Cadangan &amp; Status Menit</h3>
+            <div class="tbl-wrap"><table id="t3-bench-tbl"></table></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>📊 Perbandingan 15 Formasi Resmi (#3492)</h2>
+        <div class="tbl-wrap"><table id="t3-form-tbl"></table></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 3B: Audit Skuad Senior -->
+    <div id="sub-t3-squad" class="subpanel">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <h2 style="margin:0">🧾 Audit Skuad Senior, Regresi per Posisi &amp; Kontrak</h2>
+          <div class="pill-row" style="margin:0">
+            <input id="t4-search" class="input" placeholder="Filter nama / posisi..." oninput="renderRosterTable()" />
+            <select id="t4-filter" onchange="renderRosterTable()">
+              <option value="ALL">Semua Pemain</option>
+              <option value="GOLDEN">Golden Window (11–59d)</option>
+              <option value="DECLINE">Regresi / Ambang Usia</option>
+              <option value="NONSTACK">Skill Non-Stack</option>
+              <option value="TRAP">TRAP (Pot &gt; PotCap)</option>
+              <option value="GEM">Hidden Gem</option>
+              <option value="UNHAPPY">Unhappy / roleSore</option>
+              <option value="SLUMP">Fine Slump Aktif</option>
+              <option value="LOOPHOLE">Loophole Auto-Renew 0%</option>
+            </select>
+            <button class="btn btn-green" onclick="exportRosterCsv()">⬇ Export CSV</button>
+          </div>
+        </div>
+        <div id="t4-contract-timeline" class="mb-8"></div>
+        <div class="tbl-wrap tbl-sticky"><table id="t4-tbl"></table></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 3C: Special Training & Ruang Ganti -->
+    <div id="sub-t3-train" class="subpanel">
+      <div class="card mb-8">
+        <h2>🏋️ Optimizer Special Training (CT Slot)</h2>
+        <div id="t4-training" style="font-size:12px"></div>
+      </div>
+      <div class="card">
+        <h2>😠 Radar Ruang Ganti v1.2.0 (squadRole &amp; lockerRoomHit ≥ 4)</h2>
+        <div id="t3-mood-summary" class="mb-8" style="font-size:12px"></div>
+        <div class="tbl-wrap tbl-sticky"><table id="t3-mood-tbl"></table></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 3D: Akademi -->
+    <div id="sub-t3-acad" class="subpanel">
+      <div class="card">
+        <h2>🌱 Pipeline Akademi (youthPlayers) &amp; Kecocokan Lubang Skuad</h2>
+        <div id="t5-holes" class="mb-8" style="font-size:12px"></div>
+        <div class="tbl-wrap tbl-sticky"><table id="t5-tbl"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB 4: TRANSFER & SCOUT (3 SUB-TAB) ==================== -->
+  <section id="panel-t4" class="panel">
+    <div class="budget-strip" id="t7-budget-strip"></div>
+
+    <div class="subtabs" data-group="t4">
+      <button class="subtab active" data-sub="t4-bp" onclick="goToView('t4','t4-bp')">🧠 Rencana Belanja Pintar</button>
+      <button class="subtab" data-sub="t4-exp" onclick="goToView('t4','t4-exp')">🔎 Eksplorasi Pasar Global</button>
+      <button class="subtab" data-sub="t4-short" onclick="goToView('t4','t4-short')">⭐ Shortlist <span id="t4-short-cnt" class="badge b-accent">0</span></button>
+      <button class="subtab" data-sub="t4-cart" onclick="goToView('t4','t4-cart')">🛒 Keranjang Transfer</button>
+    </div>
+
+    <!-- Sub-tab 4A: Rencana Belanja Pintar -->
+    <div id="sub-t4-bp" class="subpanel active">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <div>
+            <h2 style="margin:0">🧠 Rencana Belanja Pintar (Sesuai Kas, Lubang Skuad &amp; ROI)</h2>
+            <div class="kpi-sub">Otomatis mencocokkan target pasar terbaik dengan pemain skuad yang digantikan + simulasi 1-klik ke Keranjang.</div>
+          </div>
+          <div class="pill-row" style="margin:0">
+            <button id="bp-tab-UPGRADE" class="btn btn-sm btn-green" onclick="setBlueprintTab('UPGRADE')">🎯 Upgrade XI &amp; Lubang</button>
+            <button id="bp-tab-ROI" class="btn btn-sm" onclick="setBlueprintTab('ROI')">💸 Pabrik Uang (Flip)</button>
+            <button id="bp-tab-BARGAIN" class="btn btn-sm" onclick="setBlueprintTab('BARGAIN')">🆓 Gratis &amp; Diskon</button>
+            <button id="bp-tab-SELL" class="btn btn-sm" onclick="setBlueprintTab('SELL')">📤 Sumber Dana (Jual)</button>
+          </div>
+        </div>
+        <div id="t7-blueprint"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 4B: Eksplorasi Pasar -->
+    <div id="sub-t4-exp" class="subpanel">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <h2 style="margin:0">🔎 Eksplorasi Global Auto-Scout <span id="t7-cnt" class="badge b-info">0</span></h2>
+          <div class="pill-row" style="margin:0">
+            <button class="btn btn-sm" onclick="applyScoutPreset('ALL')">Reset</button>
+            <button class="btn btn-sm btn-green" onclick="applyScoutPreset('HOLES')">Isi Lubang</button>
+            <button class="btn btn-sm btn-amber" onclick="applyScoutPreset('FLIP')" title="Pemain muda 17–21 thn buat dibeli murah, dilatih, lalu dijual mahal">Top Flip (Cuan)</button>
+            <button class="btn btn-sm" onclick="applyScoutPreset('BOSMAN')" title="Kontrak ≤180 hari — bisa rekrut GRATIS via Pra-Kontrak!">Bosman (Gratis ≤180d)</button>
+            <button class="btn btn-sm" onclick="applyScoutPreset('UNH')" title="Pemain tidak bahagia di klub AI — diskon harga -15% &amp; gaji -50%">Unhappy (-15%)</button>
+            <button class="btn btn-sm" onclick="applyScoutPreset('GEM')">Hidden Gems</button>
+            <button class="btn btn-sm" onclick="applyScoutPreset('FREE')">Free Agent</button>
+            <button class="btn btn-sm" onclick="applyScoutPreset('LOCAL')">Lokal</button>
+            <button class="btn btn-sm" onclick="applyScoutPreset('SHORTLIST')">⭐ Shortlist</button>
+            <button class="btn btn-sm btn-green" onclick="exportScoutCsv()">⬇ CSV</button>
+          </div>
+        </div>
+        <div class="pill-row">
+          <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="renderScout()" />
+          <select id="s-pos" onchange="renderScout()">
+            <option value="">Semua Posisi</option>
+            <option value="G">GK — Kiper</option>
+            <option value="LD">RB — Bek Kanan</option>
+            <option value="LE">LB — Bek Kiri</option>
+            <option value="ZD">RCB — Bek Tengah Kanan</option>
+            <option value="ZE">LCB — Bek Tengah Kiri</option>
+            <option value="VOL">CDM — Gelandang Bertahan</option>
+            <option value="MC">CM — Gelandang Tengah</option>
+            <option value="MA">CAM — Gelandang Serang</option>
+            <option value="MD">RM — Gelandang Kanan</option>
+            <option value="ME">LM — Gelandang Kiri</option>
+            <option value="PD">RW — Sayap Kanan</option>
+            <option value="PE">LW — Sayap Kiri</option>
+            <option value="SA">SS — Second Striker</option>
+            <option value="ATA">ST — Striker</option>
+          </select>
+          <select id="s-foot" onchange="renderScout()">
+            <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>
+          </select>
+          <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="renderScout()" />
+          <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="renderScout()" />
+          <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="renderScout()" />
+          <select id="s-price-unit" onchange="renderScout()">
+            <option value="1000000">M (Juta)</option>
+            <option value="1000">K (Ribu)</option>
+            <option value="1">Penuh (€)</option>
+          </select>
+          <select id="s-sort" onchange="renderScout()">
+            <option value="SMART">Urut: Rekomendasi Pintar</option>
+            <option value="UPGRADE">Urut: Upgrade XI (ΔEff)</option>
+            <option value="ROI">Urut: Flip ROI % Tertinggi</option>
+            <option value="PROFIT">Urut: Est. Profit Tertinggi</option>
+            <option value="CHEAP">Urut: Harga Termurah</option>
+            <option value="FORCE">Urut: Force Tertinggi</option>
+            <option value="POTCAP">Urut: PotCap Tertinggi</option>
+          </select>
+        </div>
+        <div class="pill-row" style="margin-bottom:8px">
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-afford" type="checkbox" checked onchange="renderScout()" /> 💰 Hanya Masuk Daya Beli (Kas/Swap)</label>
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-stack" type="checkbox" onchange="renderScout()" /> Hanya Stack Optimal</label>
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="renderScout()" /> Sembunyikan TRAP</label>
+          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-inj" type="checkbox" checked onchange="renderScout()" /> Sembunyikan Cedera</label>
+        </div>
+        <details class="glossary-inline">
+          <summary>📖 Catatan Arti Istilah Scout (BOSMAN, UNH, SCARCE, TRAP, GEM, GOD, FLIP)</summary>
+          <div class="glossary-grid">
+            <div><span class="badge b-good">BOSMAN</span> Kontrak ≤180d — bisa rekrut <b>GRATIS (0€)</b> via Pra-Kontrak saat kontrak habis.</div>
+            <div><span class="badge b-good">UNH</span> Pemain tidak bahagia di klub AI — <b>diskon harga -15%</b> &amp; <b>gaji -50%</b>.</div>
+            <div><span class="badge b-good">FREE</span> Free Agent (tanpa klub) — biaya transfer <b>0€</b> (kunci Sell Now 1 thn).</div>
+            <div><span class="badge b-crit">SCARCE</span> Klub AI tipis stok (≤2 pemain di posisi itu) — harga mahal <b>+15%</b>, hindari!</div>
+            <div><span class="badge b-good">GEM</span> Plafon asli (<i>PotCap</i>) tinggi / tersembunyi — calon bintang murah.</div>
+            <div><span class="badge b-crit">TRAP</span> Jebakan — tampilan Potential tinggi tapi <i>PotCap</i> asli mentok rendah.</div>
+            <div><span class="badge b-accent">GOD</span> 2 skill saling menumpuk (<i>stack</i>) penuh di Match Engine.</div>
+            <div><span class="badge b-info">LOCAL</span> Pemain domestik (WNI) — <b>tidak memakan kuota asing</b> &amp; cepat nyetel.</div>
+          </div>
+        </details>
+        <div class="tbl-wrap tbl-sticky" style="max-height:460px;overflow-y:auto"><table id="t7-scout-tbl"></table></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 4D: Shortlist Persisten -->
+    <div id="sub-t4-short" class="subpanel">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <div>
+            <h2 style="margin:0">⭐ Shortlist Target Favorit (Tersimpan Permanen Antar-Save)</h2>
+            <div class="kpi-sub">Harga beli, status Bosman/Unhappy, dan perbandingan Swap diperbarui otomatis setiap kali kamu memuat save baru.</div>
+          </div>
+          <button class="btn btn-sm" onclick="clearShortlist()">Kosongkan Shortlist</button>
+        </div>
+        <div id="t7-shortlist"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 4C: Live Transfer Cart -->
+    <div id="sub-t4-cart" class="subpanel">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <h2 style="margin:0">🛒 Live Transfer Cart &amp; Simulasi Kas (Realisasi 1.25x / Counter +40%)</h2>
+          <div class="pill-row" style="margin:0">
+            <button class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Pilih Semua Layak Jual</button>
+            <button class="btn btn-sm" onclick="clearCart()">Kosongkan Keranjang</button>
+          </div>
+        </div>
+        <div class="grid g4 mb-8" id="t7-cart-kpis"></div>
+        <div class="grid g2">
+          <div>
+            <h3>📤 Pemain Keluar (Centang Jual / Toggle Arab 2.5x)</h3>
+            <div class="tbl-wrap" style="max-height:340px;overflow-y:auto"><table id="t7-out-tbl"></table></div>
+          </div>
+          <div>
+            <h3>📥 Target Masuk (Klik "+ Beli" atau "⇄ Swap")</h3>
+            <div class="tbl-wrap" style="max-height:340px;overflow-y:auto"><table id="t7-in-tbl"></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB 5: KEUANGAN & KLUB (3 SUB-TAB) ==================== -->
+  <section id="panel-t5" class="panel">
+    <div class="subtabs" data-group="t5">
+      <button class="subtab active" data-sub="t5-ov" onclick="goToView('t5','t5-ov')">💰 Arus Kas, Shop &amp; Member</button>
+      <button class="subtab" data-sub="t5-tkt" onclick="goToView('t5','t5-tkt')">🎟️ Tiket &amp; 6 Fase</button>
+      <button class="subtab" data-sub="t5-shop" onclick="goToView('t5','t5-shop')">👕 Grafik Toko &amp; Top Jersey</button>
+      <button class="subtab" data-sub="t5-roi" onclick="goToView('t5','t5-roi')">🏟️ Stadion, ROI &amp; Penonton</button>
+    </div>
+
+    <!-- Sub-tab 5A: Arus Kas, Shop, Member & Komersial -->
+    <div id="sub-t5-ov" class="subpanel active">
+      <div class="grid g3 mb-8">
+        <div class="card">
+          <h2>👕 Club Shop Optimizer (v1.2.0)</h2>
+          <div id="t6-shop" style="font-size:12px"></div>
+        </div>
+        <div class="card">
+          <h2>🪪 Member Plans Optimizer (v1.2.0)</h2>
+          <div id="t6-member" style="font-size:12px"></div>
+        </div>
+        <div class="card">
+          <h2>🤝 Naming Rights, Sponsor &amp; Target Presiden</h2>
+          <div id="t6-commercial" style="font-size:12px"></div>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h2>📈 Tren Kas Klub</h2>
+          <div id="t6-cash-chart"></div>
+        </div>
+        <div class="card">
+          <h2>🧾 Rincian Estimasi Arus Kas Rutin / Bulan</h2>
+          <div id="t6-cashflow-detail" style="font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 5B: Tiket & 6 Fase -->
+    <div id="sub-t5-tkt" class="subpanel">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <h2 style="margin:0">🎟️ Simulator Tiket Bulat Interaktif (Pareto Fill ≥ 70.5%)</h2>
+          <div class="pill-row" style="margin:0">
+            <button class="btn btn-sm btn-green" id="sim-mode-normal" onclick="setSimMode('normal')">Laga Biasa</button>
+            <button class="btn btn-sm" id="sim-mode-big" onclick="setSimMode('big')">Big Match / Gugur</button>
+            <button class="btn btn-sm btn-green" onclick="applyOptimalTicketJS()">✨ Terapkan Optimal (Fill ≥ 70.5%)</button>
+          </div>
+        </div>
+        <div id="t6-ticket-sim" class="grid g4"></div>
+        <div id="t6-ticket-res" class="mt-12" style="font-size:12px"></div>
+        <div id="t6-tmb" class="mt-12" style="font-size:12px"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 5D: Analisis Club Shop & Leaderboard Top 8 Jersey -->
+    <div id="sub-t5-shop" class="subpanel">
+      <div id="t5-shop-analytics"></div>
+    </div>
+
+    <!-- Sub-tab 5C: Stadion, ROI & Histori Penonton -->
+    <div id="sub-t5-roi" class="subpanel">
+      <div class="grid g2">
+        <div class="card">
+          <h2>🏗️ Simulator ROI Investasi Stadion &amp; CT (12 Bulan)</h2>
+          <div id="t6-roi" style="font-size:12px"></div>
+        </div>
+        <div class="card">
+          <h2>🏟️ Histori Penonton Kandang (matchLog)</h2>
+          <div class="tbl-wrap mb-8"><table id="t6-crowd-tbl"></table></div>
+          <div id="t6-stmt-wrap">
+            <h3>📑 35 Mutasi Kas Terakhir</h3>
+            <div class="tbl-wrap" style="max-height:260px;overflow-y:auto"><table id="t6-stmt-tbl"></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB 6: LIGA, HISTORI & ALAT (3 SUB-TAB) ==================== -->
+  <section id="panel-t6" class="panel">
+    <div class="subtabs" data-group="t6">
+      <button class="subtab active" data-sub="t6-lg" onclick="goToView('t6','t6-lg')">🏆 Klasemen &amp; Histori Laga</button>
+      <button class="subtab" data-sub="t6-calc" onclick="goToView('t6','t6-calc')">🧮 5 Kalkulator Engine</button>
+      <button class="subtab" data-sub="t6-ext" onclick="goToView('t6','t6-ext')">🌍 Pra-Kontrak &amp; Timnas</button>
+    </div>
+
+    <!-- Sub-tab 6A: Klasemen & Histori -->
+    <div id="sub-t6-lg" class="subpanel active">
+      <div id="t8-title-tracker" class="mb-8"></div>
+      <div class="grid g2">
+        <div class="card">
+          <h2>🏆 Klasemen Liga Aktif</h2>
+          <div class="tbl-wrap"><table id="t8-standings-tbl"></table></div>
+        </div>
+        <div class="card">
+          <h2>🏁 10 Pertandingan Terakhir</h2>
+          <div class="tbl-wrap"><table id="t3-recent-tbl"></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 6B: 5 Kalkulator Engine -->
+    <div id="sub-t6-calc" class="subpanel">
+      <div class="grid g2">
+        <div class="card">
+          <h2>💰 Kalkulator Counter-Offer (+40% Aman / 1.25x Realisasi)</h2>
+          <div class="pill-row">
+            <input id="c-offer" class="input" type="number" value="3500" oninput="calcAll()" />
+            <select id="c-offer-u" onchange="calcAll()"><option value="K">K (Ribu)</option><option value="M">M (Juta)</option></select>
+          </div>
+          <div id="c-offer-out" style="font-size:12px"></div>
+        </div>
+
+        <div class="card">
+          <h2>📝 Cek Golden Window Renew (11–59 Hari = -12% Gaji)</h2>
+          <div class="pill-row">
+            <input id="c-days" class="input" type="number" value="45" style="width:110px" placeholder="Sisa Hari" oninput="calcAll()" />
+            <input id="c-sal" class="input" type="number" value="88" style="width:120px" placeholder="Gaji (K/bln)" oninput="calcAll()" />
+          </div>
+          <div id="c-renew-out" style="font-size:12px"></div>
+        </div>
+
+        <div class="card">
+          <h2>🤝 Kalkulator Negosiasi Sponsor (0% Risiko Annoyed)</h2>
+          <div class="pill-row">
+            <input id="c-sp-base" class="input" type="number" value="100" style="width:120px" placeholder="Tawaran (K)" oninput="calcAll()" />
+            <select id="c-sp-tier" onchange="calcAll()">
+              <option value="3">Tier 3 (Rekomendasi +2%)</option>
+              <option value="2">Tier 2</option>
+              <option value="1">Tier 1</option>
+            </select>
+          </div>
+          <div id="c-sp-out" style="font-size:12px"></div>
+        </div>
+
+        <div class="card">
+          <h2>🧪 Tester Eksak priceFactor (Shop &amp; Member v9)</h2>
+          <div class="pill-row">
+            <label style="font-size:11px">Shop Mul: <input id="c-pf-shop" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.00" style="width:76px" oninput="calcAll()" /></label>
+            <label style="font-size:11px">Member Mul: <input id="c-pf-mem" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.05" style="width:76px" oninput="calcAll()" /></label>
+            <label style="font-size:11px">Disc %: <input id="c-pf-disc" class="input" type="number" min="0" max="6" value="4" style="width:60px" oninput="calcAll()" /></label>
+          </div>
+          <div id="c-pf-out" style="font-size:12px"></div>
+        </div>
+
+        <div class="card">
+          <h2>🟥 Kalkulator Denda Kartu Merah (20% Gratis = 0% Slump)</h2>
+          <div class="pill-row">
+            <label style="font-size:11px">Gaji (K/bln): <input id="c-fine-sal" class="input" type="number" value="80" style="width:82px" oninput="calcAll()" /></label>
+            <label style="font-size:11px">Denda (%): <input id="c-fine-pct" class="input" type="number" min="0" max="100" value="20" style="width:68px" oninput="calcAll()" /></label>
+            <button class="btn btn-sm btn-green" onclick="setFinePct(20)">20% Aman</button>
+            <button class="btn btn-sm" onclick="setFinePct(50)">50% (2K)</button>
+            <button class="btn btn-sm" onclick="setFinePct(100)">100% (M)</button>
+          </div>
+          <div id="c-fine-out" style="font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 6C: Pra-Kontrak & Timnas -->
+    <div id="sub-t6-ext" class="subpanel">
+      <div class="grid g2">
+        <div class="card">
+          <div id="t8-precontracts" style="font-size:12px"></div>
+        </div>
+        <div class="card">
+          <div id="t8-nation" style="font-size:12px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- QUICK SEARCH MODAL (Ctrl+K) -->
+<div class="modal-bg" id="search-modal" onclick="if(event.target===this)closeSearch()">
+  <div class="modal">
+    <div class="flex-between mb-8">
+      <strong style="font-size:13px">🔍 Quick Search (Skuad Senior, Akademi, Global Scout)</strong>
+      <button class="btn btn-sm" onclick="closeSearch()">ESC</button>
+    </div>
+    <input id="qs-input" class="input" style="width:100%;padding:9px 11px;font-size:13px" placeholder="Ketik nama pemain atau klub..." oninput="runQuickSearch()" />
+    <div id="qs-results" class="mt-12" style="max-height:55vh;overflow-y:auto;font-size:12px"></div>
+  </div>
+</div>
+
+<!-- GLOSSARY / KAMUS ISTILAH MODAL -->
+<div class="modal-bg" id="glossary-modal" onclick="if(event.target===this)closeGlossary()">
+  <div class="modal" style="width:min(760px,95vw);max-height:84vh;overflow-y:auto">
+    <div class="flex-between mb-8">
+      <strong style="font-size:14px">📖 Kamus Istilah Cepat LigaFoot Optimizer</strong>
+      <button class="btn btn-sm" onclick="closeGlossary()">Tutup (ESC)</button>
+    </div>
+    <div class="kpi-sub mb-8">Arahkan kursor (hover) ke badge mana saja di dashboard untuk melihat penjelasan singkatnya.</div>
+    <div class="grid g2" style="gap:10px;font-size:12px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
+        <h3>🔎 Transfer &amp; Auto-Scout</h3>
+        <div><span class="badge b-good">BOSMAN</span> Kontrak sisa <b>≤180 hari</b> — bisa direkrut <b>GRATIS (0€)</b> lewat Pra-Kontrak saat kontraknya habis.</div>
+        <div style="margin-top:5px"><span class="badge b-good">UNH</span> Pemain <b>Unhappy</b> di klub AI — diskon harga beli <b>-15%</b> &amp; tuntutan gaji <b>-50%</b>.</div>
+        <div style="margin-top:5px"><span class="badge b-good">FREE</span> <b>Free Agent</b> (tanpa klub) — biaya transfer 0 (terkunci 1 tahun untuk <i>Sell Now</i>).</div>
+        <div style="margin-top:5px"><span class="badge b-accent">SALE</span> Masuk daftar jual klub AI (harga lebih murah ~10%).</div>
+        <div style="margin-top:5px"><span class="badge b-crit">SCARCE</span> Klub AI kekurangan stok (≤2 orang di posisi itu) — harga dinaikkan <b>+15%</b>, hindari!</div>
+        <div style="margin-top:5px"><span class="badge b-info">LOCAL</span> Pemain domestik (WNI) — <b>tidak makan kuota asing</b> &amp; menyatu 2x lebih cepat.</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
+        <h3>🧾 Skuad, Potensi &amp; Kontrak</h3>
+        <div><span class="badge b-good">GEM</span> <b>Hidden Gem</b> — plafon asli (<i>PotCap</i>) lebih tinggi dari tampilan atau ruang tumbuh sangat besar.</div>
+        <div style="margin-top:5px"><span class="badge b-crit">TRAP</span> <b>Jebakan Potensi</b> — tampilan Potential tinggi padahal <i>PotCap</i> asli mentok rendah.</div>
+        <div style="margin-top:5px"><span class="badge b-good">GOD</span> Kombinasi 2 skill yang <b>saling menumpuk (stack)</b> penuh di Match Engine.</div>
+        <div style="margin-top:5px"><span class="badge b-crit">NON-STACK</span> Skill bentrok (bek <code>TCK+MRK</code> cuma +5%; gelandang <code>PAS+PLY</code> cuma +3%).</div>
+        <div style="margin-top:5px"><span class="badge b-good">Golden Window</span> Kontrak sisa <b>11–59 hari</b> — renew manual <b>3 tahun = potong gaji -12% gratis</b>!</div>
+        <div style="margin-top:5px"><span class="badge b-crit">SLUMP</span> Penalti denda kartu merah (&gt;20%): performa turun -3% selama 30 hari. (Denda ≤20% = 0% risiko!)</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
+        <h3>⚽ Taktik, Formasi &amp; War Room</h3>
+        <div><span class="badge b-accent">F9 / False Nine</span> Otomatis aktif jika ≥2 striker (ST/SS) di XI punya skill <code>PAS</code> atau <code>PLY</code>.</div>
+        <div style="margin-top:5px"><span class="badge b-warn">FB Salah Kaki</span> Penalti kaki terbalik (<b>-5%</b>) di v1.2.0 <b>HANYA kena Fullback (RB/LB)</b>. Sayap (LW/RW) bebas!</div>
+        <div style="margin-top:5px"><span class="badge b-muted">Mod A/D</span> Bonus/penalti bawaan formasi resmi (#3492) untuk Serangan (A) &amp; Pertahanan (D).</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
+        <h3>💰 Ekonomi &amp; Stadion</h3>
+        <div><span class="badge b-good">Counter +40%</span> Balas tawaran masuk AI sebesar <b>1.40x</b> (0% risiko batal; realisasi rata-rata cair <b>1.25x</b>).</div>
+        <div style="margin-top:5px"><span class="badge b-good">Fill ≥70.5%</span> Syarat keterisian stadion agar bonus kandang <b>+2% Lini Tengah</b> selalu menyala.</div>
+        <div style="margin-top:5px"><span class="badge b-crit">INJURED_SALE</span> Jangan jual pemain saat cedera — valuasi jualnya dipotong oleh game.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- SLIDE-OVER PLAYER DRAWER (v8.0 Tahap 2) -->
+<div class="drawer-bg" id="player-drawer-bg" onclick="if(event.target===this)closePlayerDrawer()">
+  <div class="drawer-panel" id="player-drawer-body"></div>
+</div>
+
+<div class="sticky-cart-bar" id="sticky-cart-bar"></div>
+<div class="toast" id="toast"></div>
+
+  <!-- MOBILE BOTTOM NAVIGATION BAR (Aktif di layar HP <= 768px) -->
+  <nav class="mobile-bnav" aria-label="Navigasi Mobile">
+    <button class="bnav-item active" data-tab="t1" onclick="goToView('t1')"><span class="bnav-ico">🏠</span><span>Beranda</span></button>
+    <button class="bnav-item" data-tab="t2" onclick="goToView('t2')"><span class="bnav-ico">⚔️</span><span>War Room</span></button>
+    <button class="bnav-item" data-tab="t3" onclick="goToView('t3')"><span class="bnav-ico">⚽</span><span>Skuad</span></button>
+    <button class="bnav-item" data-tab="t4" onclick="goToView('t4')"><span class="bnav-ico">🛒</span><span>Scout</span></button>
+    <button class="bnav-item" data-tab="t5" onclick="goToView('t5')"><span class="bnav-ico">💰</span><span>Keuangan</span></button>
+    <button class="bnav-item" data-tab="t6" onclick="goToView('t6')"><span class="bnav-ico">🏆</span><span>Liga</span></button>
+  </nav>
+</div>
+
+<!-- 1. Engine Pure JS (Tahap 1 & 2) -->
+<script src="js/engine/config.js"></script>
+<script src="js/engine/utils.js"></script>
+<script src="js/engine/economy.js"></script>
+<script src="js/engine/tactics.js"></script>
+<script src="js/engine/roster.js"></script>
+<script src="js/engine/scout.js"></script>
+<script src="js/engine/club.js"></script>
+<script src="js/storage.js"></script>
+
+<!-- 2. Bootstrap Awal Global `D` Sebelum Modul UI Dimuat -->
+<script>
+  var D = window.D = {
+    cfg: window.LFEngine.config.getClientConfig(),
+    meta: {},
+    stadium: { optLigaPrices: { geral: 12, arquibancada: 19, cadeiras: 47, camarotes: 160 } },
+  };
+</script>
+
+<!-- 3. Modul UI v8.0 (Adaptasi Dinamis) -->
+<script src="js/ui/core.js"></script>
+<script src="js/ui/tab1_command.js"></script>
+<script src="js/ui/tab2_warroom.js"></script>
+<script src="js/ui/tab3_tactics.js"></script>
+<script src="js/ui/tab4_squad.js"></script>
+<script src="js/ui/tab5_academy.js"></script>
+<script src="js/ui/tab6_finance.js"></script>
+<script src="js/ui/tab7_scout.js"></script>
+<script src="js/ui/tab8_tools.js"></script>
+
+<!-- 4. App Loader & PWA Controller -->
+<script src="js/app_loader.js"></script>
+</body>
+</html>
