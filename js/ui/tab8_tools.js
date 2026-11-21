@@ -234,17 +234,25 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.2.5 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.3.3 PWA';
+  const gd = window.LFGDrive;
+  const gdCfg = gd ? gd.loadConfig() : null;
+  const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
+  const gdLabel = gdReady
+    ? `${gdCfg.folderName || gdCfg.folderId} · ${gdCfg.fileName || '(terbaru)'}`
+    : 'Belum diatur (klik Setup di Ganti Save)';
 
   el.innerHTML = `
     <div class="pwa-kv-grid mono">
       <div class="pwa-kv-box"><span class="c-muted">Versi &amp; Mode Offline</span><b class="${swActive ? 'c-green' : 'c-amber'}">${swActive ? '✓ PWA Offline Siap' : 'Online Browser'}</b><span class="c-muted" style="font-size:10px">${esc(verTxt)}</span></div>
       <div class="pwa-kv-box"><span class="c-muted">Cache Static DB HP</span><b class="c-sky">${dbPlayers ? dbPlayers.toLocaleString('id-ID') + ' pemain' : 'Belum di-cache'}</b><span class="c-muted" style="font-size:10px">${dbClubs.toLocaleString('id-ID')} klub</span></div>
       <div class="pwa-kv-box"><span class="c-muted">Snapshot Delta Tracker</span><b class="c-green">${snapCount} tanggal</b><span class="c-muted" style="font-size:10px">Tersimpan di IndexedDB</span></div>
-      <div class="pwa-kv-box"><span class="c-muted">Shortlist Favorit</span><b class="c-purple">${shortCnt} target</b><span class="c-muted" style="font-size:10px">Persisten antar-save</span></div>
+      <div class="pwa-kv-box"><span class="c-muted">Google Drive Sync (Opsi C)</span><b class="${gdReady ? 'c-sky' : 'c-amber'}">${gdReady ? '☁️ Aktif Lintas HP' : '⚠ Belum Diatur'}</b><span class="c-muted" style="font-size:10px">${esc(gdLabel)}</span></div>
     </div>
     <div class="pill-row" style="margin-bottom:0">
-      <button type="button" class="btn btn-sm btn-green" onclick="exportPwaBackupJson()">⬇ Export Backup Data</button>
+      <button type="button" class="btn btn-sm btn-sky" onclick="if(window.LFApp)LFApp.syncGoogleDrive(true,{force:true})">☁️ Sync Drive</button>
+      <button type="button" class="btn btn-sm" onclick="if(window.LFApp)LFApp.copyGDriveShareUrl()">🔗 Link Setup HP Lain</button>
+      <button type="button" class="btn btn-sm btn-green" onclick="exportPwaBackupJson()">⬇ Export Backup (${shortCnt})</button>
       <button type="button" class="btn btn-sm" onclick="document.getElementById('pwa-import-file').click()">⬆ Import Backup</button>
       <button type="button" class="btn btn-sm" onclick="if(window.LFApp)LFApp.refreshStaticDb();showToast('Menyinkronkan Static DB...')">↻ Sync DB</button>
       <button type="button" class="btn btn-sm" onclick="clearPwaCacheConfirm()">🗑️ Bersihkan Cache</button>

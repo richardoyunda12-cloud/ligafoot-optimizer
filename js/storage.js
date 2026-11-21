@@ -189,11 +189,17 @@
     const prog = (msg) => { if (typeof onProgress === 'function') onProgress(msg); };
     if (!file) throw new Error('File save .ligafoot belum dipilih.');
     prog(`Membaca ${(file.size / (1024 * 1024)).toFixed(2)} MB (${file.name})...`);
-    const text = await file.text();
-    prog('Mem-parse JSON save LigaFoot...');
     let parsed;
     try {
-      parsed = JSON.parse(text);
+      if (typeof file.arrayBuffer === 'function') {
+        const buf = await file.arrayBuffer();
+        prog('Mem-parse JSON save LigaFoot...');
+        parsed = await decompressGzipToJson(buf);
+      } else {
+        const text = await file.text();
+        prog('Mem-parse JSON save LigaFoot...');
+        parsed = JSON.parse(text);
+      }
     } catch (err) {
       throw new Error(`File bukan JSON LigaFoot yang valid (${err.message}). Pastikan memilih file .ligafoot hasil Export Save.`);
     }
@@ -207,6 +213,8 @@
     return idbSet(KEYS.LAST_DASHBOARD, {
       data: dataObj,
       fileName: fileMeta.fileName || 'ligafoot_slot1.ligafoot',
+      source: fileMeta.source || 'local',
+      gdriveMeta: fileMeta.gdriveMeta || null,
       savedAt: new Date().toISOString(),
     });
   }
