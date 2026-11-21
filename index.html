@@ -102,9 +102,9 @@
           </div>
         </div>
         <div class="top-actions">
-          <button class="btn btn-green" onclick="LFApp.openSavePicker()" title="Muat file save .ligafoot terbaru">📂 Ganti Save</button>
-          <button class="btn" onclick="openSearch()">🔍 Cari</button>
-          <button class="btn" onclick="openGlossary()">📖 Kamus</button>
+          <button type="button" class="btn btn-green" onclick="LFApp.openSavePicker()" title="Muat file save .ligafoot terbaru">📂 <span class="btn-lbl-long">Ganti </span>Save</button>
+          <button type="button" class="btn" onclick="openSearch()" title="Cari Cepat (Ctrl+K)">🔍<span class="btn-lbl-mob-hide"> Cari</span></button>
+          <button type="button" class="btn" onclick="openGlossary()" title="Kamus Istilah">📖<span class="btn-lbl-mob-hide"> Kamus</span></button>
           <button class="btn" id="btn-density" onclick="toggleDensity()" title="Ganti kepadatan tampilan tabel &amp; kartu">↕️ Mode: Lega</button>
           <span class="badge b-good" id="hdr-badge">v8.1 PWA</span>
         </div>
@@ -125,6 +125,7 @@
   <section id="panel-t1" class="panel active">
     <div id="t1-hero"></div>
     <div class="grid g4" id="t1-kpis"></div>
+    <div id="t1-club-strip"></div>
     <div id="t1-autoguard-wrap"></div>
 
     <div class="grid g-main-side mt-12">
@@ -154,23 +155,31 @@
     </div>
   </section>
 
-  <!-- ==================== TAB 2: WAR ROOM (MATCHDAY FOKUS) ==================== -->
+  <!-- ==================== TAB 2: WAR ROOM (MATCHDAY FOKUS v8.2.1) ==================== -->
   <section id="panel-t2" class="panel">
     <div class="card mb-8">
-      <div class="flex-between mb-8">
+      <div class="wr-top-head">
         <div>
-          <h2 style="margin:0">⚔️ War Room Matchday — Fokus 1 Laga per Klik</h2>
-          <div class="kpi-sub">Pilih jadwal di bawah, lalu cocokkan <b>Wasit</b> &amp; <b>Cuaca</b> sesuai layar pra-pertandingan di game.</div>
+          <h2 style="margin:0">⚔️ War Room Matchday</h2>
+          <div class="kpi-sub wr-sub-desk">Pilih jadwal di bawah, lalu cocokkan <b>Wasit</b> &amp; <b>Cuaca</b> sesuai layar pra-pertandingan di game.</div>
         </div>
-        <div class="pill-row" style="margin:0">
-          <span class="kpi-lbl" style="align-self:center">Wasit:</span>
-          <button id="wr-ref-strict" class="btn btn-sm" onclick="setWarCond('ref','strict')">🟥 Ketat</button>
-          <button id="wr-ref-normal" class="btn btn-sm btn-green" onclick="setWarCond('ref','normal')">🟨 Normal</button>
-          <button id="wr-ref-lenient" class="btn btn-sm" onclick="setWarCond('ref','lenient')">🟩 Longgar</button>
-          <span class="kpi-lbl" style="align-self:center;margin-left:6px">Cuaca:</span>
-          <button id="wr-w-clear" class="btn btn-sm btn-green" onclick="setWarCond('weather','clear')">☀️ Cerah</button>
-          <button id="wr-w-rain" class="btn btn-sm" onclick="setWarCond('weather','rain')">🌧️ Hujan</button>
-          <button id="wr-w-heat" class="btn btn-sm" onclick="setWarCond('weather','heat')">🔥 Panas</button>
+        <div class="wr-cond-bars">
+          <div class="wr-seg-row">
+            <span class="wr-seg-lbl">Wasit</span>
+            <div class="wr-seg-group">
+              <button type="button" id="wr-ref-strict" class="btn btn-sm" onclick="setWarCond('ref','strict')">🟥 Ketat</button>
+              <button type="button" id="wr-ref-normal" class="btn btn-sm btn-green" onclick="setWarCond('ref','normal')">🟨 Normal</button>
+              <button type="button" id="wr-ref-lenient" class="btn btn-sm" onclick="setWarCond('ref','lenient')">🟩 Longgar</button>
+            </div>
+          </div>
+          <div class="wr-seg-row">
+            <span class="wr-seg-lbl">Cuaca</span>
+            <div class="wr-seg-group">
+              <button type="button" id="wr-w-clear" class="btn btn-sm btn-green" onclick="setWarCond('weather','clear')">☀️ Cerah</button>
+              <button type="button" id="wr-w-rain" class="btn btn-sm" onclick="setWarCond('weather','rain')">🌧️ Hujan</button>
+              <button type="button" id="wr-w-heat" class="btn btn-sm" onclick="setWarCond('weather','heat')">🔥 Panas</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -178,11 +187,14 @@
       <div id="t2-active-match"></div>
     </div>
 
-    <details class="glossary-inline" style="padding:11px 14px">
-      <summary>📣 Laci Live Coaching, Halftime Talk &amp; Tactical Orders (Klik untuk buka/tutup)</summary>
+    <details id="t2-live-drawer" class="glossary-inline" style="padding:11px 14px">
+      <summary>📣 Laci Live Coaching, Pelacak 3 Shout &amp; Halftime Talk (Klik untuk buka/tutup)</summary>
       <div class="grid g2 mt-12">
         <div>
-          <h3>🗣️ Halftime Talk &amp; 3 Shouts (Anti-Repeat 100% → 50% → 0%)</h3>
+          <div class="flex-between mb-8">
+            <h3 style="margin:0">🗣️ Halftime &amp; Pelacak 3 Shout (100% → 50% → 0%)</h3>
+            <button type="button" class="btn btn-sm" onclick="resetWarShouts()">🔄 Reset Match</button>
+          </div>
           <div id="t2-halftime" class="mb-8" style="font-size:12px"></div>
           <div id="t2-shouts"></div>
         </div>
@@ -194,25 +206,28 @@
     </details>
   </section>
 
-  <!-- ==================== TAB 3: SKUAD & TAKTIK (4 SUB-TAB) ==================== -->
+  <!-- ==================== TAB 3: SKUAD & TAKTIK (4 SUB-TAB v8.2.2) ==================== -->
   <section id="panel-t3" class="panel">
     <div class="subtabs" data-group="t3">
-      <button class="subtab active" data-sub="t3-xi" onclick="goToView('t3','t3-xi')">⚽ Lapangan &amp; Dual XI</button>
-      <button class="subtab" data-sub="t3-squad" onclick="goToView('t3','t3-squad')">🧾 Audit Skuad Senior</button>
-      <button class="subtab" data-sub="t3-train" onclick="goToView('t3','t3-train')">🏋️ Training &amp; Ruang Ganti</button>
-      <button class="subtab" data-sub="t3-acad" onclick="goToView('t3','t3-acad')">🌱 Akademi</button>
+      <button type="button" class="subtab active" data-sub="t3-xi" onclick="goToView('t3','t3-xi')">⚽ Lapangan &amp; Dual XI</button>
+      <button type="button" class="subtab" data-sub="t3-squad" onclick="goToView('t3','t3-squad')">🧾 Audit Skuad Senior</button>
+      <button type="button" class="subtab" data-sub="t3-train" onclick="goToView('t3','t3-train')">🏋️ Training &amp; Ruang Ganti</button>
+      <button type="button" class="subtab" data-sub="t3-acad" onclick="goToView('t3','t3-acad')">🌱 Akademi</button>
     </div>
 
     <!-- Sub-tab 3A: Lapangan & Dual XI -->
     <div id="sub-t3-xi" class="subpanel active">
       <div class="card mb-8">
-        <div class="flex-between mb-8">
-          <div class="pill-row" style="margin:0">
-            <button id="xi-mode-best" class="btn btn-green" onclick="setXiMode('best')">⚡ Best XI (Full Power)</button>
-            <button id="xi-mode-rot" class="btn" onclick="setXiMode('rot')">🔄 Rotation XI (Laga Ringan)</button>
+        <div class="t3-ctrl-bar">
+          <div class="t3-ctrl-left">
+            <div class="t3-seg-2">
+              <button type="button" id="xi-mode-best" class="btn btn-green" onclick="setXiMode('best')">⚡ Best XI</button>
+              <button type="button" id="xi-mode-rot" class="btn" onclick="setXiMode('rot')">🔄 Rotation XI</button>
+            </div>
             <select id="t3-form-select" onchange="onFormationChange()"></select>
+            <span id="t3-best-form-slot"></span>
           </div>
-          <div id="t3-xi-summary" class="mono" style="font-size:12px"></div>
+          <div id="t3-xi-summary" class="mono" style="font-size:11.5px"></div>
         </div>
         <div class="grid g2">
           <div>
@@ -223,16 +238,17 @@
             </div>
           </div>
           <div>
-            <h3>🎯 Set-Piece &amp; Kapten Optimal</h3>
+            <h3>🎯 Set-Piece &amp; Kapten (Klik nama → Profil)</h3>
             <div id="t3-setpieces" class="mb-8" style="font-size:12px"></div>
-            <h3>🪑 Bangku Cadangan &amp; Status Menit</h3>
+            <h3 id="t3-bench-title">🪑 Bangku Cadangan &amp; Status Menit</h3>
             <div class="tbl-wrap"><table id="t3-bench-tbl"></table></div>
+            <div id="t3-absent-box"></div>
           </div>
         </div>
       </div>
       <div class="card">
-        <h2>📊 Perbandingan 15 Formasi Resmi (#3492)</h2>
-        <div class="tbl-wrap"><table id="t3-form-tbl"></table></div>
+        <h2 id="t3-form-title">📊 Perbandingan 15 Formasi Resmi (#3492)</h2>
+        <div class="tbl-wrap tbl-sticky"><table id="t3-form-tbl"></table></div>
       </div>
     </div>
 
@@ -243,24 +259,26 @@
           <h2 style="margin:0">🧾 Audit Skuad Senior &amp; Kontrak</h2>
           <button type="button" class="btn btn-sm btn-green" onclick="exportRosterCsv()">⬇ CSV</button>
         </div>
+        <div id="t4-contract-timeline"></div>
+        <div id="t4-quick-chips" class="quick-chips-bar"></div>
         <details class="mobile-filter-box" id="t3b-filter-box" open>
-          <summary><span>🔍 Filter &amp; Cari Skuad</span><span>▼</span></summary>
+          <summary><span>🔍 Cari Nama / Filter Lanjutan</span><span>▼</span></summary>
           <div class="pill-row mobile-filter-body" style="margin-bottom:0">
             <input id="t4-search" class="input" style="flex:1;min-width:140px" placeholder="Filter nama / posisi..." oninput="renderRosterTable()" />
             <select id="t4-filter" style="flex:1;min-width:140px" onchange="renderRosterTable()">
               <option value="ALL">Semua Pemain</option>
               <option value="GOLDEN">Golden Window (11–59d)</option>
               <option value="DECLINE">Regresi / Ambang Usia</option>
+              <option value="GEM">Hidden Gem</option>
+              <option value="INJURED">Cedera (Injured)</option>
               <option value="NONSTACK">Skill Non-Stack</option>
               <option value="TRAP">TRAP (Pot &gt; PotCap)</option>
-              <option value="GEM">Hidden Gem</option>
               <option value="UNHAPPY">Unhappy / roleSore</option>
               <option value="SLUMP">Fine Slump Aktif</option>
               <option value="LOOPHOLE">Loophole Auto-Renew 0%</option>
             </select>
           </div>
         </details>
-        <div id="t4-contract-timeline" class="mb-8"></div>
         <div class="tbl-wrap tbl-sticky"><table id="t4-tbl"></table></div>
       </div>
     </div>
@@ -282,21 +300,23 @@
     <div id="sub-t3-acad" class="subpanel">
       <div class="card">
         <h2>🌱 Pipeline Akademi (youthPlayers) &amp; Kecocokan Lubang Skuad</h2>
+        <div id="t5-kpis"></div>
         <div id="t5-holes" class="mb-8" style="font-size:12px"></div>
+        <div id="t5-quick-chips" class="quick-chips-bar"></div>
         <div class="tbl-wrap tbl-sticky"><table id="t5-tbl"></table></div>
       </div>
     </div>
   </section>
 
-  <!-- ==================== TAB 4: TRANSFER & SCOUT (3 SUB-TAB) ==================== -->
+  <!-- ==================== TAB 4: TRANSFER & SCOUT (4 SUB-TAB v8.2.3) ==================== -->
   <section id="panel-t4" class="panel">
     <div class="budget-strip" id="t7-budget-strip"></div>
 
     <div class="subtabs" data-group="t4">
-      <button class="subtab active" data-sub="t4-bp" onclick="goToView('t4','t4-bp')">🧠 Rencana Belanja Pintar</button>
-      <button class="subtab" data-sub="t4-exp" onclick="goToView('t4','t4-exp')">🔎 Eksplorasi Pasar Global</button>
-      <button class="subtab" data-sub="t4-short" onclick="goToView('t4','t4-short')">⭐ Shortlist <span id="t4-short-cnt" class="badge b-accent">0</span></button>
-      <button class="subtab" data-sub="t4-cart" onclick="goToView('t4','t4-cart')">🛒 Keranjang Transfer</button>
+      <button type="button" class="subtab active" data-sub="t4-bp" onclick="goToView('t4','t4-bp')">🧠 Belanja Pintar</button>
+      <button type="button" class="subtab" data-sub="t4-exp" onclick="goToView('t4','t4-exp')">🔎 Pasar Global</button>
+      <button type="button" class="subtab" data-sub="t4-short" onclick="goToView('t4','t4-short')">⭐ Shortlist <span id="t4-short-cnt" class="badge b-accent">0</span></button>
+      <button type="button" class="subtab" data-sub="t4-cart" onclick="goToView('t4','t4-cart')">🛒 Cart <span id="t4-cart-cnt" class="badge b-good">0</span></button>
     </div>
 
     <!-- Sub-tab 4A: Rencana Belanja Pintar -->
@@ -304,54 +324,58 @@
       <div class="card">
         <div class="flex-between mb-8">
           <div>
-            <h2 style="margin:0">🧠 Rencana Belanja Pintar (Sesuai Kas, Lubang Skuad &amp; ROI)</h2>
-            <div class="kpi-sub">Otomatis mencocokkan target pasar terbaik dengan pemain skuad yang digantikan + simulasi 1-klik ke Keranjang.</div>
+            <h2 style="margin:0">🧠 Rencana Belanja Pintar</h2>
+            <div class="kpi-sub t4-bp-sub-desk">Otomatis mencocokkan target pasar terbaik dengan pemain skuad yang digantikan + simulasi 1-klik ke Keranjang.</div>
           </div>
-          <div class="pill-row" style="margin:0">
-            <button id="bp-tab-UPGRADE" class="btn btn-sm btn-green" onclick="setBlueprintTab('UPGRADE')">🎯 Upgrade XI &amp; Lubang</button>
-            <button id="bp-tab-ROI" class="btn btn-sm" onclick="setBlueprintTab('ROI')">💸 Pabrik Uang (Flip)</button>
-            <button id="bp-tab-BARGAIN" class="btn btn-sm" onclick="setBlueprintTab('BARGAIN')">🆓 Gratis &amp; Diskon</button>
-            <button id="bp-tab-SELL" class="btn btn-sm" onclick="setBlueprintTab('SELL')">📤 Sumber Dana (Jual)</button>
+          <div class="t4-bp-grid">
+            <button type="button" id="bp-tab-UPGRADE" class="btn btn-sm btn-green" onclick="setBlueprintTab('UPGRADE')">🎯 Upgrade XI</button>
+            <button type="button" id="bp-tab-ROI" class="btn btn-sm" onclick="setBlueprintTab('ROI')">💸 Flip ROI</button>
+            <button type="button" id="bp-tab-BARGAIN" class="btn btn-sm" onclick="setBlueprintTab('BARGAIN')">🆓 Gratis/Diskon</button>
+            <button type="button" id="bp-tab-SELL" class="btn btn-sm" onclick="setBlueprintTab('SELL')">📤 Jual Skuad</button>
           </div>
         </div>
         <div id="t7-blueprint"></div>
       </div>
     </div>
 
-    <!-- Sub-tab 4B: Eksplorasi Pasar -->
+    <!-- Sub-tab 4B: Eksplorasi Pasar Global -->
     <div id="sub-t4-exp" class="subpanel">
       <div class="card">
         <div class="flex-between mb-8">
           <h2 style="margin:0">🔎 Eksplorasi Pasar <span id="t7-cnt" class="badge b-info">0</span></h2>
           <button type="button" class="btn btn-sm btn-green" onclick="exportScoutCsv()">⬇ CSV</button>
         </div>
+
+        <!-- Preset Chips 1-Baris (Swipe Halus + Highlight Aktif) -->
+        <div id="t4-preset-chips" class="t4-preset-strip"></div>
+
+        <!-- Quick Bar Mobile (Tersinkron 2 Arah dengan Filter Asli!) -->
         <div class="scout-quick-bar">
-          <input id="s-q-mob" class="input" placeholder="Cari nama / klub..." oninput="document.getElementById('s-q').value=this.value;renderScout()" />
-          <select id="s-pos-mob" onchange="document.getElementById('s-pos').value=this.value;renderScout()">
-            <option value="">Semua Pos</option>
+          <input id="s-q-mob" class="input" placeholder="Cari nama/klub..." oninput="syncScoutQuick('q', this.value)" />
+          <select id="s-pos-mob" onchange="syncScoutQuick('pos', this.value)">
+            <option value="">Pos: All</option>
             <option value="G">GK</option><option value="LD">RB</option><option value="LE">LB</option>
             <option value="ZD">RCB</option><option value="ZE">LCB</option><option value="VOL">CDM</option>
             <option value="MC">CM</option><option value="MA">CAM</option><option value="PD">RW</option>
             <option value="PE">LW</option><option value="SA">SS</option><option value="ATA">ST</option>
           </select>
+          <select id="s-sort-mob" onchange="syncScoutQuick('sort', this.value)">
+            <option value="SMART">Urut: Pintar</option>
+            <option value="UPGRADE">Upgrade XI</option>
+            <option value="ROI">Flip ROI %</option>
+            <option value="PROFIT">Profit Max</option>
+            <option value="CHEAP">Termurah</option>
+            <option value="FORCE">Force Max</option>
+            <option value="POTCAP">PotCap Max</option>
+          </select>
         </div>
+
         <details class="mobile-filter-box" id="t4b-filter-box" open>
-          <summary><span>🎛️ Filter Lanjutan &amp; Preset Scout (Bosman / Unhappy / Flip)</span><span>▼</span></summary>
+          <summary id="t4b-filter-summary"><span>🎛️ Filter Lanjutan</span><span>▼</span></summary>
           <div class="mobile-filter-body">
             <div class="pill-row">
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('ALL')">Reset</button>
-              <button type="button" class="btn btn-sm btn-green" onclick="applyScoutPreset('HOLES')">Isi Lubang</button>
-              <button type="button" class="btn btn-sm btn-amber" onclick="applyScoutPreset('FLIP')">Top Flip</button>
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('BOSMAN')">Bosman ≤180d</button>
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('UNH')">Unhappy -15%</button>
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('GEM')">Gems</button>
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('FREE')">Free</button>
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('LOCAL')">Lokal</button>
-              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('SHORTLIST')">⭐ Shortlist</button>
-            </div>
-            <div class="pill-row">
-              <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="renderScout()" />
-              <select id="s-pos" onchange="renderScout()">
+              <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="syncScoutDesktopToMob();resetScoutLimitAndRender()" />
+              <select id="s-pos" onchange="syncScoutDesktopToMob();resetScoutLimitAndRender()">
                 <option value="">Semua Posisi</option>
                 <option value="G">GK — Kiper</option><option value="LD">RB — Bek Kanan</option><option value="LE">LB — Bek Kiri</option>
                 <option value="ZD">RCB — Bek Tengah Kanan</option><option value="ZE">LCB — Bek Tengah Kiri</option>
@@ -360,16 +384,16 @@
                 <option value="ME">LM — Gelandang Kiri</option><option value="PD">RW — Sayap Kanan</option>
                 <option value="PE">LW — Sayap Kiri</option><option value="SA">SS — Second Striker</option><option value="ATA">ST — Striker</option>
               </select>
-              <select id="s-foot" onchange="renderScout()">
+              <select id="s-foot" onchange="resetScoutLimitAndRender()">
                 <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>
               </select>
-              <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="renderScout()" />
-              <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="renderScout()" />
-              <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="renderScout()" />
-              <select id="s-price-unit" onchange="renderScout()">
+              <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="resetScoutLimitAndRender()" />
+              <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="resetScoutLimitAndRender()" />
+              <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="resetScoutLimitAndRender()" />
+              <select id="s-price-unit" onchange="resetScoutLimitAndRender()">
                 <option value="1000000">M (Juta)</option><option value="1000">K (Ribu)</option><option value="1">Penuh (€)</option>
               </select>
-              <select id="s-sort" onchange="renderScout()">
+              <select id="s-sort" onchange="syncScoutDesktopToMob();resetScoutLimitAndRender()">
                 <option value="SMART">Urut: Rekomendasi Pintar</option>
                 <option value="UPGRADE">Urut: Upgrade XI (ΔEff)</option>
                 <option value="ROI">Urut: Flip ROI % Tertinggi</option>
@@ -380,81 +404,97 @@
               </select>
             </div>
             <div class="pill-row" style="margin-bottom:4px">
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-afford" type="checkbox" checked onchange="renderScout()" /> 💰 Masuk Daya Beli</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-stack" type="checkbox" onchange="renderScout()" /> Hanya Stack Optimal</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="renderScout()" /> Sembunyikan TRAP</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-inj" type="checkbox" checked onchange="renderScout()" /> Sembunyikan Cedera</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-afford" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> 💰 Masuk Daya Beli</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-stack" type="checkbox" onchange="resetScoutLimitAndRender()" /> Hanya Stack Optimal</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> Sembunyikan TRAP</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-inj" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> Sembunyikan Cedera</label>
             </div>
           </div>
         </details>
+
         <details class="glossary-inline">
-          <summary>📖 Catatan Arti Istilah Scout (BOSMAN, UNH, SCARCE, TRAP, GEM, GOD, FLIP)</summary>
+          <summary>📖 Catatan Arti Istilah Scout (BOSMAN, UNH, SCARCE, TRAP, GEM, GOD)</summary>
           <div class="glossary-grid">
             <div><span class="badge b-good">BOSMAN</span> Kontrak ≤180d — bisa rekrut <b>GRATIS (0€)</b> via Pra-Kontrak saat kontrak habis.</div>
             <div><span class="badge b-good">UNH</span> Pemain tidak bahagia di klub AI — <b>diskon harga -15%</b> &amp; <b>gaji -50%</b>.</div>
             <div><span class="badge b-good">FREE</span> Free Agent (tanpa klub) — biaya transfer <b>0€</b> (kunci Sell Now 1 thn).</div>
-            <div><span class="badge b-crit">SCARCE</span> Klub AI tipis stok (≤2 pemain di posisi itu) — harga mahal <b>+15%</b>, hindari!</div>
+            <div><span class="badge b-crit">SCARCE</span> Klub AI tipis stok (≤2 pemain) — harga mahal <b>+15%</b>, hindari!</div>
             <div><span class="badge b-good">GEM</span> Plafon asli (<i>PotCap</i>) tinggi / tersembunyi — calon bintang murah.</div>
             <div><span class="badge b-crit">TRAP</span> Jebakan — tampilan Potential tinggi tapi <i>PotCap</i> asli mentok rendah.</div>
-            <div><span class="badge b-accent">GOD</span> 2 skill saling menumpuk (<i>stack</i>) penuh di Match Engine.</div>
-            <div><span class="badge b-info">LOCAL</span> Pemain domestik (WNI) — <b>tidak memakan kuota asing</b> &amp; cepat nyetel.</div>
           </div>
         </details>
-        <div class="tbl-wrap tbl-sticky" style="max-height:460px;overflow-y:auto"><table id="t7-scout-tbl"></table></div>
+
+        <div class="tbl-wrap tbl-sticky" style="max-height:480px;overflow-y:auto"><table id="t7-scout-tbl"></table></div>
+        <div id="t7-scout-more" class="scout-more-wrap"></div>
       </div>
     </div>
 
-    <!-- Sub-tab 4D: Shortlist Persisten -->
+    <!-- Sub-tab 4C: Shortlist Persisten -->
     <div id="sub-t4-short" class="subpanel">
       <div class="card">
         <div class="flex-between mb-8">
           <div>
-            <h2 style="margin:0">⭐ Shortlist Target Favorit (Tersimpan Permanen Antar-Save)</h2>
-            <div class="kpi-sub">Harga beli, status Bosman/Unhappy, dan perbandingan Swap diperbarui otomatis setiap kali kamu memuat save baru.</div>
+            <h2 style="margin:0">⭐ Shortlist Target Favorit</h2>
+            <div class="kpi-sub">Tersimpan permanen di HP antar-save; harga &amp; status Bosman diperbarui otomatis.</div>
           </div>
-          <button class="btn btn-sm" onclick="clearShortlist()">Kosongkan Shortlist</button>
+          <button type="button" class="btn btn-sm" onclick="clearShortlist()">Kosongkan</button>
         </div>
+        <div id="t7-short-summary"></div>
         <div id="t7-shortlist"></div>
       </div>
     </div>
 
-    <!-- Sub-tab 4C: Live Transfer Cart -->
+    <!-- Sub-tab 4D: Live Transfer Cart -->
     <div id="sub-t4-cart" class="subpanel">
       <div class="card">
         <div class="flex-between mb-8">
-          <h2 style="margin:0">🛒 Live Transfer Cart &amp; Simulasi Kas (Realisasi 1.25x / Counter +40%)</h2>
+          <h2 style="margin:0">🛒 Live Transfer Cart &amp; Simulasi Kas</h2>
           <div class="pill-row" style="margin:0">
-            <button class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Pilih Semua Layak Jual</button>
-            <button class="btn btn-sm" onclick="clearCart()">Kosongkan Keranjang</button>
+            <button type="button" class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Pilih Layak Jual</button>
+            <button type="button" class="btn btn-sm" onclick="clearCart()">Reset</button>
           </div>
         </div>
         <div class="grid g4 mb-8" id="t7-cart-kpis"></div>
+        <div id="t7-cart-impact"></div>
         <div class="grid g2">
           <div>
-            <h3>📤 Pemain Keluar (Centang Jual / Toggle Arab 2.5x)</h3>
-            <div class="tbl-wrap" style="max-height:340px;overflow-y:auto"><table id="t7-out-tbl"></table></div>
+            <div class="flex-between mb-8">
+              <h3 style="margin:0">📤 Pemain Keluar (Jual / Arab 2.5x)</h3>
+              <input id="t7-out-search" class="input" style="width:150px;padding:4px 8px" placeholder="Cari skuad..." oninput="renderCart()" />
+            </div>
+            <div class="tbl-wrap tbl-sticky" style="max-height:340px;overflow-y:auto"><table id="t7-out-tbl"></table></div>
           </div>
           <div>
-            <h3>📥 Target Masuk (Klik "+ Beli" atau "⇄ Swap")</h3>
-            <div class="tbl-wrap" style="max-height:340px;overflow-y:auto"><table id="t7-in-tbl"></table></div>
+            <h3>📥 Target Masuk (Toggle 🆓 0€ Bosman)</h3>
+            <div class="tbl-wrap tbl-sticky" style="max-height:340px;overflow-y:auto"><table id="t7-in-tbl"></table></div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ==================== TAB 5: KEUANGAN & KLUB (3 SUB-TAB) ==================== -->
+  <!-- ==================== TAB 5: KEUANGAN & KLUB (4 SUB-TAB v8.2.4) ==================== -->
   <section id="panel-t5" class="panel">
     <div class="subtabs" data-group="t5">
-      <button class="subtab active" data-sub="t5-ov" onclick="goToView('t5','t5-ov')">💰 Arus Kas, Shop &amp; Member</button>
-      <button class="subtab" data-sub="t5-tkt" onclick="goToView('t5','t5-tkt')">🎟️ Tiket &amp; 6 Fase</button>
-      <button class="subtab" data-sub="t5-shop" onclick="goToView('t5','t5-shop')">👕 Grafik Toko &amp; Top Jersey</button>
-      <button class="subtab" data-sub="t5-roi" onclick="goToView('t5','t5-roi')">🏟️ Stadion, ROI &amp; Penonton</button>
+      <button type="button" class="subtab active" data-sub="t5-ov" onclick="goToView('t5','t5-ov')">💰 Arus Kas &amp; Komersial</button>
+      <button type="button" class="subtab" data-sub="t5-tkt" onclick="goToView('t5','t5-tkt')">🎟️ Tiket &amp; 6 Fase</button>
+      <button type="button" class="subtab" data-sub="t5-shop" onclick="goToView('t5','t5-shop')">👕 Toko &amp; Top Jersey</button>
+      <button type="button" class="subtab" data-sub="t5-roi" onclick="goToView('t5','t5-roi')">🏟️ Stadion, CT &amp; ROI</button>
     </div>
 
-    <!-- Sub-tab 5A: Arus Kas, Shop, Member & Komersial -->
+    <!-- Sub-tab 5A: Arus Kas & Grafik di ATAS, lalu Shop, Member & Komersial -->
     <div id="sub-t5-ov" class="subpanel active">
-      <div class="grid g3 mb-8">
+      <div class="grid g2 mb-8">
+        <div class="card">
+          <h2>🧾 Arus Kas Rutin &amp; Kesehatan Keuangan</h2>
+          <div id="t6-cashflow-detail" style="font-size:12px"></div>
+        </div>
+        <div class="card">
+          <h2 id="t6-cash-chart-title">📈 Tren Kas Klub</h2>
+          <div id="t6-cash-chart"></div>
+        </div>
+      </div>
+      <div class="grid g3">
         <div class="card">
           <h2>👕 Club Shop Optimizer (v1.2.0)</h2>
           <div id="t6-shop" style="font-size:12px"></div>
@@ -464,18 +504,8 @@
           <div id="t6-member" style="font-size:12px"></div>
         </div>
         <div class="card">
-          <h2>🤝 Naming Rights, Sponsor &amp; Target Presiden</h2>
+          <h2>🤝 Naming, Sponsor &amp; Target Presiden</h2>
           <div id="t6-commercial" style="font-size:12px"></div>
-        </div>
-      </div>
-      <div class="grid g2">
-        <div class="card">
-          <h2>📈 Tren Kas Klub</h2>
-          <div id="t6-cash-chart"></div>
-        </div>
-        <div class="card">
-          <h2>🧾 Rincian Estimasi Arus Kas Rutin / Bulan</h2>
-          <div id="t6-cashflow-detail" style="font-size:12px"></div>
         </div>
       </div>
     </div>
@@ -484,11 +514,12 @@
     <div id="sub-t5-tkt" class="subpanel">
       <div class="card">
         <div class="flex-between mb-8">
-          <h2 style="margin:0">🎟️ Simulator Tiket Bulat Interaktif (Pareto Fill ≥ 70.5%)</h2>
+          <h2 style="margin:0">🎟️ Simulator Tiket Bulat (Pareto Fill ≥ 70.5%)</h2>
           <div class="pill-row" style="margin:0">
-            <button class="btn btn-sm btn-green" id="sim-mode-normal" onclick="setSimMode('normal')">Laga Biasa</button>
-            <button class="btn btn-sm" id="sim-mode-big" onclick="setSimMode('big')">Big Match / Gugur</button>
-            <button class="btn btn-sm btn-green" onclick="applyOptimalTicketJS()">✨ Terapkan Optimal (Fill ≥ 70.5%)</button>
+            <button type="button" class="btn btn-sm btn-green" id="sim-mode-normal" onclick="setSimMode('normal')">Laga Biasa</button>
+            <button type="button" class="btn btn-sm" id="sim-mode-big" onclick="setSimMode('big')">Big Match / Gugur</button>
+            <button type="button" class="btn btn-sm btn-green" onclick="applyOptimalTicketJS()">✨ Optimal</button>
+            <button type="button" class="btn btn-sm" onclick="resetSimToSavePrices()">↩️ Harga Save</button>
           </div>
         </div>
         <div id="t6-ticket-sim" class="grid g4"></div>
@@ -497,21 +528,26 @@
       </div>
     </div>
 
-    <!-- Sub-tab 5D: Analisis Club Shop & Leaderboard Top 8 Jersey -->
+    <!-- Sub-tab 5C: Grafik Club Shop & Top 8 Jersey -->
     <div id="sub-t5-shop" class="subpanel">
       <div id="t5-shop-analytics"></div>
     </div>
 
-    <!-- Sub-tab 5C: Stadion, ROI & Histori Penonton -->
+    <!-- Sub-tab 5D: Stadion, Proyek CT Aktif, Kalkulator ROI & Penonton -->
     <div id="sub-t5-roi" class="subpanel">
+      <div class="card mb-8">
+        <h2>🏟️ Status Stadion &amp; Proyek Fasilitas Aktif</h2>
+        <div id="t6-facility-status" style="font-size:12px"></div>
+      </div>
       <div class="grid g2">
         <div class="card">
-          <h2>🏗️ Simulator ROI Investasi Stadion &amp; CT (12 Bulan)</h2>
+          <h2>🧮 Kalkulator ROI Ekspansi Stadion (Interaktif)</h2>
           <div id="t6-roi" style="font-size:12px"></div>
         </div>
         <div class="card">
-          <h2>🏟️ Histori Penonton Kandang (matchLog)</h2>
-          <div class="tbl-wrap mb-8"><table id="t6-crowd-tbl"></table></div>
+          <h2>🎟️ Histori Penonton Kandang (matchLog)</h2>
+          <div id="t6-crowd-kpis"></div>
+          <div class="tbl-wrap tbl-sticky mb-8"><table id="t6-crowd-tbl"></table></div>
           <div id="t6-stmt-wrap">
             <h3>📑 35 Mutasi Kas Terakhir</h3>
             <div class="tbl-wrap" style="max-height:260px;overflow-y:auto"><table id="t6-stmt-tbl"></table></div>
@@ -521,88 +557,137 @@
     </div>
   </section>
 
-  <!-- ==================== TAB 6: LIGA, HISTORI & ALAT (3 SUB-TAB) ==================== -->
+  <!-- ==================== TAB 6: LIGA, HISTORI & ALAT (3 SUB-TAB v8.2.5) ==================== -->
   <section id="panel-t6" class="panel">
     <div class="subtabs" data-group="t6">
-      <button class="subtab active" data-sub="t6-lg" onclick="goToView('t6','t6-lg')">🏆 Klasemen &amp; Histori Laga</button>
-      <button class="subtab" data-sub="t6-calc" onclick="goToView('t6','t6-calc')">🧮 5 Kalkulator Engine</button>
-      <button class="subtab" data-sub="t6-ext" onclick="goToView('t6','t6-ext')">🌍 Pra-Kontrak &amp; Timnas</button>
+      <button type="button" class="subtab active" data-sub="t6-lg" onclick="goToView('t6','t6-lg')">🏆 Klasemen &amp; Histori</button>
+      <button type="button" class="subtab" data-sub="t6-calc" onclick="goToView('t6','t6-calc')">🧮 5 Kalkulator Engine</button>
+      <button type="button" class="subtab" data-sub="t6-ext" onclick="goToView('t6','t6-ext')">🌍 Bosman, Timnas &amp; PWA</button>
     </div>
 
-    <!-- Sub-tab 6A: Klasemen & Histori -->
+    <!-- Sub-tab 6A: Klasemen Zona + Klik Rival->War Room & Histori Form Streak -->
     <div id="sub-t6-lg" class="subpanel active">
       <div id="t8-title-tracker" class="mb-8"></div>
       <div class="grid g2">
         <div class="card">
-          <h2>🏆 Klasemen Liga Aktif</h2>
+          <h2>🏆 Klasemen Liga <span class="badge b-info" style="font-weight:600">Klik rival → Simulasi</span></h2>
+          <div class="st-zone-legend">
+            <span><span class="st-dot" style="background:#10b981"></span>#1 Juara</span>
+            <span><span class="st-dot" style="background:#38bdf8"></span>Top 4 / Kontinental</span>
+            <span><span class="st-dot" style="background:#ef4444"></span>Zona Degradasi</span>
+          </div>
           <div class="tbl-wrap"><table id="t8-standings-tbl"></table></div>
         </div>
         <div class="card">
           <h2>🏁 10 Pertandingan Terakhir</h2>
+          <div id="t6-form-streak"></div>
           <div class="tbl-wrap"><table id="t3-recent-tbl"></table></div>
         </div>
       </div>
     </div>
 
-    <!-- Sub-tab 6B: 5 Kalkulator Engine -->
+    <!-- Sub-tab 6B: 5 Kalkulator Engine (Terhubung ke Skuadmu!) -->
     <div id="sub-t6-calc" class="subpanel">
       <div class="grid g2">
         <div class="card">
-          <h2>💰 Kalkulator Counter-Offer (+40% Aman / 1.25x Realisasi)</h2>
-          <div class="pill-row">
-            <input id="c-offer" class="input" type="number" value="3500" oninput="calcAll()" />
-            <select id="c-offer-u" onchange="calcAll()"><option value="K">K (Ribu)</option><option value="M">M (Juta)</option></select>
+          <h2>💰 Counter-Offer (+40% Aman / 1.25x &amp; Arab)</h2>
+          <div class="calc-pick-row">
+            <select id="c-offer-player" onchange="fillCalcFromPlayer('offer', this.value)">
+              <option value="">⚡ Isi otomatis dari Pemain Skuad...</option>
+            </select>
+          </div>
+          <div class="calc-grid-2">
+            <label class="calc-field">Tawaran Awal AI
+              <input id="c-offer" class="input" type="number" value="3500" oninput="calcAll()" />
+            </label>
+            <label class="calc-field">Satuan
+              <select id="c-offer-u" onchange="calcAll()"><option value="K">K (Ribu)</option><option value="M">M (Juta)</option></select>
+            </label>
           </div>
           <div id="c-offer-out" style="font-size:12px"></div>
         </div>
 
         <div class="card">
-          <h2>📝 Cek Golden Window Renew (11–59 Hari = -12% Gaji)</h2>
-          <div class="pill-row">
-            <input id="c-days" class="input" type="number" value="45" style="width:110px" placeholder="Sisa Hari" oninput="calcAll()" />
-            <input id="c-sal" class="input" type="number" value="88" style="width:120px" placeholder="Gaji (K/bln)" oninput="calcAll()" />
+          <h2>📝 Golden Window Renew (11–59 Hari = -12% Gaji)</h2>
+          <div class="calc-pick-row">
+            <select id="c-renew-player" onchange="fillCalcFromPlayer('renew', this.value)">
+              <option value="">⚡ Isi otomatis dari Pemain Skuad...</option>
+            </select>
+          </div>
+          <div class="calc-grid-2">
+            <label class="calc-field">Sisa Kontrak (Hari)
+              <input id="c-days" class="input" type="number" value="45" oninput="calcAll()" />
+            </label>
+            <label class="calc-field">Gaji Kini (K/bln)
+              <input id="c-sal" class="input" type="number" value="88" oninput="calcAll()" />
+            </label>
           </div>
           <div id="c-renew-out" style="font-size:12px"></div>
         </div>
 
         <div class="card">
-          <h2>🤝 Kalkulator Negosiasi Sponsor (0% Risiko Annoyed)</h2>
-          <div class="pill-row">
-            <input id="c-sp-base" class="input" type="number" value="100" style="width:120px" placeholder="Tawaran (K)" oninput="calcAll()" />
-            <select id="c-sp-tier" onchange="calcAll()">
-              <option value="3">Tier 3 (Rekomendasi +2%)</option>
-              <option value="2">Tier 2</option>
-              <option value="1">Tier 1</option>
-            </select>
+          <h2>🤝 Negosiasi Sponsor &amp; Naming Rights</h2>
+          <div class="calc-grid-2">
+            <label class="calc-field">Tawaran Sponsor (K/bln)
+              <input id="c-sp-base" class="input" type="number" value="100" oninput="calcAll()" />
+            </label>
+            <label class="calc-field">Tier Perusahaan
+              <select id="c-sp-tier" onchange="calcAll()">
+                <option value="3">Tier 3 (+2% maks)</option>
+                <option value="2">Tier 2</option>
+                <option value="1">Tier 1</option>
+              </select>
+            </label>
           </div>
           <div id="c-sp-out" style="font-size:12px"></div>
         </div>
 
         <div class="card">
-          <h2>🧪 Tester Eksak priceFactor (Shop &amp; Member v9)</h2>
+          <h2>🧪 Tester priceFactor (Shop &amp; Member v9)</h2>
           <div class="pill-row">
-            <label style="font-size:11px">Shop Mul: <input id="c-pf-shop" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.00" style="width:76px" oninput="calcAll()" /></label>
-            <label style="font-size:11px">Member Mul: <input id="c-pf-mem" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.05" style="width:76px" oninput="calcAll()" /></label>
-            <label style="font-size:11px">Disc %: <input id="c-pf-disc" class="input" type="number" min="0" max="6" value="4" style="width:60px" oninput="calcAll()" /></label>
+            <button type="button" class="btn btn-sm" onclick="fillPfFromSave()">↩️ Isi Save Kini</button>
+            <button type="button" class="btn btn-sm btn-green" onclick="fillPfOptimal()">✨ Isi Optimal</button>
+          </div>
+          <div class="calc-grid-3">
+            <label class="calc-field">Shop Mul
+              <input id="c-pf-shop" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.00" oninput="calcAll()" />
+            </label>
+            <label class="calc-field">Member Mul
+              <input id="c-pf-mem" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.05" oninput="calcAll()" />
+            </label>
+            <label class="calc-field">Disc %
+              <input id="c-pf-disc" class="input" type="number" min="0" max="6" value="4" oninput="calcAll()" />
+            </label>
           </div>
           <div id="c-pf-out" style="font-size:12px"></div>
         </div>
 
         <div class="card">
-          <h2>🟥 Kalkulator Denda Kartu Merah (20% Gratis = 0% Slump)</h2>
+          <h2>🟥 Denda Kartu Merah (20% Gratis = 0% Slump)</h2>
+          <div class="calc-pick-row">
+            <select id="c-fine-player" onchange="fillCalcFromPlayer('fine', this.value)">
+              <option value="">⚡ Isi gaji otomatis dari Pemain Skuad...</option>
+            </select>
+          </div>
+          <div class="calc-grid-2">
+            <label class="calc-field">Gaji Bulanan (K/bln)
+              <input id="c-fine-sal" class="input" type="number" value="80" oninput="calcAll()" />
+            </label>
+            <label class="calc-field">Denda (%)
+              <input id="c-fine-pct" class="input" type="number" min="0" max="100" value="20" oninput="calcAll()" />
+            </label>
+          </div>
           <div class="pill-row">
-            <label style="font-size:11px">Gaji (K/bln): <input id="c-fine-sal" class="input" type="number" value="80" style="width:82px" oninput="calcAll()" /></label>
-            <label style="font-size:11px">Denda (%): <input id="c-fine-pct" class="input" type="number" min="0" max="100" value="20" style="width:68px" oninput="calcAll()" /></label>
-            <button class="btn btn-sm btn-green" onclick="setFinePct(20)">20% Aman</button>
-            <button class="btn btn-sm" onclick="setFinePct(50)">50% (2K)</button>
-            <button class="btn btn-sm" onclick="setFinePct(100)">100% (M)</button>
+            <button type="button" class="btn btn-sm btn-green" onclick="setFinePct(20)">20% Aman</button>
+            <button type="button" class="btn btn-sm" onclick="setFinePct(50)">50% (2K)</button>
+            <button type="button" class="btn btn-sm" onclick="setFinePct(100)">100% (Merah)</button>
           </div>
           <div id="c-fine-out" style="font-size:12px"></div>
         </div>
       </div>
     </div>
 
-    <!-- Sub-tab 6C: Pra-Kontrak & Timnas -->
+    <!-- Sub-tab 6C: Pra-Kontrak + Bosman Preview, Timnas & Manajemen PWA HP -->
     <div id="sub-t6-ext" class="subpanel">
       <div class="grid g2">
         <div class="card">
@@ -611,21 +696,37 @@
         <div class="card">
           <div id="t8-nation" style="font-size:12px"></div>
         </div>
+        <div class="card" style="grid-column: 1 / -1">
+          <h2>📱 Info Aplikasi PWA &amp; Manajemen Data HP</h2>
+          <input type="file" id="pwa-import-file" accept=".json,application/json" class="app-hidden" onchange="importPwaBackupFile(this.files && this.files[0])" />
+          <div id="t8-pwa-card" style="font-size:12px"></div>
+        </div>
       </div>
     </div>
   </section>
 </main>
 
-<!-- QUICK SEARCH MODAL (Ctrl+K) -->
+<!-- QUICK SEARCH MODAL (Ctrl+K — v8.2.5: Nama, Klub, Posisi & Tag) -->
 <div class="modal-bg" id="search-modal" onclick="if(event.target===this)closeSearch()">
   <div class="modal">
     <div class="flex-between mb-8">
-      <strong style="font-size:13px">🔍 Quick Search (Skuad Senior, Akademi, Global Scout)</strong>
-      <button class="btn btn-sm" onclick="closeSearch()">ESC</button>
+      <strong style="font-size:13px">🔍 Cari Cepat (Nama, Klub, Posisi, Tag)</strong>
+      <button type="button" class="btn btn-sm" onclick="closeSearch()">ESC</button>
     </div>
-    <input id="qs-input" class="input" style="width:100%;padding:9px 11px;font-size:13px" placeholder="Ketik nama pemain atau klub..." oninput="runQuickSearch()" />
-    <div id="qs-results" class="mt-12" style="max-height:55vh;overflow-y:auto;font-size:12px"></div>
+    <div class="qs-input-wrap">
+      <input id="qs-input" class="input" style="padding:9px 11px;font-size:13px" placeholder="Ketik nama, klub, posisi (ST/LB), atau tag (BOSMAN/UNH)..." oninput="runQuickSearch()" />
+      <button type="button" id="qs-clear-btn" class="btn btn-sm" onclick="clearQuickSearch()" title="Hapus pencarian">✕</button>
+    </div>
+    <div class="pill-row mt-12" style="margin-bottom:0">
+      <button type="button" class="btn btn-sm" onclick="setQuickSearchQuery('BOSMAN')">🆓 BOSMAN</button>
+      <button type="button" class="btn btn-sm" onclick="setQuickSearchQuery('UNH')">🔥 UNH</button>
+      <button type="button" class="btn btn-sm" onclick="setQuickSearchQuery('GEM')">💎 GEM</button>
+      <button type="button" class="btn btn-sm" onclick="setQuickSearchQuery('ST')">ST</button>
+      <button type="button" class="btn btn-sm" onclick="setQuickSearchQuery('LB')">LB</button>
+    </div>
+    <div id="qs-results" class="mt-12" style="max-height:52vh;overflow-y:auto;font-size:12px"></div>
   </div>
+</div>
 </div>
 
 <!-- GLOSSARY / KAMUS ISTILAH MODAL -->

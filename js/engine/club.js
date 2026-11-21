@@ -144,7 +144,7 @@
           const dmv = curP.mv - U.safeNum(pp.mv, curP.mv);
           const dgf = U.roundTo(curP.gf - U.safeNum(pp.gf, curP.gf), 3);
           if (df !== 0 || Math.abs(dmv) >= 50000) {
-            deltas.playerChanges.push({ name: curP.name, forceDelta: df, mvDelta: Math.round(dmv), gfDelta: dgf });
+            deltas.playerChanges.push({ id: pid, name: curP.name, forceDelta: df, mvDelta: Math.round(dmv), gfDelta: dgf });
           }
         }
       }
@@ -459,17 +459,19 @@
     const { holes, holePositions } = T.detectSquadHoles(userRoster, activeFormation);
     const holePosSet = new Set(holePositions);
 
-    // Special Training Audit
-    const trainSlots = 2 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2);
-    const trainMode = String(uTeam.trainMode || 'auto');
+    // Special Training Audit (v8.2.2: Zero-Truncation + Top 6+ Kandidat dengan id eksak)
     const rawTrainIds = Array.isArray(uTeam.trainIds) ? uTeam.trainIds : [];
+    const formulaSlots = 3 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2); // #21507 TRAIN_SLOTS_BASE=3
+    const trainSlots = Math.max(formulaSlots, rawTrainIds.length);
+    const trainMode = String(uTeam.trainMode || 'auto');
     const pById = {};
     for (const p of userRoster) pById[p.id] = p;
 
+    const idealCount = Math.max(6, trainSlots + 2);
     const idealTrain = userRoster
       .filter(p => !p.injured && p.age < p.declineAge && (p.potCap - p.force) > 0)
       .sort((a, b) => ((b.potCap - b.force) - (a.potCap - a.force)) || (a.age - b.age) || (b.growthFrac - a.growthFrac))
-      .slice(0, trainSlots);
+      .slice(0, idealCount);
 
     const wastedTrain = [];
     for (const tid of rawTrainIds.slice(0, trainSlots)) {
@@ -483,7 +485,18 @@
       mode: trainMode,
       currentIds: rawTrainIds.slice(0, trainSlots),
       currentNames: rawTrainIds.slice(0, trainSlots).filter(tid => tid in pById).map(tid => pById[tid].name),
-      ideal: idealTrain.map(p => ({ name: p.name, pos: p.pos, age: p.age, force: p.force, potCap: p.potCap, gap: p.potCap - p.force })),
+      ideal: idealTrain.map(p => ({
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        age: p.age,
+        force: p.force,
+        potCap: p.potCap,
+        gap: p.potCap - p.force,
+        growthFrac: p.growthFrac,
+        stackGrade: p.stackGrade,
+        nonStack: p.nonStack,
+      })),
       wastedNames: wastedTrain,
     };
 
@@ -711,7 +724,7 @@
       if (pc && typeof pc === 'object') {
         preContracts.push({
           playerName: pc.playerName || pc.name || pc.playerId || '-',
-          fromTeam: pc.fromTeamName || pc.fromTeamId || '-',
+          fromTeam: pc.fromTeamName || (pc.fromTeamId ? (U.getStaticClub(clubsMeta, pc.fromTeamId).name || (compactTeams[pc.fromTeamId] && compactTeams[pc.fromTeamId].name) || pc.fromTeamId) : '-'),
           arriveDate: String(pc.arriveDate || pc.endDate || '').slice(0, 10),
           salary: U.safeNum(pc.salary, 0),
         });
@@ -755,7 +768,7 @@
 
     const fineSlumpPlayers = userRoster
       .filter(p => (p.fineSlump || 0) > 0)
-      .map(p => ({ name: p.name, pos: p.pos, slumpPct: p.fineSlumpPct, days: p.fineSlumpDays }));
+      .map(p => ({ id: p.id, name: p.name, pos: p.pos, slumpPct: p.fineSlumpPct, days: p.fineSlumpDays }));
 
     const cashHist = [];
     if (Array.isArray(uTeam.cashHistory)) {
@@ -885,7 +898,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.1 Web PWA (Engine v1.2.0 • Mobile UX)',
+        version: 'v8.2.5 Web PWA (Engine v1.2.0 • Pure JS)',
         generatedAt,
         parseSec,
         userId,
@@ -897,6 +910,7 @@
         season: U.safeInt(save.season, 1),
         week: U.safeInt(save.week, 1),
         currentDate,
+        todayNum: U.safeInt(save.world && save.world.today, -1),
         phase: U.translatePhaseName(save.phase),
         transferWindow: save.transferWindow,
         budget: Math.round(budget),
@@ -907,6 +921,7 @@
         ctLevel,
         ctCond,
         ctMaintOff,
+        ctWork: uTeam.ctWork || null,
         youthCoach,
         bankLoan: Math.round(bankLoan),
         payroll: Math.round(totalPayroll),

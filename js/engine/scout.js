@@ -474,6 +474,7 @@
       const { roster } = R.extractTeamRoster(cm, staticPlayers, false, cid, name, country);
       if (!roster.length) continue;
       const xi = T.solveBestXi(roster, form, 99, country, null, false, T.repToLevel(rep));
+      const xiLite = (xi.xi || []).map(a => [a.player.pos, a.player.s1, a.player.s2, a.player.force]);
       const stars = roster.filter(p => !p.injured).sort((a, b) => b.force - a.force).slice(0, 3)
         .map(p => ({ name: p.name, pos: p.pos, force: p.force, s1: p.s1, s2: p.s2, star: p.star }));
       const injured = roster.filter(p => p.injured).slice(0, 3)
@@ -486,6 +487,7 @@
         formation: form,
         avgScore: xi.avgScore,
         sectors: xi.sectors,
+        xiLite,
         stars,
         injured,
       });

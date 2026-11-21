@@ -1,4 +1,6 @@
-// ==================== RENDER TAB 4: TRANSFER, SHORTLIST & AUTO-SCOUT (v8.0 FINAL) ====================
+// ==================== RENDER TAB 4: TRANSFER, SHORTLIST & AUTO-SCOUT (v8.2.3) ====================
+let scoutPageLimit = 80;
+
 function isRecommendedSell(p) {
   if (p.injured) return false;
   return Boolean(
@@ -8,6 +10,19 @@ function isRecommendedSell(p) {
     || (p.squadRank >= 15 && p.age >= 24 && !p.isGem)
     || (p.action && p.action.includes('JUAL'))
   );
+}
+
+function isBosmanTarget(r) {
+  if (!r) return false;
+  const fl = String(r[18] || '');
+  return fl.includes('BOSMAN') || (Number(r[15]) <= 180 && !fl.includes('FREE'));
+}
+
+function getEffectiveBuyCost(r) {
+  if (!r) return 0;
+  const pid = r[19];
+  if (cartInBosman && cartInBosman[pid] && isBosmanTarget(r)) return 0;
+  return Number(r[14]) || 0;
 }
 
 function getCartMetrics() {
@@ -22,7 +37,7 @@ function getCartMetrics() {
   });
   const inList = Object.values(cartIn);
   inList.forEach(r => {
-    cashOut += r[14];
+    cashOut += getEffectiveBuyCost(r);
     salDelta += Math.round(r[12] * 0.95);
     if (hc && r[4] && r[4] !== hc) fDelta += 1;
   });
@@ -30,7 +45,9 @@ function getCartMetrics() {
   const projForeign = curForeign + fDelta;
   const projBudget = D.meta.budget + cashIn - cashOut;
   const buyingPower = D.meta.budget + cashIn;
-  return { cashIn, cashOut, salDelta, fDelta, curForeign, projForeign, projBudget, buyingPower, inList };
+  const outCount = Object.keys(cartOut).length;
+  const inCount = inList.length;
+  return { cashIn, cashOut, salDelta, fDelta, curForeign, projForeign, projBudget, buyingPower, inList, outCount, inCount };
 }
 
 function findBestReplacement(r, cm) {
@@ -96,6 +113,7 @@ function findBestReplacement(r, cm) {
 
 function enrichScoutRow(r, cm) {
   const flags = r[18] || '';
+  const isBosman = isBosmanTarget(r);
   const estBuy = r[14];
   const sal3y = Math.round(r[12] * 0.95);
   const estResale = r[21] || Math.round(r[13] * 1.25);
@@ -111,11 +129,14 @@ function enrichScoutRow(r, cm) {
   const remCash = cm.projBudget;
   const netCostIfSwap = swap ? swap.netCost : estBuy;
   let affordCode = 'EXP';
-  if (estBuy <= remCash) affordCode = 'CASH';
+  // Target BOSMAN selalu bisa direkrut 0€ lewat Pra-Kontrak!
+  if (isBosman) affordCode = 'BOSMAN';
+  else if (estBuy <= remCash) affordCode = 'CASH';
   else if (swap && !swap.p.injured && !cartOut[swap.p.id] && netCostIfSwap <= remCash) affordCode = 'SWAP';
 
   const dEff = swap ? swap.deltaEff : (r[5] - D.bestXi.avgScore);
-  const costPen = Math.max(0, netCostIfSwap) / 2_500_000;
+  const effCostForScore = isBosman ? 0 : Math.max(0, netCostIfSwap);
+  const costPen = effCostForScore / 2_500_000;
   let upgradeScore = dEff * 5.0 + (fillsHole ? 16 : 0) + r[10] * 1.2 + Math.min(12, (r[7] - r[5]) * 1.1) - costPen * 2.5;
   if (r[11] === 1) upgradeScore -= 8;
   if (flags.includes('TRAP')) upgradeScore -= 14;
@@ -127,14 +148,13 @@ function enrichScoutRow(r, cm) {
   const smartScore = +(upgradeScore * 0.65 + Math.min(45, Math.max(-20, roiPct * 0.12)) + r[17] * 0.35).toFixed(1);
 
   return {
-    r, flags, estBuy, sal3y, estResale, projGain, estProfit, roiPct,
+    r, flags, isBosman, estBuy, sal3y, estResale, projGain, estProfit, roiPct,
     fillsHole, isForeign, swap, affordCode, netCostIfSwap,
     upgradeScore: +upgradeScore.toFixed(1),
     smartScore,
   };
 }
 
-// Hierarki Badge 2-Tingkat (maks 3 badge primer + mikro-tag sekunder yang tenang)
 function renderCompactScoutBadges(flagsStr, fillsHole) {
   const all = flagsStr ? flagsStr.split(',').filter(Boolean) : [];
   const primaryOrder = ['FREE', 'BOSMAN', 'UNH', 'SCARCE', 'TRAP', 'GEM', 'INJ'];
@@ -168,11 +188,16 @@ function setBlueprintTab(tab) {
 function renderDealCard(it, badgeTitle, badgeCls) {
   const r = it.r;
   const sw = it.swap;
-  const inC = !!cartIn[r[19]];
-  const pinned = isShortlisted(r[19]);
-  const affordBadge = it.affordCode === 'CASH'
-    ? '<span class="badge b-good">✓ KAS CUKUP</span>'
-    : (it.affordCode === 'SWAP' ? '<span class="badge b-info">⇄ CUKUP + SWAP</span>' : '<span class="badge b-crit">✗ BUTUH JUAL</span>');
+  const pid = r[19];
+  const inC = !!cartIn[pid];
+  const isBosFree = Boolean(inC && cartInBosman[pid]);
+  const pinned = isShortlisted(pid);
+
+  let affordBadge = '<span class="badge b-crit">✗ BUTUH JUAL</span>';
+  if (inC) affordBadge = `<span class="badge b-good">${isBosFree ? '✓ BOSMAN 0€' : '✓ DI CART BELI'}</span>`;
+  else if (it.affordCode === 'BOSMAN') affordBadge = '<span class="badge b-good">🆓 0€ PRA-KONTRAK</span>';
+  else if (it.affordCode === 'CASH') affordBadge = '<span class="badge b-good">✓ KAS CUKUP</span>';
+  else if (it.affordCode === 'SWAP') affordBadge = '<span class="badge b-info">⇄ CUKUP + SWAP</span>';
 
   const swHtml = sw ? `
     <div class="deal-swap-box">
@@ -180,18 +205,22 @@ function renderDealCard(it, badgeTitle, badgeCls) {
         <span>⇄ <b>Gantikan:</b> <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(sw.p.id)}')">${esc(sw.p.name)}</a> <span class="c-muted">(${fmtPos(sw.p.pos)} ${sw.p.age}th • F${sw.p.force})</span></span>
         <span class="mono ${sw.deltaEff >= 0 ? 'c-green' : 'c-amber'}"><b>${sw.deltaEff >= 0 ? '+' : ''}${sw.deltaEff} Eff</b></span>
       </div>
-      <div class="c-muted" style="margin-top:2px">${esc(sw.reason)} • Est. Jual: <b class="mono">${sw.repSale ? fmtM(sw.repSale) : '0 (Cedera)'}</b> • ΔGaji: <b class="mono ${sw.deltaSal <= 0 ? 'c-green' : 'c-amber'}">${sw.deltaSal >= 0 ? '+' : ''}${fmtM(sw.deltaSal)}</b></div>
+      <div class="c-muted" style="margin-top:2px">${esc(sw.reason)} • Jual: <b class="mono">${sw.repSale ? fmtM(sw.repSale) : '0 (Cedera)'}</b> • ΔGaji: <b class="mono ${sw.deltaSal <= 0 ? 'c-green' : 'c-amber'}">${sw.deltaSal >= 0 ? '+' : ''}${fmtM(sw.deltaSal)}</b></div>
     </div>` : `<div class="deal-swap-box c-muted">Tambahan kedalaman skuad (belum ada pemain seposisi untuk diganti).</div>`;
 
-  const pidJs = escJs(r[19]);
+  const pidJs = escJs(pid);
   const repIdJs = sw ? escJs(sw.p.id) : '';
-  return `<div class="deal-card ${it.affordCode !== 'EXP' ? 'afford' : ''}">
+  const buyDisplay = it.isBosman
+    ? `<span class="c-green">0€*</span> <span class="c-muted" style="font-size:10px">(tebus ${fmtM(it.estBuy)})</span>`
+    : `<span class="c-amber">${fmtM(it.estBuy)}</span>`;
+
+  return `<div class="deal-card ${it.affordCode !== 'EXP' ? 'afford' : ''} ${inC ? 'in-cart' : ''}">
     <div>
       <div class="flex-between mb-8">
         <span class="badge ${badgeCls}">${esc(badgeTitle)}</span>
         <div style="display:flex;gap:5px;align-items:center">
           ${affordBadge}
-          <button class="star-btn ${pinned ? 'pinned' : ''}" title="${pinned ? 'Hapus dari Shortlist' : 'Simpan ke Shortlist'}" onclick="toggleShortlist('${pidJs}')">${pinned ? '★' : '☆'}</button>
+          <button type="button" class="star-btn ${pinned ? 'pinned' : ''}" title="${pinned ? 'Hapus dari Shortlist' : 'Simpan ke Shortlist'}" onclick="toggleShortlist('${pidJs}')">${pinned ? '★' : '☆'}</button>
         </div>
       </div>
       <div style="font-size:14px;font-weight:800"><a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')">${esc(r[0])}</a> ${r[20] === 2 ? '👑' : (r[20] === 1 ? '⭐' : '')} <span class="c-muted" style="font-size:11px">(${r[4]} • ${esc(r[16])})</span></div>
@@ -203,13 +232,15 @@ function renderDealCard(it, badgeTitle, badgeCls) {
     </div>
     <div>
       <div class="deal-metrics">
-        <div><div class="c-muted" style="font-size:10px">Est. Beli</div><div class="mono c-amber"><b>${fmtM(it.estBuy)}</b></div></div>
+        <div><div class="c-muted" style="font-size:10px">${it.isBosman ? 'Bosman / Tebus' : 'Est. Beli'}</div><div class="mono"><b>${buyDisplay}</b></div></div>
         <div><div class="c-muted" style="font-size:10px">Net Kas (Swap)</div><div class="mono ${it.netCostIfSwap <= 0 ? 'c-green' : 'c-sky'}"><b>${it.netCostIfSwap <= 0 ? '+' + fmtM(-it.netCostIfSwap) : '-' + fmtM(it.netCostIfSwap)}</b></div></div>
         <div><div class="c-muted" style="font-size:10px">Flip ROI (1–2M)</div><div class="mono ${it.estProfit > 0 ? 'c-green' : 'c-muted'}"><b>${it.estProfit >= 0 ? '+' : ''}${fmtM(it.estProfit)} (${it.roiPct}%)</b></div></div>
       </div>
       <div class="flex-between" style="margin-top:8px">
-        <button class="btn btn-sm ${inC ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}')">${inC ? '✓ Di Cart Beli' : '+ Beli Saja'}</button>
-        ${sw ? `<button class="btn btn-sm" style="flex:1;border-color:rgba(56,189,248,.6)" onclick="swapToCart('${pidJs}','${repIdJs}')">⇄ Pasang Swap</button>` : ''}
+        ${it.isBosman
+          ? `<button type="button" class="btn btn-sm ${isBosFree ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}', true)">${isBosFree ? '✓ Bosman 0€ (Batal)' : '🆓 + Bosman (0€)'}</button>`
+          : `<button type="button" class="btn btn-sm ${inC ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}', false)">${inC ? '✓ Di Cart (Batal)' : '+ Beli Saja'}</button>`}
+        ${sw ? `<button type="button" class="btn btn-sm" style="flex:1;border-color:rgba(56,189,248,.6)" onclick="swapToCart('${pidJs}','${repIdJs}', ${it.isBosman ? 'true' : 'false'})">⇄ Pasang Swap</button>` : ''}
       </div>
     </div>
   </div>`;
@@ -219,17 +250,33 @@ function renderScoutBlueprint() {
   const cm = getCartMetrics();
   const sellable = D.roster.filter(isRecommendedSell);
   const potentialSellCash = sellable.reduce((s, p) => s + p.estRealSale, 0);
+
+  const cartBadge = document.getElementById('t4-cart-cnt');
+  if (cartBadge) cartBadge.textContent = String(cm.outCount + cm.inCount);
+
   document.getElementById('t7-budget-strip').innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px">
-      <div><span class="kpi-lbl">Kas Awal</span><div class="mono" style="font-size:16px;font-weight:800">${fmtM(D.meta.budget)}</div></div>
-      <div><span class="kpi-lbl">Cart Jual</span><div class="mono c-green" style="font-size:16px;font-weight:800">+${fmtM(cm.cashIn)}</div></div>
-      <div><span class="kpi-lbl">Cart Beli</span><div class="mono c-amber" style="font-size:16px;font-weight:800">-${fmtM(cm.cashOut)}</div></div>
-      <div><span class="kpi-lbl">Sisa Daya Beli</span><div class="mono ${cm.projBudget >= 0 ? 'c-green' : 'c-red'}" style="font-size:18px;font-weight:900">${fmtM(cm.projBudget)}</div></div>
-      <div><span class="kpi-lbl">Kuota Asing</span><div class="mono ${cm.projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}" style="font-size:16px;font-weight:800">${cm.projForeign}/${D.meta.foreignCap}</div></div>
+    <div class="bstrip-desk">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px">
+        <div><span class="kpi-lbl">Kas Awal</span><div class="mono" style="font-size:16px;font-weight:800">${fmtM(D.meta.budget)}</div></div>
+        <div><span class="kpi-lbl">Cart Jual</span><div class="mono c-green" style="font-size:16px;font-weight:800">+${fmtM(cm.cashIn)}</div></div>
+        <div><span class="kpi-lbl">Cart Beli</span><div class="mono c-amber" style="font-size:16px;font-weight:800">-${fmtM(cm.cashOut)}</div></div>
+        <div><span class="kpi-lbl">Sisa Daya Beli</span><div class="mono ${cm.projBudget >= 0 ? 'c-green' : 'c-red'}" style="font-size:18px;font-weight:900">${fmtM(cm.projBudget)}</div></div>
+        <div><span class="kpi-lbl">Kuota Asing</span><div class="mono ${cm.projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}" style="font-size:16px;font-weight:800">${cm.projForeign}/${D.meta.foreignCap}</div></div>
+      </div>
+      <div class="pill-row" style="margin:0">
+        <button type="button" class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Pilih ${sellable.length} Layak Jual (+${fmtM(potentialSellCash)})</button>
+        <button type="button" class="btn btn-sm" onclick="clearCart()">🔄 Reset</button>
+      </div>
     </div>
-    <div class="pill-row" style="margin:0">
-      <button class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Pilih ${sellable.length} Layak Jual (+${fmtM(potentialSellCash)})</button>
-      <button class="btn btn-sm" onclick="clearCart()">🔄 Reset Cart</button>
+    <div class="bstrip-mob">
+      <div class="mono" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        💰 <b class="${cm.projBudget >= 0 ? 'c-green' : 'c-red'}" style="font-size:13px">${fmtM(cm.projBudget)}</b>
+        <span class="c-muted"> · Asing <b class="${cm.projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}">${cm.projForeign}/${D.meta.foreignCap}</b></span>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        <button type="button" class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Jual (${sellable.length})</button>
+        <button type="button" class="btn btn-sm" onclick="clearCart()" title="Reset Keranjang">🔄</button>
+      </div>
     </div>`;
 
   const box = document.getElementById('t7-blueprint');
@@ -238,31 +285,39 @@ function renderScoutBlueprint() {
     const injuredSale = D.roster.filter(p => p.injured && p.forSale);
     box.innerHTML = `
       ${injuredSale.length ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">INJURED_SALE</span><div><b>Tarik dari bursa jual:</b> ${injuredSale.map(p => esc(p.name)).join(', ')} — sedang cedera, jual sekarang kena potongan valuasi!</div></div>` : ''}
-      <div class="kpi-sub mb-8">Pemain sehat yang direkomendasikan dijual (regresi / cadangan mahal / For Sale). Centang untuk langsung menambah <b>Sisa Daya Beli</b> di atas!</div>
-      <div class="tbl-wrap tbl-sticky"><table><thead><tr><th>Pemain</th><th>Jual</th><th>Pos / Usia</th><th>Force / Cap</th><th>Gaji/Bln</th><th>Est. Cair (1.25x)</th><th>Alasan</th></tr></thead><tbody>` +
+      <div class="kpi-sub mb-8">Pemain sehat yang direkomendasikan dijual. Centang atau aktifkan <b>Arab 2.5x</b> untuk langsung menambah Daya Beli!</div>
+      <div class="tbl-wrap tbl-sticky"><table><thead><tr><th>Pemain &amp; Alasan</th><th>Jual</th><th>Arab 2.5x</th><th>Est. Cair (1.25x)</th><th>Pos/Usia</th><th>F/Cap</th><th>Gaji/Bln</th></tr></thead><tbody>` +
       (rows.length ? rows.map(p => {
-        const sel = !!cartOut[p.id];
+        const sel = cartOut[p.id];
+        const pidJs = escJs(p.id);
         return `<tr>
-          <td><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.isTop5Arab ? `<span class="badge b-accent" title="${esc(tipFor('ARAB'))}">ARAB WATCH</span>` : ''}</td>
-          <td><input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleCartOut('${escJs(p.id)}')" /></td>
-          <td class="mono">${fmtPos(p.pos)} • ${p.age}th (turun@${p.declineAge})</td>
-          <td class="mono">${p.force} / ${p.potCap}</td>
+          <td>
+            <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${pidJs}')"><b>${esc(p.name)}</b></a></div>
+            <div class="inline-sticky-meta">
+              <span class="badge b-warn">${esc(p.action)}</span>
+              <span class="mono c-green" style="font-size:10px"><b>+${fmtM(sel && sel.arab ? p.estArabLow : p.estRealSale)}</b></span>
+            </div>
+          </td>
+          <td><input type="checkbox" style="width:18px;height:18px;accent-color:#10b981;cursor:pointer" ${sel ? 'checked' : ''} onchange="toggleCartOut('${pidJs}')" /></td>
+          <td>${p.isTop5Arab ? `<button type="button" class="btn btn-sm ${sel && sel.arab ? 'btn-amber' : ''}" onclick="toggleCartArab('${pidJs}')">${fmtM(p.estArabLow)}</button>` : '<span class="c-muted">-</span>'}</td>
+          <td class="mono c-green"><b>+${fmtM(p.estRealSale)}</b> <span class="c-muted" style="font-size:10px">(Ctr ${fmtM(p.estCounter40)})</span></td>
+          <td class="mono">${fmtPos(p.pos)} • ${p.age}th (@${p.declineAge})</td>
+          <td class="mono">${p.force}/${p.potCap}</td>
           <td class="mono">${fmtM(p.salary)}</td>
-          <td class="mono c-green"><b>+${fmtM(p.estRealSale)}</b> <span class="c-muted">(Ctr ${fmtM(p.estCounter40)})</span></td>
-          <td><span class="badge b-warn">${esc(p.action)}</span></td>
         </tr>`;
       }).join('') : '<tr><td colspan="7" class="c-green">Skuad sangat ramping — tidak ada deadwood mendesak untuk dijual!</td></tr>') + `</tbody></table></div>`;
     return;
   }
 
+  // FIX AUDIT TAB 4: JANGAN filter `!cartIn[r[19]]` agar kartu tetap di tempatnya dengan bingkai hijau saat diklik!
   const cleanPool = D.scoutPool
-    .filter(r => !cartIn[r[19]] && !(r[18] || '').includes('TRAP') && !(r[18] || '').includes('INJ'))
+    .filter(r => !(r[18] || '').includes('TRAP') && !(r[18] || '').includes('INJ'))
     .map(r => enrichScoutRow(r, cm));
 
   let picks = [];
   if (scoutBlueprintTab === 'UPGRADE') {
     const ranked = cleanPool
-      .filter(x => x.affordCode !== 'EXP' && (x.fillsHole || (x.swap && x.swap.deltaEff >= 1.0)))
+      .filter(x => (x.affordCode !== 'EXP' || cartIn[x.r[19]]) && (x.fillsHole || (x.swap && x.swap.deltaEff >= 1.0)))
       .sort((a, b) => b.upgradeScore - a.upgradeScore);
     const posCnt = {};
     for (const x of ranked) {
@@ -273,26 +328,42 @@ function renderScoutBlueprint() {
     }
   } else if (scoutBlueprintTab === 'ROI') {
     const ranked = cleanPool
-      .filter(x => x.affordCode !== 'EXP' && x.r[2] <= 21 && x.r[11] === 0 && x.estProfit > 0)
+      .filter(x => (x.affordCode !== 'EXP' || cartIn[x.r[19]]) && x.r[2] <= 21 && x.r[11] === 0 && x.estProfit > 0)
       .sort((a, b) => (b.roiPct * 0.6 + (b.estProfit / 100000) * 1.8) - (a.roiPct * 0.6 + (a.estProfit / 100000) * 1.8));
     for (const x of ranked.slice(0, 6)) {
       picks.push({ it: x, lbl: `FLIP ROI +${x.roiPct}%`, cls: 'b-accent' });
     }
   } else if (scoutBlueprintTab === 'BARGAIN') {
     const ranked = cleanPool
-      .filter(x => x.affordCode !== 'EXP' && (x.flags.includes('FREE') || x.flags.includes('BOSMAN') || x.flags.includes('UNH')))
+      .filter(x => (x.affordCode !== 'EXP' || cartIn[x.r[19]]) && (x.flags.includes('FREE') || x.isBosman || x.flags.includes('UNH')))
       .sort((a, b) => b.smartScore - a.smartScore);
     for (const x of ranked.slice(0, 6)) {
-      const tag = x.flags.includes('FREE') ? 'FREE AGENT (0€)' : (x.flags.includes('BOSMAN') ? 'BOSMAN ≤180D' : 'UNHAPPY (-15%)');
+      const tag = x.flags.includes('FREE') ? 'FREE AGENT (0€)' : (x.isBosman ? 'BOSMAN 0€ ≤180D' : 'UNHAPPY (-15%)');
       picks.push({ it: x, lbl: tag, cls: 'b-info' });
     }
   }
 
   if (!picks.length) {
-    box.innerHTML = `<div class="alert-item"><span class="badge b-warn">KAS KETAT</span><div>Belum ada rekomendasi yang muat di <b>Sisa Daya Beli (${fmtM(cm.projBudget)})</b>. Klik tombol <b>⚡ Pilih Layak Jual</b> di atas untuk menambah modal dari penjualan pemain, atau cek tab <b>🆓 Gratis &amp; Diskon</b>!</div></div>`;
+    box.innerHTML = `<div class="alert-item"><span class="badge b-warn">KAS KETAT</span><div>Belum ada rekomendasi yang muat di <b>Sisa Daya Beli (${fmtM(cm.projBudget)})</b>. Klik tombol <b>⚡ Jual</b> di atas untuk menambah modal, atau cek tab <b>🆓 Gratis/Diskon</b>!</div></div>`;
     return;
   }
   box.innerHTML = `<div class="deal-grid">${picks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>`;
+}
+
+function addAllShortlistToCart() {
+  const ids = Object.keys(shortlistMap || {});
+  const poolById = new Map((D.scoutPool || []).map(r => [r[19], r]));
+  let added = 0;
+  ids.forEach(pid => {
+    const r = poolById.get(pid);
+    if (r && !cartIn[pid]) {
+      cartIn[pid] = r;
+      if (isBosmanTarget(r)) cartInBosman[pid] = true;
+      added++;
+    }
+  });
+  renderTab7All();
+  showToast(added ? `${added} target Shortlist masuk ke Cart!` : 'Semua target Shortlist sudah ada di Cart');
 }
 
 function renderShortlistTab() {
@@ -300,10 +371,12 @@ function renderShortlistTab() {
   const cntBadge = document.getElementById('t4-short-cnt');
   if (cntBadge) cntBadge.textContent = String(ids.length);
   const el = document.getElementById('t7-shortlist');
+  const sumEl = document.getElementById('t7-short-summary');
   if (!el) return;
 
   if (!ids.length) {
-    el.innerHTML = `<div class="alert-item"><span class="badge b-accent">SHORTLIST KOSONG</span><div>Klik ikon bintang <b>☆</b> pada pemain mana saja di <b>Rencana Belanja</b>, <b>Eksplorasi Pasar</b>, atau <b>Player Drawer</b> untuk menyimpannya permanen antar-save!</div></div>`;
+    if (sumEl) sumEl.innerHTML = '';
+    el.innerHTML = `<div class="alert-item"><span class="badge b-accent">SHORTLIST KOSONG</span><div>Klik ikon bintang <b>☆</b> pada pemain mana saja di <b>Belanja Pintar</b>, <b>Pasar Global</b>, atau <b>Player Drawer</b> untuk menyimpannya permanen antar-save!</div></div>`;
     return;
   }
 
@@ -312,55 +385,165 @@ function renderShortlistTab() {
   const rosterById = new Map((D.roster || []).map(p => [p.id, p]));
   const activeCards = [];
   const archivedRows = [];
+  let totCashBuy = 0, totSal3y = 0, bosmanCnt = 0, activeCnt = 0;
 
   ids.forEach(pid => {
     const saved = shortlistMap[pid];
     if (rosterById.has(pid)) {
       const p = rosterById.get(pid);
-      archivedRows.push(`<div class="alert-item"><span class="badge b-good">SUDAH DIREKRUT ✓</span><div style="flex:1"><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> (${fmtPos(p.pos)} • F${p.force}) sudah masuk skuadmu!</div><button class="btn btn-sm" onclick="toggleShortlist('${escJs(pid)}')">Hapus</button></div>`);
+      archivedRows.push(`<div class="alert-item"><span class="badge b-good">SUDAH DIREKRUT ✓</span><div style="flex:1"><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> (${fmtPos(p.pos)} • F${p.force}) sudah masuk skuadmu!</div><button type="button" class="btn btn-sm" onclick="toggleShortlist('${escJs(pid)}')">Hapus</button></div>`);
     } else if (poolById.has(pid)) {
-      const it = enrichScoutRow(poolById.get(pid), cm);
+      activeCnt++;
+      const r = poolById.get(pid);
+      const it = enrichScoutRow(r, cm);
+      totSal3y += it.sal3y;
+      if (it.isBosman) bosmanCnt++;
+      else totCashBuy += it.estBuy;
+
       const diffP = (saved && saved.savedPrice) ? (it.estBuy - saved.savedPrice) : 0;
-      const lbl = diffP < -20000 ? `⭐ TURUN ${fmtM(-diffP)}!` : (it.flags.includes('BOSMAN') ? '⭐ BOSMAN GRATIS' : '⭐ TARGET SHORTLIST');
-      activeCards.push(renderDealCard(it, lbl, diffP < -20000 ? 'b-good' : 'b-accent'));
+      const diffF = (saved && saved.savedForce) ? (r[5] - saved.savedForce) : 0;
+      const newBos = Boolean(saved && saved.wasBosman === false && it.isBosman);
+      const newUnh = Boolean(saved && saved.wasUnh === false && it.flags.includes('UNH'));
+
+      let lbl = '⭐ TARGET SHORTLIST';
+      let cls = 'b-accent';
+      if (newBos) { lbl = '🆕 BARU JADI BOSMAN 0€!'; cls = 'b-good'; }
+      else if (newUnh) { lbl = '🆕 BARU UNHAPPY -15%!'; cls = 'b-good'; }
+      else if (diffP < -20000) { lbl = `⭐ TURUN ${fmtM(-diffP)}!`; cls = 'b-good'; }
+      else if (diffF > 0) { lbl = `⭐ FORCE NAIK +${diffF}!`; cls = 'b-info'; }
+      else if (it.isBosman) { lbl = '⭐ BOSMAN 0€'; cls = 'b-good'; }
+      activeCards.push(renderDealCard(it, lbl, cls));
     } else {
-      archivedRows.push(`<div class="alert-item"><span class="badge b-muted">TIDAK DI POOL</span><div style="flex:1"><b>${esc(saved.name || pid)}</b> (${esc(fmtPos(saved.pos))} • ${esc(saved.club || '-')}) — tidak muncul di top scout pool save ini (disimpan ${esc(saved.savedAt || '-')}).</div><button class="btn btn-sm" onclick="toggleShortlist('${escJs(pid)}')">Hapus</button></div>`);
+      archivedRows.push(`<div class="alert-item"><span class="badge b-muted">TIDAK DI POOL</span><div style="flex:1"><b>${esc(saved.name || pid)}</b> (${esc(fmtPos(saved.pos))} • ${esc(saved.club || '-')}) — tidak muncul di top scout pool save ini (disimpan ${esc(saved.savedAt || '-')}).</div><button type="button" class="btn btn-sm" onclick="toggleShortlist('${escJs(pid)}')">Hapus</button></div>`);
     }
   });
+
+  if (sumEl) {
+    sumEl.innerHTML = activeCnt ? `
+      <div class="shortlist-summary-bar">
+        <div class="mono">
+          <b>${activeCnt} Target</b> · Est. Tebus Tunai: <b class="c-amber">${fmtM(totCashBuy)}</b>
+          ${bosmanCnt ? ` · <b class="c-green">Bosman 0€: ${bosmanCnt}</b>` : ''}
+          · Total Gaji 3Th: <b class="c-sky">${fmtM(totSal3y)}/bln</b>
+        </div>
+        <button type="button" class="btn btn-sm btn-green" onclick="addAllShortlistToCart()">🛒 Masukkan Semua ke Cart</button>
+      </div>` : '';
+  }
 
   el.innerHTML = (activeCards.length ? `<div class="deal-grid mb-8">${activeCards.join('')}</div>` : '') + archivedRows.join('');
 }
 
+// ==================== SINKRONISASI 2 ARAH FILTER MOBILE <-> DESKTOP ====================
+function syncScoutQuick(kind, val) {
+  if (kind === 'q') {
+    const el = document.getElementById('s-q');
+    if (el) el.value = val;
+  } else if (kind === 'pos') {
+    const el = document.getElementById('s-pos');
+    if (el) el.value = val;
+  } else if (kind === 'sort') {
+    const el = document.getElementById('s-sort');
+    if (el) el.value = val;
+  }
+  scoutPageLimit = 80;
+  renderScout();
+}
+
+function syncScoutDesktopToMob() {
+  const sq = document.getElementById('s-q'), sqm = document.getElementById('s-q-mob');
+  if (sq && sqm && sqm.value !== sq.value) sqm.value = sq.value;
+  const sp = document.getElementById('s-pos'), spm = document.getElementById('s-pos-mob');
+  if (sp && spm && spm.value !== sp.value) spm.value = sp.value;
+  const ss = document.getElementById('s-sort'), ssm = document.getElementById('s-sort-mob');
+  if (ss && ssm && ssm.value !== ss.value) ssm.value = ss.value;
+}
+
+function resetScoutLimitAndRender() {
+  scoutPageLimit = 80;
+  renderScout();
+}
+
+function loadMoreScout() {
+  scoutPageLimit += 80;
+  renderScout();
+}
+
+function renderScoutPresetChips() {
+  const el = document.getElementById('t4-preset-chips');
+  if (!el) return;
+  const defs = [
+    ['ALL', 'Semua'],
+    ['HOLES', '🎯 Lubang'],
+    ['BOSMAN', '🆓 Bosman ≤180d'],
+    ['UNH', '🔥 Unhappy -15%'],
+    ['FLIP', '💸 Flip ≤21th'],
+    ['GEM', '💎 Gems'],
+    ['FREE', 'Free Agent'],
+    ['LOCAL', '🇮🇩 Lokal'],
+    ['SHORTLIST', '⭐ Shortlist'],
+  ];
+  el.innerHTML = defs.map(([k, lbl]) =>
+    `<button type="button" class="qchip ${scoutPreset === k ? 'active' : ''}" onclick="applyScoutPreset('${k}')">${lbl}</button>`
+  ).join('');
+}
+
+function updateScoutFilterSummary() {
+  const sum = document.getElementById('t4b-filter-summary');
+  if (!sum) return;
+  const tags = [];
+  if (scoutPreset !== 'ALL') tags.push(scoutPreset);
+  const foot = (document.getElementById('s-foot') || {}).value;
+  if (foot) tags.push('Kaki ' + fmtFoot(foot));
+  const ma = (document.getElementById('s-max-age') || {}).value;
+  if (ma) tags.push('≤' + ma + 'th');
+  const mf = (document.getElementById('s-min-f') || {}).value;
+  if (mf) tags.push('F≥' + mf);
+  const mp = (document.getElementById('s-max-price') || {}).value;
+  if (mp) tags.push('Maks ' + mp);
+  const os = (document.getElementById('s-only-stack') || {}).checked;
+  if (os) tags.push('Stack OK');
+  const af = (document.getElementById('s-afford') || {}).checked;
+  if (!af) tags.push('Semua Harga');
+  const badgeHtml = tags.length
+    ? ` <span class="badge b-good" style="margin-left:4px">${esc(tags.join(' · '))}</span>`
+    : '';
+  sum.innerHTML = `<span>🎛️ Filter Lanjutan${badgeHtml}</span><span>▼</span>`;
+}
+
 function applyScoutPreset(preset) {
   scoutPreset = preset;
-  document.getElementById('s-q').value = '';
-  document.getElementById('s-pos').value = '';
-  document.getElementById('s-foot').value = '';
-  document.getElementById('s-max-age').value = preset === 'FLIP' ? '21' : '';
-  document.getElementById('s-min-f').value = '';
-  document.getElementById('s-max-price').value = '';
-  document.getElementById('s-only-stack').checked = (preset === 'FLIP');
-  document.getElementById('s-hide-trap').checked = true;
-  document.getElementById('s-sort').value = preset === 'FLIP' ? 'ROI' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART');
+  scoutPageLimit = 80;
+  const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+  const setChk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v; };
+  setVal('s-q', '');
+  setVal('s-pos', '');
+  setVal('s-foot', '');
+  setVal('s-max-age', preset === 'FLIP' ? '21' : '');
+  setVal('s-min-f', '');
+  setVal('s-max-price', '');
+  setChk('s-only-stack', preset === 'FLIP');
+  setChk('s-hide-trap', true);
+  setVal('s-sort', preset === 'FLIP' ? 'ROI' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART'));
+  syncScoutDesktopToMob();
   renderScout();
   showToast('Preset Scout: ' + preset);
 }
 
 function getFilteredScout() {
   const cm = getCartMetrics();
-  const q = (document.getElementById('s-q').value || '').toLowerCase();
-  const pos = document.getElementById('s-pos').value;
-  const foot = document.getElementById('s-foot').value;
-  const maxAge = parseInt(document.getElementById('s-max-age').value, 10);
-  const minF = parseInt(document.getElementById('s-min-f').value, 10);
-  const maxPRaw = parseFloat(document.getElementById('s-max-price').value);
-  const pUnit = parseFloat(document.getElementById('s-price-unit').value) || 1;
+  const q = ((document.getElementById('s-q') || {}).value || '').toLowerCase();
+  const pos = (document.getElementById('s-pos') || {}).value || '';
+  const foot = (document.getElementById('s-foot') || {}).value || '';
+  const maxAge = parseInt((document.getElementById('s-max-age') || {}).value, 10);
+  const minF = parseInt((document.getElementById('s-min-f') || {}).value, 10);
+  const maxPRaw = parseFloat((document.getElementById('s-max-price') || {}).value);
+  const pUnit = parseFloat((document.getElementById('s-price-unit') || {}).value) || 1;
   const maxP = isNaN(maxPRaw) ? Infinity : maxPRaw * pUnit;
-  const onlyAfford = document.getElementById('s-afford').checked;
-  const onlyStack = document.getElementById('s-only-stack').checked;
-  const hideTrap = document.getElementById('s-hide-trap').checked;
-  const hideInj = document.getElementById('s-hide-inj').checked;
-  const sortBy = document.getElementById('s-sort').value || 'SMART';
+  const onlyAfford = Boolean((document.getElementById('s-afford') || {}).checked);
+  const onlyStack = Boolean((document.getElementById('s-only-stack') || {}).checked);
+  const hideTrap = Boolean((document.getElementById('s-hide-trap') || {}).checked);
+  const hideInj = Boolean((document.getElementById('s-hide-inj') || {}).checked);
+  const sortBy = (document.getElementById('s-sort') || {}).value || 'SMART';
   const holesSet = new Set(D.holePositions || []);
 
   const filtered = [];
@@ -371,14 +554,15 @@ function getFilteredScout() {
     if (foot && r[3] !== foot) continue;
     if (!isNaN(maxAge) && r[2] > maxAge) continue;
     if (!isNaN(minF) && r[5] < minF) continue;
-    if (r[14] > maxP) continue;
+    const effPriceFilter = isBosmanTarget(r) ? 0 : r[14];
+    if (effPriceFilter > maxP) continue;
     if (onlyStack && (r[11] === 1 || r[10] < 3.0)) continue;
     if (hideTrap && flags.includes('TRAP')) continue;
     if (hideInj && flags.includes('INJ')) continue;
 
     if (scoutPreset === 'HOLES' && !holesSet.has(r[1])) continue;
     if (scoutPreset === 'FLIP' && (r[2] > 21 || r[17] < 30)) continue;
-    if (scoutPreset === 'BOSMAN' && !flags.includes('BOSMAN')) continue;
+    if (scoutPreset === 'BOSMAN' && !isBosmanTarget(r)) continue;
     if (scoutPreset === 'UNH' && !flags.includes('UNH')) continue;
     if (scoutPreset === 'GEM' && !flags.includes('GEM')) continue;
     if (scoutPreset === 'FREE' && !flags.includes('FREE')) continue;
@@ -394,7 +578,7 @@ function getFilteredScout() {
     if (sortBy === 'UPGRADE') return b.upgradeScore - a.upgradeScore;
     if (sortBy === 'ROI') return b.roiPct - a.roiPct || b.estProfit - a.estProfit;
     if (sortBy === 'PROFIT') return b.estProfit - a.estProfit;
-    if (sortBy === 'CHEAP') return a.estBuy - b.estBuy || b.r[5] - a.r[5];
+    if (sortBy === 'CHEAP') return (a.isBosman ? 0 : a.estBuy) - (b.isBosman ? 0 : b.estBuy) || b.r[5] - a.r[5];
     if (sortBy === 'FORCE') return b.r[5] - a.r[5] || b.r[7] - a.r[7];
     if (sortBy === 'POTCAP') return b.r[7] - a.r[7] || b.r[5] - a.r[5];
     return b.smartScore - a.smartScore;
@@ -403,33 +587,49 @@ function getFilteredScout() {
 }
 
 function renderScout() {
+  syncScoutDesktopToMob();
+  renderScoutPresetChips();
+  updateScoutFilterSummary();
+
   const items = getFilteredScout();
   document.getElementById('t7-cnt').textContent = items.length + ' target';
-  const show = items.slice(0, 120);
+  const show = items.slice(0, scoutPageLimit);
+
   document.getElementById('t7-scout-tbl').innerHTML = `<thead><tr>
-    <th>Pemain &amp; Klub</th><th>Pos / Usia</th><th>F → Cap &amp; Skill</th>
-    <th>Est. Beli &amp; Fit</th><th>Saran Gantikan (Swap)</th><th>Proyeksi Flip &amp; ROI</th><th>Aksi</th>
+    <th>Pemain &amp; Aksi Cepat</th><th>Pos / Usia</th><th>F → Cap &amp; Skill</th>
+    <th>Est. Beli &amp; Fit</th><th>Saran Swap</th><th>Flip &amp; ROI</th><th class="col-desk-only">Aksi</th>
   </tr></thead><tbody>` + (show.length ? show.map(it => {
     const r = it.r;
     const sw = it.swap;
-    const inC = !!cartIn[r[19]];
-    const pinned = isShortlisted(r[19]);
+    const pid = r[19];
+    const inC = !!cartIn[pid];
+    const isBosFree = Boolean(inC && cartInBosman[pid]);
+    const pinned = isShortlisted(pid);
     const stIcon = r[20] === 2 ? '👑' : (r[20] === 1 ? '⭐' : '');
-    const fitBadge = it.affordCode === 'CASH'
-      ? '<span class="badge b-good">✓ KAS</span>'
-      : (it.affordCode === 'SWAP' ? '<span class="badge b-info">⇄ SWAP</span>' : '<span class="badge b-muted">✗ MAHAL</span>');
+
+    let fitBadge = '<span class="badge b-muted">✗ MAHAL</span>';
+    if (it.affordCode === 'BOSMAN') fitBadge = '<span class="badge b-good">🆓 0€</span>';
+    else if (it.affordCode === 'CASH') fitBadge = '<span class="badge b-good">✓ KAS</span>';
+    else if (it.affordCode === 'SWAP') fitBadge = '<span class="badge b-info">⇄ SWAP</span>';
 
     const swCell = sw
       ? `<div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(sw.p.id)}')"><b>${esc(sw.p.name)}</b></a> <span class="mono ${sw.deltaEff >= 0 ? 'c-green' : 'c-amber'}">(${sw.deltaEff >= 0 ? '+' : ''}${sw.deltaEff} Eff)</span></div>
          <div class="c-muted" style="font-size:10px">Net: <b class="mono">${it.netCostIfSwap <= 0 ? '+' + fmtM(-it.netCostIfSwap) : '-' + fmtM(it.netCostIfSwap)}</b> • ΔGaji ${sw.deltaSal >= 0 ? '+' : ''}${fmtM(sw.deltaSal)}</div>`
       : '<span class="c-muted">-</span>';
 
-    const pidJs = escJs(r[19]);
+    const pidJs = escJs(pid);
     const repIdJs = sw ? escJs(sw.p.id) : '';
+    const buyBtnLbl = inC ? (isBosFree ? '✓ 0€' : '✓') : (it.isBosman ? '+0€' : '+Beli');
+    const buyBtnsHtml = `
+      <button type="button" class="star-btn ${pinned ? 'pinned' : ''}" title="${pinned ? 'Hapus Shortlist' : 'Pin Shortlist'}" onclick="toggleShortlist('${pidJs}')">${pinned ? '★' : '☆'}</button>
+      <button type="button" class="btn btn-sm ${inC ? 'btn-amber' : 'btn-green'}" onclick="toggleCartIn('${pidJs}', ${it.isBosman ? 'true' : 'false'})">${buyBtnLbl}</button>
+      ${sw ? `<button type="button" class="btn btn-sm" title="Swap dgn ${esc(sw.p.name)}" onclick="swapToCart('${pidJs}','${repIdJs}', ${it.isBosman ? 'true' : 'false'})">⇄</button>` : ''}`;
+
     return `<tr>
       <td>
-        <div><a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')"><b>${esc(r[0])}</b></a> ${stIcon} <span class="c-muted">(${r[4]} • ${esc(r[16])})</span></div>
-        <div style="margin-top:3px">${renderCompactScoutBadges(r[18], it.fillsHole)}</div>
+        <div><a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')"><b>${esc(r[0])}</b></a> ${stIcon} <span class="c-muted" style="font-size:10px">(${r[4]}·${esc(r[16])})</span></div>
+        <div style="margin-top:2px">${renderCompactScoutBadges(r[18], it.fillsHole)}</div>
+        <div class="sticky-inline-acts">${buyBtnsHtml}</div>
       </td>
       <td class="mono"><b>${fmtPos(r[1])}</b> • ${r[2]}th • <b>${fmtFoot(r[3])}</b><div class="c-muted" style="font-size:10px">Kontrak ${r[15]}d</div></td>
       <td class="mono">
@@ -437,33 +637,42 @@ function renderScout() {
         <div><span class="badge ${r[11] ? 'b-crit' : 'b-muted'}">${fmtSkills(r[8], r[9])} (+${r[10]}%)</span></div>
       </td>
       <td class="mono">
-        <b>${fmtM(it.estBuy)}</b> ${fitBadge}
-        <div class="c-muted" style="font-size:10px">Gaji 3th: ${fmtM(it.sal3y)}/bln</div>
+        <b>${it.isBosman ? '<span class="c-green">0€*</span>' : fmtM(it.estBuy)}</b> ${fitBadge}
+        <div class="c-muted" style="font-size:10px">${it.isBosman ? 'Tebus ' + fmtM(it.estBuy) + ' · ' : ''}Gaji ${fmtM(it.sal3y)}</div>
       </td>
       <td>${swCell}</td>
       <td class="mono">
         <b class="${it.estProfit > 0 ? 'c-green' : 'c-muted'}">${it.estProfit >= 0 ? '+' : ''}${fmtM(it.estProfit)} (${it.roiPct}%)</b>
-        <div class="c-muted" style="font-size:10px">Est. Jual ${fmtM(it.estResale)} (+${it.projGain}F)</div>
+        <div class="c-muted" style="font-size:10px">Jual ~${fmtM(it.estResale)} (+${it.projGain}F)</div>
       </td>
-      <td>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button class="star-btn ${pinned ? 'pinned' : ''}" title="${pinned ? 'Hapus dari Shortlist' : 'Pin ke Shortlist'}" onclick="toggleShortlist('${pidJs}')">${pinned ? '★' : '☆'}</button>
-          <button class="btn btn-sm ${inC ? 'btn-amber' : 'btn-green'}" onclick="toggleCartIn('${pidJs}')">${inC ? '✓' : '+ Beli'}</button>
-          ${sw ? `<button class="btn btn-sm" title="Beli target + Jual ${esc(sw.p.name)}" onclick="swapToCart('${pidJs}','${repIdJs}')">⇄</button>` : ''}
-        </div>
-      </td>
+      <td class="col-desk-only"><div style="display:flex;gap:4px;align-items:center">${buyBtnsHtml}</div></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada target sesuai filter (coba lepas centang "Hanya Masuk Daya Beli" atau pilih pemain untuk dijual dulu).</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada target sesuai filter (coba lepas centang "Masuk Daya Beli" atau pilih pemain dijual dulu).</td></tr>') + `</tbody>`;
+
+  // Pagination bertahap (+80 lagi)
+  const moreEl = document.getElementById('t7-scout-more');
+  if (moreEl) {
+    if (!items.length) {
+      moreEl.innerHTML = '';
+    } else if (show.length < items.length) {
+      const rem = items.length - show.length;
+      moreEl.innerHTML = `
+        <span class="c-muted mono">Menampilkan <b>${show.length}</b> dari <b>${items.length}</b> target</span>
+        <button type="button" class="btn btn-sm btn-green" onclick="loadMoreScout()">Muat +${Math.min(80, rem)} Lagi (${rem} tersisa)</button>`;
+    } else {
+      moreEl.innerHTML = `<span class="c-muted mono">Menampilkan seluruh <b>${items.length}</b> target sesuai filter.</span>`;
+    }
+  }
 }
 
 function exportScoutCsv() {
   const items = getFilteredScout().slice(0, 500);
-  const hdr = ['Name','Pos','Age','Foot','Nat','Force','Pot','PotCap','S1','S2','StackPct','Sal3Y','MV','EstBuy','EstResale','EstProfit','RoiPct','SuggestedReplace','DeltaEff','NetSwapCost','ContractDays','Club','Flags','Shortlisted'];
+  const hdr = ['Name','Pos','Age','Foot','Nat','Force','Pot','PotCap','S1','S2','StackPct','Sal3Y','MV','EstBuy','BosmanFree','EstResale','EstProfit','RoiPct','SuggestedReplace','DeltaEff','NetSwapCost','ContractDays','Club','Flags','Shortlisted'];
   const lines = [hdr.join(',')].concat(items.map(it => {
     const r = it.r, sw = it.swap;
     return [
       `"${r[0].replace(/"/g,'""')}"`, fmtPos(r[1]), r[2], fmtFoot(r[3]), r[4], r[5], r[6], r[7],
-      fmtSkill(r[8]), fmtSkill(r[9]), r[10], it.sal3y, r[13], it.estBuy, it.estResale, it.estProfit, it.roiPct,
+      fmtSkill(r[8]), fmtSkill(r[9]), r[10], it.sal3y, r[13], it.estBuy, it.isBosman ? 'YES' : 'NO', it.estResale, it.estProfit, it.roiPct,
       sw ? `"${sw.p.name.replace(/"/g,'""')}"` : '""', sw ? sw.deltaEff : 0, it.netCostIfSwap,
       r[15], `"${r[16].replace(/"/g,'""')}"`, `"${r[18]}"`, isShortlisted(r[19]) ? 'YES' : 'NO'
     ].join(',');
@@ -492,9 +701,13 @@ function selectAllRecommendedSells() {
   showToast(added ? `${added} pemain layak jual masuk ke Cart!` : 'Semua pemain layak jual sudah ada di Cart');
 }
 
-function swapToCart(targetId, replaceId) {
+function swapToCart(targetId, replaceId, asBosmanFree) {
   const found = D.scoutPool.find(r => r[19] === targetId);
-  if (found) cartIn[targetId] = found;
+  if (found) {
+    cartIn[targetId] = found;
+    if (asBosmanFree && isBosmanTarget(found)) cartInBosman[targetId] = true;
+    else delete cartInBosman[targetId];
+  }
   const rep = D.roster.find(p => p.id === replaceId);
   if (rep) {
     if (rep.injured) {
@@ -512,67 +725,130 @@ function toggleCartOut(pid) {
   else cartOut[pid] = { arab: false };
   renderTab7All();
 }
+
 function toggleCartArab(pid) {
   if (!cartOut[pid]) cartOut[pid] = { arab: true };
   else cartOut[pid].arab = !cartOut[pid].arab;
   renderTab7All();
 }
-function toggleCartIn(pid) {
+
+function toggleCartIn(pid, asBosmanFree) {
   if (cartIn[pid]) {
     delete cartIn[pid];
+    delete cartInBosman[pid];
   } else {
     const found = D.scoutPool.find(r => r[19] === pid);
-    if (found) cartIn[pid] = found;
+    if (found) {
+      cartIn[pid] = found;
+      if (asBosmanFree && isBosmanTarget(found)) cartInBosman[pid] = true;
+    }
   }
   renderTab7All();
 }
-function clearCart() { cartOut = {}; cartIn = {}; renderTab7All(); showToast('Keranjang transfer dikosongkan'); }
+
+function toggleCartInBosman(pid) {
+  if (!cartIn[pid]) return;
+  if (cartInBosman[pid]) delete cartInBosman[pid];
+  else cartInBosman[pid] = true;
+  renderTab7All();
+}
+
+function clearCart() {
+  cartOut = {};
+  cartIn = {};
+  cartInBosman = {};
+  renderTab7All();
+  showToast('Keranjang transfer dikosongkan');
+}
 
 function renderCart() {
   const cm = getCartMetrics();
-  const { cashIn, cashOut, salDelta, projBudget, projForeign, inList } = cm;
+  const { cashIn, cashOut, salDelta, projBudget, projForeign, inList, outCount, inCount } = cm;
 
   document.getElementById('t7-cart-kpis').innerHTML = `
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
-      <div class="kpi-lbl">Est. Dana Masuk (Real 1.25x)</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
+      <div class="kpi-lbl">Dana Masuk (1.25x)</div>
       <div class="kpi-val mono c-green">+${fmtM(cashIn)}</div>
-      <div class="kpi-sub">${Object.keys(cartOut).length} pemain dijual</div>
+      <div class="kpi-sub">${outCount} pemain dijual</div>
     </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
-      <div class="kpi-lbl">Est. Belanja Masuk</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
+      <div class="kpi-lbl">Belanja Masuk</div>
       <div class="kpi-val mono c-amber">-${fmtM(cashOut)}</div>
-      <div class="kpi-sub">${inList.length} target masuk</div>
+      <div class="kpi-sub">${inCount} target masuk</div>
     </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
-      <div class="kpi-lbl">Proyeksi Sisa Kas</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
+      <div class="kpi-lbl">Sisa Kas</div>
       <div class="kpi-val mono ${projBudget >= 0 ? 'c-green' : 'c-red'}">${fmtM(projBudget)}</div>
-      <div class="kpi-sub">Delta Gaji: <b class="mono">${salDelta >= 0 ? '+' : ''}${fmtM(salDelta)}/bln</b></div>
+      <div class="kpi-sub">ΔGaji: <b class="mono">${salDelta >= 0 ? '+' : ''}${fmtM(salDelta)}</b></div>
     </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px">
-      <div class="kpi-lbl">Kuota Asing Skuad</div>
-      <div class="mono kpi-val ${projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}">${projForeign} <span style="font-size:12px" class="c-muted">(Batas XI: ${D.meta.foreignCap})</span></div>
-      <div class="kpi-sub">${projForeign > D.meta.foreignCap ? '⚠ Lebih dari batas lapangan!' : '✓ Aman masuk XI'}</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
+      <div class="kpi-lbl">Kuota Asing</div>
+      <div class="mono kpi-val ${projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}">${projForeign}/${D.meta.foreignCap}</div>
+      <div class="kpi-sub">${projForeign > D.meta.foreignCap ? '⚠ Melebihi batas XI!' : '✓ Aman masuk XI'}</div>
     </div>`;
 
-  const sortedOut = [...D.roster].sort((a, b) => (isRecommendedSell(b) ? 1 : 0) - (isRecommendedSell(a) ? 1 : 0) || b.estRealSale - a.estRealSale);
-  document.getElementById('t7-out-tbl').innerHTML = `<thead><tr><th>Jual</th><th>Pemain</th><th>Real 1.25x (Ctr +40%)</th><th>Arab 2.5x</th></tr></thead><tbody>` +
-    sortedOut.map(p => {
+  // Strip Proyeksi Dampak Skuad
+  const impEl = document.getElementById('t7-cart-impact');
+  if (impEl) {
+    const curSq = (D.roster || []).length;
+    const projSq = curSq - outCount + inCount;
+    const hc = D.meta.country;
+    const extraForeignWarn = (projForeign > D.meta.foreignCap)
+      ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual 1 pemain asing lama</span>`
+      : `<span class="badge b-good">✓ Komposisi Asing &amp; Kas Sehat</span>`;
+    impEl.innerHTML = `
+      <div class="cart-impact-strip">
+        <div class="mono">
+          📊 Proyeksi Skuad: <b>${curSq} → ${projSq} pemain</b> ·
+          Asing: <b>${cm.curForeign} → ${projForeign}/${D.meta.foreignCap}</b> ·
+          Gaji/Bln: <b>${fmtM(D.meta.payroll + salDelta)}</b>
+        </div>
+        ${extraForeignWarn}
+      </div>`;
+  }
+
+  // Tabel Pemain Keluar dengan pencarian cepat
+  const outQ = ((document.getElementById('t7-out-search') || {}).value || '').toLowerCase();
+  const sortedOut = [...D.roster]
+    .filter(p => !outQ || p.name.toLowerCase().includes(outQ) || fmtPos(p.pos).toLowerCase().includes(outQ))
+    .sort((a, b) => (cartOut[b.id] ? 1 : 0) - (cartOut[a.id] ? 1 : 0) || (isRecommendedSell(b) ? 1 : 0) - (isRecommendedSell(a) ? 1 : 0) || b.estRealSale - a.estRealSale);
+
+  document.getElementById('t7-out-tbl').innerHTML = `<thead><tr><th>Pemain</th><th>Jual</th><th>Real 1.25x</th><th>Arab 2.5x</th></tr></thead><tbody>` +
+    (sortedOut.length ? sortedOut.map(p => {
       const sel = cartOut[p.id];
       const recSell = isRecommendedSell(p);
-      const injWarn = p.injured ? ' <span class="badge b-crit">🏥INJ</span>' : (recSell ? ' <span class="badge b-warn">LAYAK JUAL</span>' : '');
+      const injWarn = p.injured ? ' <span class="badge b-crit">🏥INJ</span>' : (recSell ? ' <span class="badge b-warn">LAYAK</span>' : '');
       const pidJs = escJs(p.id);
       return `<tr>
-        <td><input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleCartOut('${pidJs}')" /></td>
-        <td><a class="clickable-name" onclick="openPlayerDrawer('roster','${pidJs}')"><b>${esc(p.name)}</b></a> <span class="c-muted">(${fmtPos(p.pos)} ${p.age}th • F${p.force})</span>${injWarn}</td>
-        <td class="mono">${fmtM(p.estRealSale)} <span class="c-muted" style="font-size:10px">(Ctr ${fmtM(p.estCounter40)})</span></td>
-        <td>${p.isTop5Arab ? `<button class="btn btn-sm ${sel && sel.arab ? 'btn-amber' : ''}" onclick="toggleCartArab('${pidJs}')">${fmtM(p.estArabLow)}</button>` : '<span class="c-muted">-</span>'}</td>
+        <td>
+          <a class="clickable-name" onclick="openPlayerDrawer('roster','${pidJs}')"><b>${esc(p.name)}</b></a>
+          <div class="c-muted" style="font-size:10px">${fmtPos(p.pos)} ${p.age}th · F${p.force}${injWarn}</div>
+        </td>
+        <td><input type="checkbox" style="width:18px;height:18px;accent-color:#10b981;cursor:pointer" ${sel ? 'checked' : ''} onchange="toggleCartOut('${pidJs}')" /></td>
+        <td class="mono">${fmtM(p.estRealSale)}<div class="c-muted" style="font-size:10px">Ctr ${fmtM(p.estCounter40)}</div></td>
+        <td>${p.isTop5Arab ? `<button type="button" class="btn btn-sm ${sel && sel.arab ? 'btn-amber' : ''}" onclick="toggleCartArab('${pidJs}')">${fmtM(p.estArabLow)}</button>` : '<span class="c-muted">-</span>'}</td>
       </tr>`;
-    }).join('') + `</tbody>`;
+    }).join('') : '<tr><td colspan="4" class="c-muted">Pemain tidak ditemukan.</td></tr>') + `</tbody>`;
 
-  document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Pos</th><th>Est. Beli</th><th>Gaji 3Th</th><th>Hapus</th></tr></thead><tbody>` +
-    (inList.length ? inList.map(r => `<tr>
-      <td><a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(r[19])}')"><b>${esc(r[0])}</b></a> (${r[5]}→${r[7]})</td><td><b>${fmtPos(r[1])}</b></td>
-      <td class="mono c-amber">${fmtM(r[14])}</td><td class="mono">${fmtM(Math.round(r[12] * 0.95))}</td>
-      <td><button class="btn btn-sm" onclick="toggleCartIn('${escJs(r[19])}')">✕</button></td>
-    </tr>`).join('') : '<tr><td colspan="5" class="c-muted">Belum ada target ditambahkan. Klik "+ Beli" atau "⇄ Swap" di atas!</td></tr>') + `</tbody>`;
+  // Tabel Target Masuk dengan Toggle 🆓 0€ Bosman!
+  document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Biaya Beli</th><th>Bosman 0€</th><th>Gaji 3Th</th><th>Hapus</th></tr></thead><tbody>` +
+    (inList.length ? inList.map(r => {
+      const pid = r[19];
+      const pidJs = escJs(pid);
+      const canBos = isBosmanTarget(r);
+      const isBosOn = Boolean(canBos && cartInBosman[pid]);
+      const effCost = getEffectiveBuyCost(r);
+      return `<tr>
+        <td>
+          <a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')"><b>${esc(r[0])}</b></a>
+          <div class="c-muted mono" style="font-size:10px">${fmtPos(r[1])} · ${r[5]}→${r[7]} · ${r[15]}d</div>
+        </td>
+        <td class="mono ${isBosOn ? 'c-green' : 'c-amber'}"><b>${isBosOn ? '0€ (Gratis)' : fmtM(effCost)}</b></td>
+        <td>${canBos
+          ? `<button type="button" class="btn btn-sm ${isBosOn ? 'btn-green' : ''}" onclick="toggleCartInBosman('${pidJs}')">${isBosOn ? '🆓 0€ ON' : '0€ Off'}</button>`
+          : '<span class="c-muted">-</span>'}</td>
+        <td class="mono">${fmtM(Math.round(r[12] * 0.95))}</td>
+        <td><button type="button" class="btn btn-sm" onclick="toggleCartIn('${pidJs}')">✕</button></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" class="c-muted">Belum ada target. Klik "+ Beli", "🆓 + Bosman (0€)", atau "⇄ Swap" di Belanja Pintar / Pasar Global!</td></tr>') + `</tbody>`;
 }

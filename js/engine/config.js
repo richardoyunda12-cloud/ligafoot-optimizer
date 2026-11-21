@@ -200,15 +200,15 @@
   };
 
   const CT_MILESTONES = [
-    [1, 'Dasar — slot latihan minimal (2 slot)'],
+    [1, 'Dasar — 3 slot latihan (TRAIN_SLOTS_BASE = 3)'],
     [2, '+0.015/mgg growth pemain <=23 thn'],
-    [3, 'Diskon biaya Scout -25% & +1 slot latihan'],
+    [3, 'Diskon biaya Scout -25% & 4 slot latihan'],
     [4, '+0.010/mgg growth untuk SELURUH skuad'],
-    [5, '-20% kecepatan regresi veteran & +1 slot latihan'],
+    [5, '-20% kecepatan regresi veteran & 5 slot latihan'],
     [6, '+1 prospek akademi baru per musim'],
-    [7, '-20% risiko cedera & +1 slot latihan'],
+    [7, '-20% risiko cedera & 6 slot latihan'],
     [8, 'Membuka tampilan potensi eksak pemain'],
-    [9, '+10% pemulihan stamina & +1 slot latihan'],
+    [9, '+10% pemulihan stamina & 7 slot latihan'],
     [10, '+3 batas plafon potensi pemain muda'],
   ];
 

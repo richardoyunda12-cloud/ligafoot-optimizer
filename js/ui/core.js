@@ -10,6 +10,7 @@ let scoutPreset = 'ALL';
 let scoutBlueprintTab = 'UPGRADE';
 let cartOut = {}; // playerId -> { arab: bool }
 let cartIn = {};  // playerId -> scoutRow
+let cartInBosman = {}; // playerId -> bool (0€ Pra-Kontrak)
 
 // Single Source of Truth dari optimizer/config.py via D.cfg
 const CFG = D.cfg || {};
@@ -347,6 +348,7 @@ function goToView(tab, sub) {
     const am = document.getElementById('t2-active-match');
     if (!am || !am.innerHTML.trim()) { try { renderTab2(); } catch (e) { console.error(e); } }
   }
+  if (typeof renderStickyCartBar === 'function') renderStickyCartBar();
   if (typeof window !== 'undefined' && window.innerWidth <= 900) {
     window.scrollTo(0, 0);
   }
@@ -422,28 +424,61 @@ function computeTitleStatus() {
   const second = st[1];
   const remUser = Math.max(0, totalRounds - user.p);
   const remSecond = Math.max(0, totalRounds - second.p);
+
   if (user.pos === 1) {
     const lead = user.pts - second.pts;
     const maxSec = second.pts + remSecond * 3;
-    const need = Math.max(0, maxSec - user.pts + 1);
+    // Edge Case Akhir Musim (0 laga tersisa)
+    if (remSecond === 0 && (remUser === 0 || user.pts > second.pts || (user.pts === second.pts && user.gd >= second.gd))) {
+      const tieMsg = lead > 0
+        ? `Unggul ${lead} poin atas ${second.name}`
+        : `Unggul selisih gol (${user.gd >= 0 ? '+' : ''}${user.gd}) atas ${second.name}`;
+      return {
+        userPos: 1, totalRounds, remUser, lead, secondName: second.name,
+        clinched: true, needPts: 0,
+        text: `🏆 JUARA LIGA! Musim selesai • ${tieMsg}.`
+      };
+    }
+    if (user.pts > maxSec) {
+      return {
+        userPos: 1, totalRounds, remUser, lead, secondName: second.name,
+        clinched: true, needPts: 0,
+        text: `🏆 JUARA SECARA MATEMATIS! Unggul ${lead} poin atas ${second.name} di sisa ${remSecond} pekan.`
+      };
+    }
+    const need = Math.max(1, maxSec - user.pts + 1);
     return {
       userPos: 1, totalRounds, remUser, lead, secondName: second.name,
-      clinched: (user.pts > maxSec),
-      needPts: need,
-      text: (user.pts > maxSec)
-        ? `🏆 JUARA SECARA MATEMATIS! Unggul ${lead} poin atas ${second.name} di sisa ${remSecond} pekan.`
-        : `🥇 Peringkat #1 (+${lead} poin dari ${second.name}). Butuh ${need} poin lagi dari sisa ${remUser} laga untuk kunci gelar!`
+      clinched: false, needPts: need,
+      text: `🥇 Peringkat #1 (+${lead} poin dari ${second.name}). Butuh ${need} poin lagi dari sisa ${remUser} laga untuk kunci gelar!`
     };
   }
+
   const behind = leader.pts - user.pts;
   return {
     userPos: user.pos, totalRounds, remUser, lead: -behind, secondName: leader.name,
     clinched: false, needPts: null,
-    text: `Peringkat #${user.pos} (${user.pts} poin, selisih ${behind} poin dari pemuncak ${leader.name} di sisa ${remUser} pekan).`
+    text: remUser === 0
+      ? `🏁 Musim selesai di Peringkat #${user.pos} (${user.pts} poin, selisih ${behind} poin dari juara ${leader.name}).`
+      : `Peringkat #${user.pos} (${user.pts} poin, selisih ${behind} poin dari pemuncak ${leader.name} di sisa ${remUser} pekan).`
   };
 }
 
-// ==================== PLAYER DRAWER (v8.0 TAHAP 2) ====================
+function openSquadWithFilter(fltVal) {
+  const inp = document.getElementById('t4-search');
+  const sel = document.getElementById('t4-filter');
+  if (inp) inp.value = '';
+  if (sel) sel.value = fltVal || 'ALL';
+  if (typeof renderRosterTable === 'function') renderRosterTable();
+  goToView('t3', 't3-squad');
+}
+
+function openWarRoomOfficial(idx) {
+  if (typeof warSimMode !== 'undefined') warSimMode = false;
+  activeMatchIdx = Number(idx) || 0;
+  if (typeof renderTab2 === 'function') renderTab2();
+  goToView('t2');
+}// ==================== PLAYER DRAWER (v8.0 TAHAP 2) ====================
 let activeDrawer = null; // { kind: 'roster'|'youth'|'scout', id: string }
 
 function closePlayerDrawer() {
@@ -501,7 +536,7 @@ function openPlayerDrawer(kind, id) {
     const actB = { crit: 'b-crit', warn: 'b-warn', good: 'b-good', accent: 'b-accent', info: 'b-info', muted: 'b-muted' }[p.actionCls] || 'b-muted';
     const cardsList = Object.entries(p.cardsByComp || {})
       .filter(([, v]) => v && ((v.y || 0) > 0 || (v.s || 0) > 0))
-      .map(([cid, v]) => `${cid}: ${v.y || 0}🟨${v.s ? ' ' + v.s + '🟥' : ''}`);
+      .map(([cid, v]) => `${(window.LFEngine && LFEngine.utils ? LFEngine.utils.translateCompName(cid, cid) : cid)}: ${v.y || 0}🟨${v.s ? ' ' + v.s + '🟥' : ''}`);
 
     body.innerHTML = `
       <div class="flex-between mb-8">
@@ -532,6 +567,21 @@ function openPlayerDrawer(kind, id) {
         <div class="mini-bar-bg" style="height:9px;margin:5px 0 8px"><div class="mini-bar-fill" style="width:${curFill}%;background:linear-gradient(90deg,var(--sky),var(--green))"></div></div>
         <div class="drawer-kv"><span>Tampilan Potential UI</span><span class="mono">${p.potential} ${p.isTrap ? '<b class="c-red">(lebih tinggi dr asli!)</b>' : ''}</span></div>
         <div class="drawer-kv"><span>Progress GrowthFrac</span>${growthBarHtml(p.growthFrac, p.nearDrop)}</div>
+        ${(() => {
+          const ta = D.trainAudit || {};
+          const inTr = (ta.currentIds || []).includes(p.id);
+          const recIdx = (ta.ideal || []).findIndex(x => x.id === p.id || x.name === p.name);
+          if (inTr && (p.force >= p.potCap || p.age >= p.declineAge)) {
+            return '<div class="drawer-kv"><span>Special Training</span><span class="badge b-crit">⚠ MENTOK POTCAP — KELUARKAN!</span></div>';
+          }
+          if (inTr) {
+            return '<div class="drawer-kv"><span>Special Training</span><span class="badge b-good">🏋️ Aktif di Slot Training</span></div>';
+          }
+          if (recIdx >= 0 && recIdx < (ta.slots || 4)) {
+            return `<div class="drawer-kv"><span>Special Training</span><span class="badge b-info">✨ Rekomendasi Masuk (#${recIdx + 1})</span></div>`;
+          }
+          return '';
+        })()}
         <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${p.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct}%)</span></div>
         <div class="c-muted" style="font-size:11px;margin-top:4px">${esc(p.stackNote)}</div>
       </div>
@@ -637,7 +687,7 @@ function openPlayerDrawer(kind, id) {
       </div>` : ''}
       <div class="pill-row mt-12">
         <button class="star-btn ${isShortlisted(r[19]) ? 'pinned' : ''}" style="padding:7px 11px;font-size:13px" onclick="toggleShortlist('${pidJs}')">${isShortlisted(r[19]) ? '★ Shortlisted' : '☆ Shortlist'}</button>
-        <button class="btn ${inC ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}');openPlayerDrawer('scout','${pidJs}')">${inC ? '✓ Di Cart Beli' : '+ Beli Saja'}</button>
+        <button class="btn ${inC ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}', ${r[15] <= 180 ? 'true' : 'false'});openPlayerDrawer('scout','${pidJs}')">${inC ? (cartInBosman[r[19]] ? '✓ Bosman 0€' : '✓ Di Cart Beli') : (r[15] <= 180 ? '🆓 + Bosman 0€' : '+ Beli Saja')}</button>
         ${sw ? `<button class="btn" style="flex:1;border-color:rgba(56,189,248,.6)" onclick="swapToCart('${pidJs}','${repIdJs}');openPlayerDrawer('scout','${pidJs}')">⇄ Swap</button>` : ''}
       </div>`;
   }
@@ -677,6 +727,9 @@ function toggleShortlist(pid) {
       club: r ? r[16] : '',
       savedAt: D.meta ? D.meta.currentDate : '',
       savedPrice: r ? r[14] : 0,
+      savedForce: r ? r[5] : 0,
+      wasBosman: r ? (String(r[18] || '').includes('BOSMAN') || Number(r[15]) <= 180) : false,
+      wasUnh: r ? String(r[18] || '').includes('UNH') : false,
     };
     showToast('⭐ Disimpan ke Shortlist: ' + shortlistMap[pid].name);
   }
@@ -699,7 +752,8 @@ function renderStickyCartBar() {
   if (!bar || typeof getCartMetrics !== 'function') return;
   const outCnt = Object.keys(cartOut || {}).length;
   const inCnt = Object.keys(cartIn || {}).length;
-  if (outCnt === 0 && inCnt === 0) {
+  const onCartSubtab = (activeTab === 't4' && activeSubTabs && activeSubTabs.t4 === 't4-cart');
+  if ((outCnt === 0 && inCnt === 0) || onCartSubtab) {
     bar.classList.remove('open');
     return;
   }
@@ -731,6 +785,7 @@ window.LFResetUIState = function () {
   cartIn = {};
   scoutPreset = 'ALL';
   scoutBlueprintTab = 'UPGRADE';
+  if (typeof acadFilter !== 'undefined') acadFilter = 'ALL';
   activeDrawer = null;
   if (D && D.stadium && D.stadium.optLigaPrices) {
     simPrices = { ...D.stadium.optLigaPrices };

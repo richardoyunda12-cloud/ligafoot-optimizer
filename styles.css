@@ -681,7 +681,7 @@ html, body {
   }
 
   /* 5. Perapian Tab 5C Jersey Row agar strict 360px */
-  .jersey-row {
+  .jersey-row:not(.jersey-row-v2) {
     grid-template-columns: 28px minmax(0, 1fr) 74px;
     gap: 6px;
     padding: 7px 8px;
@@ -745,4 +745,1131 @@ html, body {
   .drawer-kv { font-size: 11px; }
   .aq-item .flex-between { flex-direction: column; align-items: flex-start; gap: 6px; }
   .aq-item .flex-between .btn-sm { align-self: flex-end; }
+}
+
+/* === v8.2 TAB 1 BERANDA OVERHAUL (SLIM HEADER, DRILL-DOWN KPI, CLEAN QUEUE) === */
+.hdr-sub-mob { display: none; }
+.hdr-sub-desk { display: inline; }
+.btn-lbl-long { display: inline; }
+.btn-lbl-mob-hide { display: inline; }
+
+/* Interactive KPI Drill-Down Cards */
+.kpi-card-link {
+  cursor: pointer;
+  position: relative;
+  transition: border-color .15s, transform .12s, background .15s;
+}
+.kpi-card-link:hover {
+  border-color: var(--sky);
+  background: var(--card2);
+  transform: translateY(-1px);
+}
+.kpi-card-link:active { transform: translateY(0); }
+.kpi-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.kpi-chevron {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  font-weight: 800;
+}
+.kpi-card-link:hover .kpi-chevron { color: var(--sky); }
+
+/* 1-Line Club Status & Transfer Window Strip */
+.club-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.club-status-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.club-status-items b { color: var(--text); }
+
+/* Hero Banner 3-Layer Clean */
+.hero-match-v2 {
+  background: linear-gradient(135deg, rgba(16,185,129,.16), rgba(56,189,248,.09) 60%, var(--card));
+  border: 1px solid rgba(16,185,129,.45);
+  border-radius: 14px;
+  padding: 13px 15px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.hero-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+}
+.hero-main-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hero-opp-title {
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.25;
+  color: #fff;
+}
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hero-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* Action Queue v8.2: Judul -> Deskripsi -> Tombol Aksi di Kanan Bawah */
+.aq-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+.aq-filter-pills {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.aq-item-v2 {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  transition: .15s;
+}
+.aq-item-v2.CRITICAL { border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.08); }
+.aq-item-v2.HIGH { border-color: rgba(245,158,11,.45); background: rgba(245,158,11,.07); }
+.aq-item-v2.done { opacity: .48; border-color: var(--border); background: var(--bg2); }
+.aq-item-v2.done .aq-title { text-decoration: line-through; }
+.aq-body { flex: 1; min-width: 0; }
+.aq-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.aq-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.aq-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* Mini Standings anti-scroll horizontal di 360px */
+.mini-club-cell {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tr.mini-sep-row td {
+  text-align: center;
+  color: var(--muted);
+  padding: 3px;
+  font-size: 11px;
+  background: transparent;
+}
+
+/* Delta clickable chips */
+.delta-chip {
+  cursor: pointer;
+  transition: transform .12s, border-color .15s;
+}
+.delta-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--sky);
+}
+
+@media (max-width: 768px) {
+  /* Header Mobile 1 Baris Ramping (~52px) */
+  .hdr-app-suffix, .hdr-sub-desk, .btn-lbl-long, .btn-lbl-mob-hide { display: none !important; }
+  .hdr-sub-mob { display: inline !important; }
+
+  .topbar {
+    flex-wrap: nowrap !important;
+    padding: 7px 0 !important;
+    gap: 8px !important;
+    align-items: center !important;
+  }
+  .brand {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 8px;
+  }
+  .brand > div:last-child { min-width: 0; }
+  .brand-ico { width: 32px; height: 32px; font-size: 15px; flex-shrink: 0; }
+  .brand h1 {
+    font-size: 14px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brand .sub {
+    font-size: 10px !important;
+    max-width: 100% !important;
+  }
+  .top-actions {
+    width: auto !important;
+    flex: 0 0 auto;
+    flex-wrap: nowrap !important;
+    justify-content: flex-end !important;
+    gap: 5px !important;
+  }
+  .top-actions .btn {
+    flex: 0 0 auto !important;
+    padding: 5px 9px !important;
+    min-height: 34px;
+    min-width: 34px;
+    font-size: 12px !important;
+  }
+
+  /* Hero Mobile */
+  .hero-match-v2 { padding: 11px 12px; gap: 7px; }
+  .hero-opp-title { font-size: 16px; }
+  .hero-cta-row .btn { flex: 1; min-height: 36px; }
+
+  /* 4 KPI rapi 2x2 */
+  #t1-kpis .card { padding: 9px 10px; }
+  #t1-kpis .kpi-val { font-size: 17px; margin-top: 2px; }
+  #t1-kpis .kpi-sub {
+    font-size: 10px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Club Status Strip ringkas */
+  .club-status-strip { padding: 7px 10px; font-size: 10.5px; }
+
+  /* Auto-Guard benar-benar 1 baris tipis bila aman */
+  .guard-strip {
+    padding: 7px 10px;
+    margin-top: 10px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  /* Mini Standings 5 kolom pas 360px tanpa geser */
+  .mini-club-cell { max-width: 122px; }
+  #t1-mini-standings th, #t1-mini-standings td { padding: 6px 6px; font-size: 11px; }
+}
+
+/* === v8.2.1 TAB 2 WAR ROOM OVERHAUL (SEGMENTED CONTROL, 5s CHEAT SHEET & 2x2 SP) === */
+.wr-top-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.wr-cond-bars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+.wr-seg-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wr-seg-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  min-width: 44px;
+}
+.wr-seg-group {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+.wr-seg-group .btn-sm {
+  border-color: transparent;
+  background: transparent;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.wr-seg-group .btn-sm.btn-green {
+  background: #059669;
+  border-color: #10b981;
+  color: #fff;
+}
+
+/* Strip Contekan 5 Detik */
+.wr-cheat-strip {
+  background: linear-gradient(135deg, rgba(16,185,129,.15), rgba(56,189,248,.08) 65%, var(--bg2));
+  border: 1px solid rgba(16,185,129,.45);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.wr-cheat-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.wr-cheat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.wr-jump-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+.wr-jump-btn {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 4px;
+  min-height: 34px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  transition: .14s;
+}
+.wr-jump-btn:hover { border-color: var(--sky); color: #fff; background: var(--card2); }
+
+/* Intip 11 Starter Rekomendasi */
+.wr-xi-peek {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.wr-xi-peek summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--sky);
+  user-select: none;
+}
+.wr-xi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+.wr-xi-chip {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.wr-xi-chip:hover { border-color: var(--sky); }
+.wr-xi-chip.is-y { border-color: rgba(239,68,68,.55); background: rgba(239,68,68,.09); }
+.wr-xi-chip.is-rot { border-color: rgba(167,139,250,.55); background: rgba(167,139,250,.10); }
+
+/* Set Pieces 2x2 Kompak di Desktop & HP */
+.sp-2grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.sp-box {
+  background: var(--card);
+  padding: 6px 8px;
+  border-radius: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+.sp-box b {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ticket Price Box Highlight */
+.tkt-box {
+  background: var(--card);
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.tkt-box.changed {
+  border-color: rgba(245,158,11,.55);
+  background: rgba(245,158,11,.08);
+}
+
+/* Shout Tracker Anti-Repeat */
+.shout-item {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  margin-bottom: 7px;
+  cursor: pointer;
+  transition: .14s;
+}
+.shout-item.used {
+  opacity: .52;
+  border-color: rgba(16,185,129,.4);
+}
+.shout-item.used .shout-name { text-decoration: line-through; }
+
+/* Top 3 Table Compact Columns on Mobile */
+.wr-top3-tbl th, .wr-top3-tbl td { padding: 6px 6px; font-size: 11px; }
+.wr-form-mod-sub { display: none; font-size: 10px; color: var(--muted); font-weight: 500; }
+
+/* Sim Mode Bar */
+.wr-sim-bar {
+  background: rgba(167,139,250,.10);
+  border: 1px solid rgba(167,139,250,.42);
+  border-radius: 11px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .wr-sub-desk { display: none !important; }
+  .wr-top-head { gap: 6px; margin-bottom: 8px; }
+  .wr-cond-bars { width: 100%; flex-direction: column; align-items: stretch; gap: 5px; }
+  .wr-seg-row { width: 100%; display: grid; grid-template-columns: 44px 1fr; gap: 6px; }
+  .wr-seg-group { width: 100%; }
+  .wr-seg-group .btn-sm { padding: 5px 4px; font-size: 11px; min-height: 32px; }
+  .wr-cheat-strip { padding: 9px 10px; margin: 8px 0; }
+  .wr-jump-btn { font-size: 10.5px; padding: 5px 2px; }
+
+  /* Padatkan tabel Top 3 Formasi pas 360px tanpa scroll horizontal */
+  .wr-top3-tbl .col-hide-mob { display: none !important; }
+  .wr-form-mod-sub { display: block; }
+  .wr-top3-tbl th, .wr-top3-tbl td { padding: 6px 4px; font-size: 11px; }
+  .wr-xi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .wr-sim-bar select { width: 100%; }
+  .wr-sim-toggles { width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+}
+
+/* === v8.2.2 TAB 3 SKUAD & TAKTIK OVERHAUL === */
+.t3-ctrl-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.t3-ctrl-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+.t3-seg-2 {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+.t3-seg-2 .btn {
+  border-color: transparent;
+  background: transparent;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.t3-seg-2 .btn.btn-green {
+  background: #059669;
+  border-color: #10b981;
+  color: #fff;
+}
+
+/* Absent (Cedera / Skorsing) Box */
+.t3-absent-box {
+  margin-top: 10px;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.38);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 11px;
+}
+.t3-absent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.t3-absent-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  background: var(--card);
+  border: 1px solid rgba(239,68,68,.42);
+  border-radius: 8px;
+  padding: 5px 8px;
+  min-height: 32px;
+  font-size: 11px;
+}
+.t3-absent-pill:hover { border-color: var(--sky); }
+
+/* Quick Filter Chips Bar (Skuad & Akademi) */
+.quick-chips-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+  margin-bottom: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.quick-chips-bar::-webkit-scrollbar { display: none; }
+.qchip {
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--muted);
+  border-radius: 99px;
+  padding: 5px 11px;
+  min-height: 32px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: .14s;
+}
+.qchip:hover { border-color: var(--sky); color: #fff; }
+.qchip.active {
+  background: rgba(16,185,129,.18);
+  border-color: #10b981;
+  color: #6ee7b7;
+}
+.qchip.is-empty { opacity: .52; }
+
+/* Inline Action/Mood micro badge di kolom sticky #1 */
+.inline-sticky-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+.inline-sticky-meta .badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  line-height: 1.3;
+}
+
+/* Mood Summary Strip & Mini KPI Akademi */
+.t3-mini-strip {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+.t3-mini-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.t3-mini-card .kpi-val { font-size: 18px; margin-top: 2px; }
+
+/* Sortable Header Highlight */
+th.sort-active { color: #6ee7b7 !important; }
+
+@media (max-width: 768px) {
+  .t3-ctrl-left { width: 100%; }
+  .t3-seg-2 { width: 100%; }
+  .t3-seg-2 .btn { min-height: 34px; font-size: 11.5px; padding: 6px 6px; }
+  #t3-form-select { flex: 1; min-width: 0; }
+  .t3-mini-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .t3-mini-card { padding: 7px 9px; }
+  .t3-mini-card .kpi-val { font-size: 16px; }
+  .qchip { min-height: 34px; padding: 5px 10px; }
+  .t3-absent-pill { min-height: 34px; }
+  /* Di layar HP sempit, kolom Aksi paling kanan boleh disembunyikan krn sudah tampil di sticky #1 */
+  .col-desk-only { display: none !important; }
+}
+
+/* === v8.2.3 TAB 4 TRANSFER & SCOUT OVERHAUL === */
+.t4-bp-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.deal-card.in-cart {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 1px rgba(16,185,129,.45);
+  background: linear-gradient(155deg, rgba(16,185,129,.12), var(--bg2));
+}
+.t4-preset-strip {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 2px 0 7px;
+  margin-bottom: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.t4-preset-strip::-webkit-scrollbar { display: none; }
+
+.sticky-inline-acts {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.sticky-inline-acts .btn-sm,
+.sticky-inline-acts .star-btn {
+  padding: 3px 7px;
+  font-size: 10.5px;
+}
+
+.shortlist-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid rgba(167,139,250,.4);
+  border-radius: 11px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.cart-impact-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 11px;
+  margin-bottom: 10px;
+  font-size: 11.5px;
+}
+
+.scout-more-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+
+/* Strip Kas Kompak HP (~48px) vs Penuh Desktop */
+.bstrip-mob { display: none; }
+.bstrip-desk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .bstrip-desk { display: none !important; }
+  .bstrip-mob {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    font-size: 11px;
+  }
+  .budget-strip {
+    padding: 6px 9px !important;
+    margin-bottom: 6px !important;
+    min-height: 46px;
+  }
+  .t4-bp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 5px;
+  }
+  .t4-bp-grid .btn-sm { width: 100%; padding: 6px 5px; font-size: 11px; }
+  .t4-bp-sub-desk { display: none !important; }
+
+  .scout-quick-bar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 86px 96px;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .scout-quick-bar select { width: 100%; padding: 5px 4px; font-size: 11px; }
+
+  /* 4 KPI Cart jadi 2x2 di layar HP */
+  #t7-cart-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+  #t7-cart-kpis .kpi-val { font-size: 17px !important; }
+
+  /* Kolom aksi kanan di Tabel Scout disembunyikan di HP krn sudah ada di sticky #1 */
+  #t7-scout-tbl .col-desk-only { display: none !important; }
+  .sticky-inline-acts .btn-sm,
+  .sticky-inline-acts .star-btn {
+    min-height: 32px;
+    min-width: 32px;
+    padding: 4px 7px;
+  }
+}
+
+/* === v8.2.4 TAB 5 KEUANGAN & KLUB OVERHAUL === */
+.cf-ratio-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  margin: 6px 0 8px;
+}
+.cf-ratio-in { background: linear-gradient(90deg, #059669, #10b981); height: 100%; }
+.cf-ratio-out { background: linear-gradient(90deg, #d97706, #ef4444); height: 100%; }
+
+.cf-health-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  margin-bottom: 9px;
+  font-size: 11px;
+}
+
+/* Ticket Simulator Sector Card */
+.sim-sec-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  transition: border-color .14s;
+}
+.sim-sec-card.diff-save {
+  border-color: rgba(245,158,11,.55);
+  background: rgba(245,158,11,.06);
+}
+
+/* Top 8 Jersey Leaderboard v2 (Progress Bar Hidup di Desktop & Mobile 360px!) */
+.jersey-row-v2 {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.jersey-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.jersey-row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.jersey-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jersey-bar-track {
+  width: 100%;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.jersey-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+/* Hype Signing Banner (Sub-Tab 5C) */
+.shop-hype-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, rgba(167,139,250,.16), rgba(56,189,248,.08));
+  border: 1px solid rgba(167,139,250,.48);
+  font-size: 12px;
+}
+
+/* Stadium Breakdown Bar & Active Construction/CT Project Banner (Sub-Tab 5D) */
+.stad-stack-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--border);
+  margin: 7px 0 9px;
+}
+.stad-legend {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 9px;
+  font-size: 11px;
+}
+.stad-leg-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.work-banner {
+  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(16,185,129,.08));
+  border: 1px solid rgba(56,189,248,.5);
+  border-radius: 11px;
+  padding: 10px 12px;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+
+/* Interactive ROI Calculator Form */
+.roi-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.roi-calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.roi-calc-field .input,
+.roi-calc-field select {
+  width: 100%;
+}
+.roi-res-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  text-align: center;
+  background: var(--bg2);
+  border: 1px solid rgba(16,185,129,.4);
+  border-radius: 10px;
+  padding: 9px 7px;
+  margin-bottom: 8px;
+}
+
+/* Crowd 3 Mini KPIs */
+.crowd-kpi-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.crowd-kpi-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 8px;
+  text-align: center;
+}
+.crowd-kpi-box .kpi-val { font-size: 16px; margin-top: 2px; }
+
+@media (max-width: 768px) {
+  .stad-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .roi-res-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .crowd-kpi-3 { gap: 5px; }
+  .crowd-kpi-box .kpi-val { font-size: 14px; }
+  #t6-tmb .col-desk-only { display: none !important; }
+}
+
+/* === v8.2.5 TAB 6 LIGA & ALAT + QUICK SEARCH OVERHAUL === */
+/* Standings Zone Indicators & Fit 360px */
+#t8-standings-tbl td.st-club-cell {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#t8-standings-tbl tr.st-rival-row { cursor: pointer; }
+#t8-standings-tbl tr.st-rival-row:hover td { background: rgba(167,139,250,.10); }
+#t8-standings-tbl td.zone-champ { border-left: 3px solid #10b981; font-weight: 800; color: #6ee7b7; }
+#t8-standings-tbl td.zone-top   { border-left: 3px solid #38bdf8; color: #7dd3fc; }
+#t8-standings-tbl td.zone-rel   { border-left: 3px solid #ef4444; color: #fca5a5; }
+#t8-standings-tbl td.zone-mid   { border-left: 3px solid transparent; }
+
+.st-zone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  align-items: center;
+}
+.st-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* Form Streak Strip (6A) */
+.form-streak-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 9px;
+  font-size: 11.5px;
+}
+.streak-pills {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.streak-pill {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+.streak-W { background: var(--green-bg); color: #6ee7b7; border: 1px solid rgba(16,185,129,.45); }
+.streak-D { background: var(--amber-bg); color: #fcd34d; border: 1px solid rgba(245,158,11,.45); }
+.streak-L { background: var(--red-bg); color: #fca5a5; border: 1px solid rgba(239,68,68,.45); }
+
+/* 5 Calculators Clean 2-Col Grid (6B) */
+.calc-pick-row {
+  margin-bottom: 8px;
+}
+.calc-pick-row select {
+  width: 100%;
+  font-size: 11.5px;
+}
+.calc-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 8px;
+}
+.calc-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 8px;
+}
+.calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.calc-field .input,
+.calc-field select {
+  width: 100%;
+}
+.calc-naming-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 9px;
+  text-align: center;
+  font-size: 11px;
+}
+.calc-naming-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 5px;
+}
+.calc-naming-box.best {
+  border-color: rgba(16,185,129,.55);
+  background: rgba(16,185,129,.10);
+}
+
+/* Bosman Preview & PWA Storage Card (6C) */
+.bosman-mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+}
+.pwa-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.pwa-kv-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 9px;
+  font-size: 11px;
+}
+.pwa-kv-box b { font-size: 13px; display: block; margin-top: 2px; }
+
+/* Quick Search Enhanced Input + Clear Button */
+.qs-input-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.qs-input-wrap .input { flex: 1; min-width: 0; }
+
+@media (max-width: 768px) {
+  #t8-standings-tbl th, #t8-standings-tbl td {
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  #t8-standings-tbl td.st-club-cell { max-width: 112px; }
+  #t3-recent-tbl th, #t3-recent-tbl td { padding: 6px 5px; font-size: 11px; }
+  .calc-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+}
+
+/* === v8.2.6 FINAL POLISH: BUDGET STRIP SPECIFICITY & STICKY COLSPAN === */
+.tbl-sticky table td[colspan] {
+  position: static !important;
+  max-width: none !important;
+  width: auto !important;
+  box-shadow: none !important;
+  white-space: normal !important;
+}
+
+@media (max-width: 768px) {
+  /* Kalahkan spesifisitas .budget-strip > div:first-child dari v8.1 */
+  .budget-strip > div.bstrip-desk:first-child {
+    display: none !important;
+  }
+  .budget-strip > div.bstrip-mob {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+  }
 }
