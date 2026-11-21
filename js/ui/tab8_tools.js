@@ -134,11 +134,11 @@ function downloadCsv(filename, content) {
 window.LFInitDashboard = function () {
   if (typeof window.LFResetUIState === 'function') window.LFResetUIState();
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.0`;
-  document.getElementById('hdr-title').textContent = `${D.meta.teamName} — LigaFoot Optimizer v8.0`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.1`;
+  document.getElementById('hdr-title').textContent = `${D.meta.teamName} — LigaFoot Optimizer v8.1`;
   document.getElementById('hdr-sub').textContent =
     `${D.meta.currentDate} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${D.meta.country}) • ${D.meta.version}`;
-  document.getElementById('hdr-badge').textContent = `v8.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.1 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   renderTab1();
   renderTab2();

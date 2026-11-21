@@ -294,16 +294,16 @@ function renderShopAnalytics() {
         <title>${x.ym}: ${(x.shirts || 0).toLocaleString('id-ID')} jersey (${fmtM(x.revenue)})</title>
         <rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}"
               rx="4" fill="${isLast ? '#10b981' : '#38bdf8'}" opacity="${isLast ? '0.95' : '0.72'}" />
-        <text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" fill="${isLast ? '#6ee7b7' : '#8ea3bc'}" font-size="9" font-weight="700">${x.shirts >= 1000 ? (x.shirts / 1000).toFixed(1) + 'K' : x.shirts}</text>
-        <text x="${cx.toFixed(1)}" y="${H - 12}" text-anchor="middle" fill="#8ea3bc" font-size="9">${esc(ymLbl)}</text>
+        <text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" fill="${isLast ? '#6ee7b7' : '#8ea3bc'}" font-size="10" font-weight="700">${x.shirts >= 1000 ? (x.shirts / 1000).toFixed(1) + 'K' : x.shirts}</text>
+        <text x="${cx.toFixed(1)}" y="${H - 12}" text-anchor="middle" fill="#8ea3bc" font-size="10">${esc(ymLbl)}</text>
       </g>`;
   }).join('');
 
   const chartSvg = `
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:195px;background:var(--bg2);border-radius:11px;border:1px solid var(--border)">
       <line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="#243449" stroke-width="1" />
-      <text x="6" y="${padT + 8}" fill="#8ea3bc" font-size="9">${maxS.toLocaleString('id-ID')}</text>
-      <text x="6" y="${padT + plotH}" fill="#8ea3bc" font-size="9">0</text>
+      <text x="6" y="${padT + 8}" fill="#8ea3bc" font-size="10">${maxS.toLocaleString('id-ID')}</text>
+      <text x="6" y="${padT + plotH}" fill="#8ea3bc" font-size="10">0</text>
       ${barsSvg}
     </svg>`;
 

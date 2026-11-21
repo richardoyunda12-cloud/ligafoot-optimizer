@@ -70,9 +70,9 @@
     const isGem = (potCap - potential) >= 4 || (age <= 22 && (potCap - force) >= 8);
 
     const ageBidMul = age < 20 ? 1.50 : (age <= 24 ? 1.35 : 1.30);
-    const estInitBid = Math.round(mv * ageBidMul);
-    const estCounter40 = Math.round(estInitBid * C.COUNTER_SAFE_MUL);
-    const estRealSale = Math.round(estInitBid * C.COUNTER_AVG_REALIZED);
+    const estInitBid = U.pyRound(mv * ageBidMul);
+    const estCounter40 = U.pyRound(estInitBid * C.COUNTER_SAFE_MUL);
+    const estRealSale = U.pyRound(estInitBid * C.COUNTER_AVG_REALIZED);
 
     return {
       id: pid,

@@ -289,6 +289,10 @@
   window.addEventListener('DOMContentLoaded', async () => {
     registerServiceWorker();
     wireEvents();
+    if (window.innerWidth <= 768) {
+      const sf = $('scout-filter-details');
+      if (sf) sf.removeAttribute('open');
+    }
 
     // Cek save terakhir di IndexedDB supaya buka ulang PWA langsung instan!
     try {

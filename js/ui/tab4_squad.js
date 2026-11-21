@@ -38,8 +38,10 @@ function renderContractTimeline() {
     ? arr.map(p => `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b> <span class="mono c-muted">${p.contractDays}d${extraFn ? extraFn(p) : ''}</span></span>`).join('')
     : '<span class="c-muted" style="font-size:11px">Tidak ada</span>';
 
+  const isMob = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const openTl = !isMob && (bTrap.length || bGold.length || bSoon.length);
   el.innerHTML = `
-    <details class="glossary-inline" ${bTrap.length || bGold.length || bSoon.length ? 'open' : ''} style="padding:10px 12px">
+    <details class="glossary-inline" ${openTl ? 'open' : ''} style="padding:10px 12px">
       <summary>📅 Kalender Kontrak 6 Bulan (Klik nama pemain untuk buka profil &amp; rencana renew)</summary>
       <div class="timeline-grid mt-12">
         <div class="tl-bucket ${bTrap.length ? 'crit' : ''}">

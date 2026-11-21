@@ -40,6 +40,17 @@
     return Number.isFinite(v) ? v : defVal;
   }
 
+  function pyRound(val) {
+    const v = Number(val);
+    if (!Number.isFinite(v)) return 0;
+    const fl = Math.floor(v);
+    const diff = v - fl;
+    if (Math.abs(diff - 0.5) < 1e-12) {
+      return (fl % 2 === 0) ? fl : fl + 1;
+    }
+    return Math.round(v);
+  }
+
   function safeInt(val, defVal = 0) {
     return Math.round(safeNum(val, defVal));
   }
@@ -388,6 +399,7 @@
     formEn,
     clamp,
     safeNum,
+    pyRound,
     safeInt,
     roundTo,
     fmtMoney,
