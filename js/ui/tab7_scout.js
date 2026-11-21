@@ -15,7 +15,13 @@ function isRecommendedSell(p) {
 function isBosmanTarget(r) {
   if (!r) return false;
   const fl = String(r[18] || '');
-  return fl.includes('BOSMAN') || (Number(r[15]) <= 180 && !fl.includes('FREE'));
+  return fl.includes('BOSMAN');
+}
+
+function isBlockedTransfer(r) {
+  if (!r) return false;
+  const fl = String(r[18] || '');
+  return fl.includes('REFUSE_DIST') || fl.includes('REFUSE_LVL') || fl.includes('KEY_LOCK') || (fl.includes('REFUSE') && !fl.includes('PERSUADE'));
 }
 
 function getEffectiveBuyCost(r) {
@@ -157,12 +163,15 @@ function enrichScoutRow(r, cm) {
 
 function renderCompactScoutBadges(flagsStr, fillsHole) {
   const all = flagsStr ? flagsStr.split(',').filter(Boolean) : [];
-  const primaryOrder = ['FREE', 'BOSMAN', 'UNH', 'SCARCE', 'TRAP', 'GEM', 'INJ'];
+  const primaryOrder = ['FREE', 'BOSMAN', 'UNH', 'PERSUADE', 'YSCOUT', 'REFUSE_DIST', 'REFUSE_LVL', 'KEY_LOCK', 'CEIL_2X', 'SCARCE', 'TRAP', 'GEM', 'INJ', 'INJ_DISC'];
   const primary = [];
   if (fillsHole) primary.push({ k: 'LUBANG', cls: 'b-warn', tip: 'Mengisi lubang posisi di skuad senior' });
   primaryOrder.forEach(k => {
     if (all.includes(k) && primary.length < 3) {
-      const cls = (k === 'SCARCE' || k === 'TRAP' || k === 'INJ') ? 'b-crit' : 'b-good';
+      let cls = 'b-good';
+      if (['SCARCE', 'TRAP', 'INJ', 'REFUSE_DIST', 'REFUSE_LVL', 'KEY_LOCK', 'REFUSE'].includes(k)) cls = 'b-crit';
+      else if (['PERSUADE', 'CEIL_2X'].includes(k)) cls = 'b-warn';
+      else if (['YSCOUT', 'INJ_DISC'].includes(k)) cls = 'b-info';
       primary.push({ k, cls, tip: tipFor(k) });
     }
   });
@@ -309,9 +318,9 @@ function renderScoutBlueprint() {
     return;
   }
 
-  // FIX AUDIT TAB 4: JANGAN filter `!cartIn[r[19]]` agar kartu tetap di tempatnya dengan bingkai hijau saat diklik!
+  // v8.3: Saring target yang menolak pindah (#23840 refusesDistance / #23919 KEY_LOCK) dari Belanja Pintar!
   const cleanPool = D.scoutPool
-    .filter(r => !(r[18] || '').includes('TRAP') && !(r[18] || '').includes('INJ'))
+    .filter(r => !(r[18] || '').includes('TRAP') && !(r[18] || '').includes('INJ') && !isBlockedTransfer(r))
     .map(r => enrichScoutRow(r, cm));
 
   let picks = [];
@@ -539,6 +548,8 @@ function getFilteredScout() {
   const maxPRaw = parseFloat((document.getElementById('s-max-price') || {}).value);
   const pUnit = parseFloat((document.getElementById('s-price-unit') || {}).value) || 1;
   const maxP = isNaN(maxPRaw) ? Infinity : maxPRaw * pUnit;
+  const onlyReachEl = document.getElementById('s-only-reach');
+  const onlyReach = onlyReachEl ? Boolean(onlyReachEl.checked) : true;
   const onlyAfford = Boolean((document.getElementById('s-afford') || {}).checked);
   const onlyStack = Boolean((document.getElementById('s-only-stack') || {}).checked);
   const hideTrap = Boolean((document.getElementById('s-hide-trap') || {}).checked);
@@ -550,6 +561,7 @@ function getFilteredScout() {
   for (const r of D.scoutPool) {
     const flags = r[18] || '';
     if (q && !(r[0].toLowerCase().includes(q) || r[16].toLowerCase().includes(q))) continue;
+    if (onlyReach && isBlockedTransfer(r) && scoutPreset !== 'SHORTLIST') continue;
     if (pos && r[1] !== pos) continue;
     if (foot && r[3] !== foot) continue;
     if (!isNaN(maxAge) && r[2] > maxAge) continue;

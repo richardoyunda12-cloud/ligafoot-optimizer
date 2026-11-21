@@ -56,26 +56,26 @@ function computeLiveFormCompare(rotMode) {
   const rows = keys.map(fk => {
     const res = solveBestXiJS(fk, rotMode);
     const md = FORMATION_MODS[fk] || { atkMod: 0, defMod: 0 };
-    const sec = { GK: [], DEF: [], MID: [], ATK: [] };
-    res.xi.forEach(a => {
-      const c = EXACT_CAT[a.slot] ?? 3;
-      const k = c === 0 ? 'GK' : ((c === 1 || c === 2) ? 'DEF' : (c === 3 ? 'MID' : 'ATK'));
-      sec[k].push(a.score);
-    });
-    const avgOf = arr => arr.length ? +(arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(1) : 0;
     return {
       formation: fk,
       avgScore: res.avg,
       totalScore: res.tot,
-      sectors: { GK: avgOf(sec.GK), DEF: avgOf(sec.DEF), MID: avgOf(sec.MID), ATK: avgOf(sec.ATK) },
+      sectors: res.sectors || { GK: 0, DEF: 0, MID: 0, ATK: 0 },
+      engineSectors: res.engineSectors || res.sectors || { GK: 0, DEF: 0, MID: 0, ATK: 0 },
+      chemistry: res.chemistry !== undefined ? res.chemistry : 100,
       foreignCount: res.fCnt,
       wrongFootCount: res.wfCnt,
       atkMod: md.atkMod,
       defMod: md.defMod,
       falseNine: res.falseNine,
+      hasFormationBug: Boolean(res.hasFormationBug),
+      formationBugInfo: res.formationBugInfo || null,
     };
   });
-  rows.sort((a, b) => b.totalScore - a.totalScore);
+  rows.sort((a, b) => {
+    if (a.hasFormationBug !== b.hasFormationBug) return a.hasFormationBug ? 1 : -1;
+    return b.totalScore - a.totalScore;
+  });
   return rows;
 }
 
@@ -100,25 +100,29 @@ function renderFormCompareTable() {
 
   const modeLbl = isRot ? 'Rotation XI' : 'Best XI';
   const hdrEl = document.getElementById('t3-form-title');
-  if (hdrEl) hdrEl.textContent = `📊 15 Formasi Resmi (#3492 • Mode ${modeLbl})`;
+  if (hdrEl) hdrEl.textContent = `📊 15 Formasi Resmi (#3575/#21891 • Mode ${modeLbl})`;
 
   tbl.innerHTML = `<thead><tr>
-    <th>15 Formasi (Klik → Pitch)</th><th>A/D</th><th>Avg</th><th>DEF</th><th>MID</th><th>ATK</th><th>Asing</th><th>FB-WF</th>
+    <th>15 Formasi (Klik → Pitch)</th><th>Avg</th><th>Chem</th><th>DEF</th><th>MID</th><th>ATK</th><th>Asing</th><th>FB-WF</th>
   </tr></thead><tbody>` +
     rows.map((f, idx) => {
       const isCur = f.formation === curFk;
       const isClub = f.formation === D.meta.activeFormation;
+      const bugTag = f.hasFormationBug
+        ? `<span class="badge b-crit" style="margin-left:3px" title="${esc(tipFor('BUG343'))}">⚠ BUG -33% ATK</span>`
+        : '';
       return `<tr class="${isCur ? 'hl-user' : ''}" style="cursor:pointer" onclick="selectFormationFromTable('${escJs(f.formation)}')">
         <td>
           <b>${idx === 0 ? '🏆 ' : ''}${esc(fmtForm(f.formation))}</b>
           ${isClub ? '<span class="badge b-info" style="margin-left:3px">Klub</span>' : ''}
           ${f.falseNine ? '<span class="badge b-accent" style="margin-left:3px">F9</span>' : ''}
+          ${bugTag}
         </td>
-        <td class="mono">${fmtMod(f.atkMod)}/${fmtMod(f.defMod)}</td>
-        <td class="mono c-green"><b>${f.avgScore}</b></td>
+        <td class="mono ${f.hasFormationBug ? 'c-red' : 'c-green'}"><b>${f.avgScore}</b></td>
+        <td class="mono c-sky">${f.chemistry ?? 100}%</td>
         <td class="mono">${f.sectors.DEF}</td>
         <td class="mono">${f.sectors.MID}</td>
-        <td class="mono">${f.sectors.ATK}</td>
+        <td class="mono ${f.hasFormationBug ? 'c-red' : ''}">${f.sectors.ATK}${f.hasFormationBug ? ' (-33%)' : ''}</td>
         <td class="mono">${f.foreignCount}/${D.meta.foreignCap}</td>
         <td class="mono ${f.wrongFootCount ? 'c-amber' : 'c-green'}">${f.wrongFootCount}</td>
       </tr>`;
@@ -152,33 +156,36 @@ function renderMoodTable() {
     sumEl.innerHTML = `
       <div class="t3-mini-strip" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px">
         <div class="t3-mini-card">
-          <div class="kpi-lbl">Unhappy</div>
-          <div class="kpi-val mono ${unhCnt >= 4 ? 'c-red' : (unhCnt > 0 ? 'c-amber' : 'c-green')}">${unhCnt}</div>
-          <div class="kpi-sub">${unhCnt >= 4 ? `Penalti -${D.meta.lockerHitPct}%!` : 'Aman (<4 org)'}</div>
+          <div class="kpi-lbl">Unhappy (≥3 = Penalti)</div>
+          <div class="kpi-val mono ${unhCnt >= 3 ? 'c-red' : (unhCnt > 0 ? 'c-amber' : 'c-green')}">${unhCnt}</div>
+          <div class="kpi-sub">${unhCnt >= 3 ? `Penalti -${D.meta.lockerHitPct}%!` : 'Aman (<3 org)'}</div>
         </div>
         <div class="t3-mini-card">
           <div class="kpi-lbl">Rawan Menit</div>
           <div class="kpi-val mono ${riskCnt > 0 ? 'c-amber' : 'c-green'}">${riskCnt}</div>
-          <div class="kpi-sub">Dekat batas 8%/25%</div>
+          <div class="kpi-sub">Dekat batas 8%/25%/40%</div>
         </div>
         <div class="t3-mini-card">
-          <div class="kpi-lbl">Kebal (Reserve/≤19)</div>
+          <div class="kpi-lbl">Kebal (Reserve)</div>
           <div class="kpi-val mono c-sky">${immuneCnt}</div>
           <div class="kpi-sub">0% risiko unhappy</div>
         </div>
       </div>
-      <div class="c-muted" style="font-size:11px">Garis kuning pada bar menit menandai ambang minimal (<b>8%</b> pelapis · <b>25%</b> starter). Tip v1.2.0: Set cadangan ke <b>reserve</b> agar 100% kebal!</div>`;
+      <div class="c-muted" style="font-size:11px">Kuota bytecode #21546 (aktif setelah ≥6 laga): <b>40%</b> Starter Top-11 / roleSore · <b>25%</b> Rotasi #12–#18 · <b>8%</b> U-19. Set cadangan (#12 ke bawah) ke <b>reserve</b> agar 100% kebal!</div>`;
   }
 
   const mRows = [...roster].sort(
-    (a, b) => (a.mood === 'unhappy' ? -1 : 1) - (b.mood === 'unhappy' ? -1 : 1) || b.moodTier - a.moodTier || a.minPct - b.minPct
+    (a, b) => (a.mood === 'unhappy' ? -1 : 1) - (b.mood === 'unhappy' ? -1 : 1) || (b.minsDeficit || 0) - (a.minsDeficit || 0) || b.moodTier - a.moodTier || a.minPct - b.minPct
   );
   const tbl = document.getElementById('t3-mood-tbl');
   if (tbl) {
-    tbl.innerHTML = `<thead><tr><th>Pemain &amp; Mood</th><th>Saran Aksi v9</th><th>Kuota Menit</th><th>Target</th><th>Role v9</th><th>Pos</th></tr></thead><tbody>` +
+    tbl.innerHTML = `<thead><tr><th>Pemain &amp; Mood</th><th>Saran Aksi v9</th><th>Kuota Menit</th><th>Target &amp; Defisit</th><th>Role v9</th><th>Pos</th></tr></thead><tbody>` +
       mRows.map(p => {
-        const mCls = p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'happy' ? 'b-good' : 'b-info');
+        const mCls = p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'warn' ? 'b-warn' : 'b-info');
         const adv = getMoodActionAdvice(p);
+        const defTxt = (!p.moodImmune && p.minsDeficit > 0)
+          ? `<div class="c-amber" style="font-size:10px">-${p.minsDeficit}m (~${p.gamesDeficit} lg)</div>`
+          : `<div class="c-muted" style="font-size:10px">${p.minsNow || 0}/${p.minsReq || 0}m</div>`;
         return `<tr>
           <td>
             <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
@@ -189,7 +196,7 @@ function renderMoodTable() {
           </td>
           <td><span class="badge ${adv.cls}">${esc(adv.txt)}</span></td>
           <td>${minutesQuotaBarHtml(p.minPct, p.reqPct, p.mood)}</td>
-          <td class="mono">${p.reqPct}%</td>
+          <td class="mono"><b>${p.reqPct}%</b>${defTxt}</td>
           <td><span class="badge ${p.roleSore ? 'b-crit' : 'b-muted'}">${esc(p.moodReason)}</span></td>
           <td><b>${fmtPos(p.pos)}</b></td>
         </tr>`;
@@ -213,6 +220,9 @@ function renderTab3Pitch() {
 
   const diffEl = document.getElementById('t3-rot-diff');
   if (diffEl) {
+    const bugBanner = res.hasFormationBug && res.formationBugInfo
+      ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">BUG 3-4-3 (#34992)</span><div style="font-size:11px"><b>${esc(res.formationBugInfo.title)}:</b> ${esc(res.formationBugInfo.desc)}</div></div>`
+      : '';
     if (isRot) {
       if (rotInPlayers.length) {
         const pairs = rotInPlayers.map((pin, idx) => {
@@ -221,50 +231,53 @@ function renderTab3Pitch() {
           const outHtml = pout ? ` ⇄ <a class="clickable-name c-muted" onclick="openPlayerDrawer('roster','${escJs(pout.id)}')">${esc(pout.name)} ↓</a> (${pout.energy}%)` : '';
           return inHtml + outHtml;
         }).join(' &nbsp;·&nbsp; ');
-        diffEl.innerHTML = `<div class="rot-diff-banner">
+        diffEl.innerHTML = bugBanner + `<div class="rot-diff-banner">
           <b>🔄 Diff Rotation XI (${rotInPlayers.length} dirotasi • Skor ${bestRef.avg} → ${res.avg}):</b><br/>
           <div style="margin-top:3px">${pairs}</div>
         </div>`;
       } else {
-        diffEl.innerHTML = `<div class="rot-diff-banner">🔄 Seluruh starter Best XI dalam kondisi bugar &amp; aman kartu — belum ada rotasi wajib untuk formasi ini.</div>`;
+        diffEl.innerHTML = bugBanner + `<div class="rot-diff-banner">🔄 Seluruh starter Best XI dalam kondisi bugar &amp; aman kartu — belum ada rotasi wajib untuk formasi ini.</div>`;
       }
     } else {
-      diffEl.innerHTML = '';
+      diffEl.innerHTML = bugBanner;
     }
   }
 
   const sumEl = document.getElementById('t3-xi-summary');
   if (sumEl) {
+    const chemVal = res.chemistry !== undefined ? res.chemistry : 100;
     sumEl.innerHTML =
-      `Avg XI: <b class="c-green">${res.avg}</b> (A${fmtMod(md.atkMod)}/D${fmtMod(md.defMod)}) · ` +
+      `Avg XI: <b class="c-green">${res.avg}</b> · ` +
+      `Chem <b class="c-sky">${chemVal}%</b> · ` +
       `Asing <b>${res.fCnt}/${D.meta.foreignCap}</b> · FB-WF <b class="${res.wfCnt ? 'c-amber' : 'c-green'}">${res.wfCnt}</b>` +
-      (res.falseNine ? ` <span class="badge b-accent">⚡ F9</span>` : '');
+      (res.falseNine ? ` <span class="badge b-accent">⚡ F9</span>` : '') +
+      (res.hasFormationBug ? ` <span class="badge b-crit">⚠ BUG -33% ATK</span>` : '');
   }
 
   const pitch = document.getElementById('t3-pitch');
   pitch.querySelectorAll('.p-node').forEach(n => n.remove());
 
-  // v8.1+ Dynamic Row-Band Pitch Engine: 0 tabrakan di SEMUA 15 formasi pada layar 360px!
+  // v8.3 Dynamic Row-Band Pitch Engine (mendukung penuh 13 kode posisi C.FORMATIONS + RULE_SLOTS)
   const fkStr = String(fk || '');
-  const defSlots = res.xi.filter(a => ['LE', 'LD', 'ZE', 'ZD', 'ZAG', 'LAT'].includes(a.slot));
+  const defSlots = res.xi.filter(a => ['LE', 'LD', 'Z', 'ZE', 'ZD', 'ZAG', 'LAT'].includes(a.slot));
   const isFiveBack = defSlots.length >= 5;
-  const is433 = fkStr.startsWith('4-3-3');
-  const isMidWings = fkStr === '4-1-4-1' || fkStr === '4-4-1-1';
+  const is433 = fkStr.startsWith('4-3-3') || fkStr === '3-4-3' || fkStr === '4-2-4';
+  const isMidWings = fkStr === '4-1-4-1' || fkStr === '4-4-1-1' || fkStr === '5-4-1';
 
   const bands = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
   res.xi.forEach(a => {
     const sl = a.slot;
     if (sl === 'G') bands[0].push(a);
-    else if (['ZE', 'ZD', 'ZAG'].includes(sl)) bands[1].push(a);
+    else if (['Z', 'ZE', 'ZD', 'ZAG'].includes(sl)) bands[1].push(a);
     else if (['LE', 'LD', 'LAT'].includes(sl)) bands[isFiveBack ? 2 : 1].push(a);
-    else if (sl === 'VOL') bands[3].push(a);
+    else if (['V', 'VOL'].includes(sl)) bands[3].push(a);
     else if (['ME', 'MC', 'MD'].includes(sl)) bands[4].push(a);
-    else if (['MA', 'SA'].includes(sl)) bands[5].push(a);
+    else if (['MO', 'MA', 'SA'].includes(sl)) bands[sl === 'SA' ? 6 : 5].push(a);
     else if (['PE', 'PD'].includes(sl)) bands[is433 ? 6 : (isMidWings ? 4 : 5)].push(a);
     else bands[6].push(a);
   });
 
-  const lrRank = { LE: 1, ME: 1, PE: 1, ZE: 2, ZAG: 3, VOL: 3, MC: 3, MA: 3, SA: 3, ATA: 3, ZD: 4, LD: 5, MD: 5, PD: 5 };
+  const lrRank = { LE: 1, ME: 1, PE: 1, ZE: 2, Z: 3, ZAG: 3, V: 3, VOL: 3, MC: 3, MO: 3, MA: 3, SA: 2, A: 3, ATA: 3, ZD: 4, LD: 5, MD: 5, PD: 5 };
   const activeBands = Object.keys(bands)
     .map(Number)
     .sort((a, b) => a - b)

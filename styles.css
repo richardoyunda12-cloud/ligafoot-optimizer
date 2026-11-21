@@ -641,18 +641,21 @@ html, body {
   .star-btn { padding: 5px 8px; font-size: 14px; }
   .subtab { padding: 7px 11px; font-size: 11px; }
 
-  /* 3. Batasi Lebar Kolom Sticky Pertama <= 38% Layar HP */
+  /* 3. Batasi Lebar Kolom Sticky Pertama <= 38% Layar HP + Anti-Crushed 1-Huruf */
   .tbl-sticky table th:first-child,
   .tbl-sticky table td:first-child {
-    max-width: 130px;
-    width: 130px;
+    min-width: 128px;
+    max-width: 148px;
+    width: 136px;
     white-space: normal;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: break-word;
     line-height: 1.25;
   }
   .tbl-sticky table td:first-child .badge,
   .tbl-sticky table td:first-child .micro-tags {
     font-size: 10px;
+    white-space: nowrap;
   }
 
   /* 4. Pitch v2 Dynamic Row-Band Anti-Tabrakan 15 Formasi di 360px (strict 1-line nowrap!) */
@@ -1355,8 +1358,23 @@ tr.mini-sep-row td {
 /* Sortable Header Highlight */
 th.sort-active { color: #6ee7b7 !important; }
 
+@media (min-width: 769px) {
+  .sticky-inline-acts,
+  .inline-sticky-meta {
+    display: none !important;
+  }
+}
+
 @media (max-width: 768px) {
-  .t3-ctrl-left { width: 100%; }
+  .t3-ctrl-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .t3-ctrl-left {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
   .t3-seg-2 { width: 100%; }
   .t3-seg-2 .btn { min-height: 34px; font-size: 11.5px; padding: 6px 6px; }
   #t3-form-select { flex: 1; min-width: 0; }

@@ -1,11 +1,10 @@
 /**
  * LigaFoot Optimizer Web Engine — club.js
- * Port eksak 1:1 dari optimizer/analyzer_club.py (v8.0 Final):
+ * Port eksak 1:1 dari bytecode Hermes v1.2.0 (`disasm_v9.hasm`, `economyV = 9`):
  * - Auto-Settings Guard (fineAuto, trainMode, autoBy, autoRenew, ctMaint, xiHold).
- * - Priority Alerts (16 kategori, termasuk Pareto VIP & Loophole 0%).
- * - Multi-format lookup `world.comps` untuk nama lawan `matchLog` & GD klasemen.
- * - Delta Tracker berbasis objek history (disimpan ke IndexedDB di browser).
- * - `analyzeSave(save, staticDb, historyStore, onProgress)` -> `{ data, updatedHistory }`.
+ * - Priority Alerts (termasuk Pareto VIP v9, Loophole 0% !noAutoRenew, Sponsor paymentsLeft, & Bug 3-4-3).
+ * - Parser `uTeam.statement` tuple `[date, cat, amt]` & `uTeam.cashHistory` `{d, v}`.
+ * - Orkestrator `analyzeSave(save, staticDb, historyStore, onProgress)` -> `{ data, updatedHistory }`.
  */
 (function (root) {
   'use strict';
@@ -45,8 +44,9 @@
       ? Object.keys(xiHoldRaw).length
       : (xiHoldRaw ? 1 : 0);
 
+    // #20912: Loophole Auto-Renew 0% hanya bekerja jika !p.noAutoRenew
     const hasTrapCore = userRoster.some(
-      p => p.contractDays <= 10 && (p.force >= 40 || p.isGem || (p.squadRank || 99) <= 14) && !p.loanedFrom
+      p => p.contractDays <= 10 && !p.noAutoRenew && (p.force >= 40 || p.isGem || (p.squadRank || 99) <= 14) && !p.loanedFrom
     );
 
     const items = [
@@ -83,7 +83,7 @@
         val: autoRenew ? 'ON' : 'OFF',
         status: (autoRenew && !hasTrapCore) ? 'warn' : 'ok',
         advice: (autoRenew && hasTrapCore)
-          ? 'Aktif taktis ✓ — Siap menangkap Loophole 0% (+180d) untuk pemain inti <=10 hari (tandai noAutoRenew di cadangan!).'
+          ? 'Aktif taktis ✓ — Siap menangkap Loophole 0% (+180d) untuk pemain inti <=10 hari (pastikan !noAutoRenew pada inti & noAutoRenew pada cadangan!).'
           : (autoRenew
             ? 'MATIKAN saat normal! Auto-Renew bikin kamu kehilangan diskon -12% Golden Window (11–59 hari).'
             : (hasTrapCore
@@ -185,10 +185,15 @@
     userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
     namingObj, sponsorsObj, ticketMul, shopAudit, memberAudit,
     holes, upcomingMatches, trainAudit, preContracts, userDiv,
-    autoGuard = null, bestXi = null, optLigaPrices = null
+    autoGuard = null, bestXi = null, optLigaPrices = null, activeFormation = '4-3-3'
   ) {
     const alerts = [];
     const add = (sev, cat, title, action) => alerts.push({ sev, cat, title, action });
+
+    if (activeFormation === '3-4-3') {
+      add('CRITICAL', 'Bug Engine 3-4-3', 'Formasi aktif 3-4-3 terkena Bug Engine v1.2.0 (#34992)!',
+        'Di bytecode #34992 slotSector, slot penyerang ke-11 pada 3-4-3 memakai rule ID 18 yang jatuh ke sektor "X" (bukan "A"), sehingga ATK kehilangan -33%! Segera ganti ke 4-2-3-1, 4-3-3, atau 3-4-2-1.');
+    }
 
     if (autoGuard && typeof autoGuard === 'object') {
       if (autoGuard.fineAuto) {
@@ -211,8 +216,9 @@
 
     for (const p of userRoster) {
       if (p.injured && p.forSale) {
-        add('CRITICAL', 'Transfer v9', `${p.name} sedang CEDERA tapi status For Sale!`,
-          'Segera tarik dari daftar jual! Di v1.2.0, menjual pemain cedera kena potongan INJURED_SALE. Tunggu sembuh dulu.');
+        const discPct = Math.round((1.0 - (p.injurySaleMul || 0.72)) * 100);
+        add('CRITICAL', 'Transfer v9', `${p.name} sedang CEDERA (${p.injuryDays}d) tapi status For Sale!`,
+          `Segera tarik dari daftar jual! Di v1.2.0 (#3542), menjual pemain cedera ${p.injuryTier} terkena potongan harga -${discPct}%. Tunggu sembuh dulu.`);
       }
     }
 
@@ -222,13 +228,17 @@
     const trapCoreIds = new Set(trapCore.map(p => p.id));
     const trapOther = userRoster.filter(p => p.contractDays <= 10 && !trapCoreIds.has(p.id));
     if (trapCore.length) {
-      const names = trapCore.slice(0, 4).map(p => `${p.name} (${p.contractDays}d)`).join(', ');
+      const blockedNoAuto = trapCore.filter(p => p.noAutoRenew);
+      const names = trapCore.slice(0, 4).map(p => `${p.name} (${p.contractDays}d${p.noAutoRenew ? ', noAutoRenew!' : ''})`).join(', ');
+      const extraWarn = blockedNoAuto.length
+        ? ` PENTING: Matikan dulu centang noAutoRenew pada ${blockedNoAuto.map(p => p.name).join(', ')}!`
+        : '';
       add('CRITICAL', 'Loophole 0%', `${trapCore.length} pemain inti masuk Zona Jebakan <=10 hari!`,
-        `${names}. Jangan renew manual (+20%–35%)! Nyalakan Auto-Renew sementara (tandai noAutoRenew di cadangan) agar diperpanjang 180d dengan gaji 0% naik!`);
+        `${names}. Jangan renew manual (+20%–35%)! Nyalakan Auto-Renew sementara (tandai noAutoRenew di cadangan) agar diperpanjang 180d dengan gaji 0% naik!${extraWarn}`);
     } else if (trapOther.length) {
       const names = trapOther.slice(0, 4).map(p => `${p.name} (${p.contractDays}d)`).join(', ');
       add('HIGH', 'Kontrak', `${trapOther.length} pemain cadangan kontrak <=10 hari.`,
-        `Pemain: ${names}. Pastikan Auto-Renew OFF / noAutoRenew agar pergi gratis menghemat gaji.`);
+        `Pemain: ${names}. Pastikan Auto-Renew OFF / noAutoRenew ON agar pergi gratis menghemat gaji.`);
     }
 
     if (namingObj && typeof namingObj === 'object' && U.safeInt(namingObj.monthsLeft, 99) <= 2) {
@@ -242,7 +252,7 @@
 
     if (unhappyCnt >= C.LOCKER_UNHAPPY_MIN) {
       add('CRITICAL', 'Ruang Ganti', `${unhappyCnt} pemain UNHAPPY — Penalti Tim -${Math.round(lockerHit * 100)}% AKTIF!`,
-        "Atur pemain cadangan jadi squadRole = 'reserve' (100% kebal unhappy di v1.2.0) atau beri menit main di laga ringan.");
+        "Atur pemain cadangan (#12 ke bawah) jadi squadRole = 'reserve' (100% kebal unhappy di v1.2.0) atau beri menit main sesuai target kuota.");
     }
 
     const slumped = userRoster.filter(p => (p.fineSlump || 0) > 0);
@@ -256,7 +266,7 @@
     if (goldC.length) {
       const names = goldC.slice(0, 5).map(p => `${p.name} (${p.contractDays}d)`).join(', ');
       add('HIGH', 'Kontrak -12%', `${goldC.length} pemain di GOLDEN WINDOW (11–59 hari)!`,
-        `${names}. Perpanjang 3 Tahun (1095d) untuk potong gaji -12% GRATIS (+ gunakan trik bangku cadangan indeks >=11 jika perlu!).`);
+        `${names}. Perpanjang 3 Tahun (1095d) untuk potong gaji -12% GRATIS (+ gunakan trik bangku cadangan indeks >=11 untuk lantai gaji 0.72x!).`);
     }
 
     const bpDiv = C.TICKETS_BASE[userDiv] || C.TICKETS_BASE[1];
@@ -266,36 +276,37 @@
     }
     const optP = optLigaPrices || {
       geral: Math.round(bpDiv.geral * 1.2),
-      arquibancada: Math.round(bpDiv.arquibancada * 1.3),
-      cadeiras: Math.round(bpDiv.cadeiras * 2.0),
+      arquibancada: Math.round(bpDiv.arquibancada * 1.4),
+      cadeiras: Math.round(bpDiv.cadeiras * 1.92),
       camarotes: Math.round(bpDiv.camarotes * 2.0),
     };
-    const vipGaps = [];
-    if (curPLiga.cadeiras < optP.cadeiras - 1) vipGaps.push(`Seats ${curPLiga.cadeiras}→${optP.cadeiras}`);
-    if (curPLiga.camarotes < optP.camarotes - 2) vipGaps.push(`Boxes ${curPLiga.camarotes}→${optP.camarotes}`);
-    if (vipGaps.length) {
-      add('HIGH', 'Tiket VIP', `Harga VIP Liga Normal di bawah optimal Pareto (${vipGaps.join(', ')})!`,
-        'Naikkan sektor VIP sesuai tabel Pareto Tab 5 untuk profit ekstra tanpa mengorbankan penonton.');
+    const ticketGaps = [];
+    if (curPLiga.arquibancada < optP.arquibancada - 1) ticketGaps.push(`Stands ${curPLiga.arquibancada}→${optP.arquibancada}`);
+    if (curPLiga.cadeiras < optP.cadeiras - 1) ticketGaps.push(`Seats ${curPLiga.cadeiras}→${optP.cadeiras}`);
+    if (curPLiga.camarotes < optP.camarotes - 2) ticketGaps.push(`Boxes ${curPLiga.camarotes}→${optP.camarotes}`);
+    if (ticketGaps.length) {
+      add('HIGH', 'Tiket Stadion v9', `Harga tiket Liga Normal di bawah optimal v9 (${ticketGaps.join(', ')})!`,
+        'Sesuaikan harga tiket di Tab 5B sesuai kurva BASE_ATTENDANCE #19915 untuk profit ekstra sambil menjaga penonton >70%.');
     }
     if (curPLiga.geral > optP.geral + 1) {
-      add('HIGH', 'Tiket General', `Tiket General (${curPLiga.geral}) terlalu mahal (optimal ${optP.geral})!`,
+      add('HIGH', 'Tiket General', `Tiket General (${curPLiga.geral}) di atas titik optimal (${optP.geral})!`,
         `Turunkan General ke ${optP.geral} agar pendapatan optimal dan total penonton tetap >70% (bonus +2% Tengah).`);
     }
 
     if (!shopAudit.is_optimal) {
       add('HIGH', 'Club Shop v9', `Harga Jersey Club Shop di ${shopAudit.cur_m.toFixed(2)}x (bukan puncak 1.00x)!`,
-        `Sesuai rumus eksak priceFactor v1.2.0, titik puncak pendapatan jersey adalah tepat 1.00x (+${shopAudit.gain_pct.toFixed(2)}% potensi naik).`);
+        `Sesuai rumus eksak priceFactor v1.2.0 (#21317), titik puncak pendapatan jersey adalah tepat 1.00x (+${shopAudit.gain_pct.toFixed(2)}% potensi naik).`);
     }
 
     if (!memberAudit.is_optimal) {
-      add('HIGH', 'Member Plan v9', `Setelan Member saat ini ${memberAudit.cur_m.toFixed(2)}x / diskon ${memberAudit.cur_d}%!`,
-        `Ubah ke ${memberAudit.opt_m.toFixed(2)}x + Diskon Tahunan ${memberAudit.opt_d}% untuk puncak pendapatan (+${memberAudit.gain_pct.toFixed(2)}%, tidak pernah terpotong cap).`);
+      add('HIGH', 'Member Plan v9', `Setelan Member saat ini ${memberAudit.cur_m.toFixed(2)}x / diskon ${memberAudit.cur_d}% (${U.roundTo(memberAudit.cur_parcel / 1000, 1)}K/bln)!`,
+        `Ubah ke ${memberAudit.opt_m.toFixed(2)}x + Diskon Tahunan ${memberAudit.opt_d}% (#21325–#21335) untuk puncak pendapatan (${U.roundTo(memberAudit.opt_parcel / 1000, 1)}K/bln, +${memberAudit.gain_pct.toFixed(2)}%).`);
     }
 
     const footHoles = holes.filter(h => h.kind === 'FOOT_HOLE');
     if (footHoles.length) {
       add('HIGH', 'Lubang Fullback', `Lubang kaki dominan Fullback di: ${footHoles.map(h => h.pos).join(', ')}!`,
-        'Penalti wrongFoot (-5%) aktif khusus di RB/LB. Cari pengganti di Akademi atau Auto-Scout.');
+        'Penalti wrongFoot (-5%) aktif di RB/LB & Wingback. Cari pengganti di Akademi atau Auto-Scout.');
     }
 
     let sContracts = [];
@@ -308,9 +319,15 @@
       add('HIGH', 'Sponsor', `Baru ${sContracts.length}/3 slot Sponsor Jersey terisi!`,
         'Negosiasikan slot kosong dengan perusahaan Tier 3 (minta +8% s.d. +10% di percobaan 1, lalu terima counter di percobaan 2).');
     } else {
-      const expSp = sContracts.filter(c => c && typeof c === 'object' && U.safeInt(c.monthsLeft, 99) <= 2);
+      // #19870: save v9 memakai `paymentsLeft` (atau fallback `monthsLeft`)
+      const expSp = sContracts.filter(c => {
+        if (!c || typeof c !== 'object') return false;
+        const left = c.paymentsLeft !== undefined ? U.safeInt(c.paymentsLeft, 99) : U.safeInt(c.monthsLeft, 99);
+        return left <= 2;
+      });
       if (expSp.length) {
-        add('MEDIUM', 'Sponsor', `${expSp.length} kontrak sponsor sisa <=2 bulan.`,
+        const spNames = expSp.map(c => `${c.name || c.company || 'Sponsor'} (${c.paymentsLeft ?? c.monthsLeft} bln)`).join(', ');
+        add('MEDIUM', 'Sponsor', `${expSp.length} kontrak sponsor sisa <=2 bulan: ${spNames}!`,
           'Siapkan negosiasi ulang saat tim di puncak klasemen & fanConfidence tinggi.');
       }
     }
@@ -350,7 +367,7 @@
 
   /**
    * Orkestrator utama (Pure JS, jalan 100% di browser HP / Node.js).
-   * Mengembalikan `{ data, updatedHistory }` di mana `data` berformat 100% identik `D` v8.0.
+   * Mengembalikan `{ data, updatedHistory }` dengan seluruh data v8.3 Bytecode v9 Verified.
    */
   function analyzeSave(save, staticDb = null, historyStore = null, onProgress = null) {
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -385,8 +402,11 @@
     const userDiv = U.estimateDivisionFromLeague(leagueId, worldComps);
 
     const budget = U.safeNum(uTeam.budget, 0);
-    const reputation = U.safeNum(uTeam.reputation, 50);
+    const reputation = U.safeNum(uTeam.reputation, uMeta.rep || 50);
     const repLevel = T.repToLevel(reputation);
+    const userTeamLevel = U.teamLevelOf(uTeam, userDiv, uMeta.level);
+    const buyerCeiling = T.buyerForceCeiling(reputation, userDiv);
+
     const boardConf = U.safeNum(uTeam.boardConfidence, 70);
     const fanConf = U.safeNum(uTeam.fanConfidence, 70);
     const ctLevel = Math.max(1, U.safeInt(uTeam.ctLevel, 1));
@@ -396,7 +416,10 @@
     const bankLoan = U.safeNum(uTeam.bankLoan, 0);
     let activeFormation = uTeam.formation || (save.lastLineup && save.lastLineup.formation) || '4-3-3';
     if (!(activeFormation in C.FORMATIONS)) activeFormation = '4-3-3';
-    const foreignCap = C.FOREIGN_FIELD_LIMITS[userCountry] || 7;
+
+    const foreignLims = U.getForeignLimit(userCountry);
+    const foreignCap = C.FOREIGN_FIELD_LIMITS[userCountry] || foreignLims.field || 7;
+    const foreignMax = foreignLims.max || 9;
 
     prog(25, `Membedah skuad ${userName} & menghitung Best XI (15 formasi)...`);
     const { roster: userRoster, youth: userYouth } = R.extractTeamRoster(
@@ -404,10 +427,13 @@
     );
 
     const totalPayroll = userRoster.reduce((s, p) => s + p.salary, 0);
+    const youthPayroll = userYouth.reduce((s, y) => s + y.salary, 0);
     const totalSquadVal = userRoster.reduce((s, p) => s + p.marketValue, 0);
-    const payrollRef = U.estimatePayrollRef(userDiv, totalPayroll);
+    // #19856: PAYROLL_REF tahunan eksak (28,500,000 untuk ID div 1 repLvl 3)
+    const payrollRef = U.payrollRef(userCountry, userDiv, repLevel);
+    const foreignCountSquad = userRoster.filter(p => userCountry && p.nationality && p.nationality !== userCountry).length;
 
-    const { moods: moodsMap, unhappyCount: unhappyCnt, lockerHit } = T.computeSquadMoodsV9(userRoster, false);
+    const { moods: moodsMap, unhappyCount: unhappyCnt, lockerHit, teamGames } = T.computeSquadMoodsV9(userRoster, false);
     for (const p of userRoster) {
       const mi = moodsMap[p.id] || {};
       p.mood = mi.mood || 'ok';
@@ -415,6 +441,12 @@
       p.minPct = mi.minPct || 0.0;
       p.reqPct = mi.reqPct || 0.0;
       p.moodImmune = Boolean(mi.immune);
+      p.roleSore = Boolean(mi.roleSore);
+      p.effGames = mi.effGames !== undefined ? mi.effGames : teamGames;
+      p.minsNow = mi.minsNow !== undefined ? mi.minsNow : p.seasonMinutes;
+      p.minsReq = mi.minsReq !== undefined ? mi.minsReq : 0;
+      p.minsDeficit = mi.minsDeficit !== undefined ? mi.minsDeficit : 0;
+      p.gamesDeficit = mi.gamesDeficit !== undefined ? mi.gamesDeficit : 0;
       p.moodReason = mi.reason || '';
     }
 
@@ -427,9 +459,10 @@
       const rIdx = rankOf[p.id];
       p.squadRank = rIdx + 1;
       p.isTop5Arab = top5Ids.has(p.id) && p.age >= 26;
-      p.benchCutSave = (rIdx < 11 && p.contractDays <= 120) ? Math.round(p.salary * 0.12) : 0;
+      p.salaryFloorFactor = rIdx < 11 ? C.SALARY_CUT.floorStarter : C.SALARY_CUT.floorReserve;
+      p.benchCutSave = (!p.salaryCutLocked && rIdx < 11 && p.contractDays <= 120) ? Math.round(p.salary * 0.12) : 0;
       p.autoRenewLoophole = Boolean(
-        p.contractDays <= 10 && (p.force >= 40 || p.isGem || rIdx < 14) && !p.loanedFrom
+        p.contractDays <= 10 && !p.noAutoRenew && (p.force >= 40 || p.isGem || rIdx < 14) && !p.loanedFrom
       );
       const actObj = R.classifyUserAction(p, rIdx, p.isTop5Arab, moodsMap);
       p.action = actObj.action;
@@ -447,21 +480,28 @@
         avgScore: res.avgScore,
         totalScore: res.totalScore,
         sectors: res.sectors,
+        engineSectors: res.engineSectors,
+        chemistry: res.chemistry,
         foreignCount: res.foreignCount,
         wrongFootCount: res.wrongFootCount,
         atkMod: mods.atkMod,
         defMod: mods.defMod,
         falseNine: res.falseNine,
+        hasFormationBug: res.hasFormationBug,
+        formationBugInfo: res.formationBugInfo,
       });
     }
-    formCompare.sort((a, b) => b.totalScore - a.totalScore);
+    formCompare.sort((a, b) => {
+      if (a.hasFormationBug !== b.hasFormationBug) return a.hasFormationBug ? 1 : -1;
+      return b.totalScore - a.totalScore;
+    });
 
     const { holes, holePositions } = T.detectSquadHoles(userRoster, activeFormation);
     const holePosSet = new Set(holePositions);
 
-    // Special Training Audit (v8.2.2: Zero-Truncation + Top 6+ Kandidat dengan id eksak)
+    // Special Training Audit (#21507 TRAIN_SLOTS_BASE=3)
     const rawTrainIds = Array.isArray(uTeam.trainIds) ? uTeam.trainIds : [];
-    const formulaSlots = 3 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2); // #21507 TRAIN_SLOTS_BASE=3
+    const formulaSlots = 3 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2);
     const trainSlots = Math.max(formulaSlots, rawTrainIds.length);
     const trainMode = String(uTeam.trainMode || 'auto');
     const pById = {};
@@ -502,7 +542,7 @@
 
     const autoGuard = auditAutoSettings(save, uTeam, userRoster, trainAudit);
 
-    // Akademi Ranking
+    // Akademi Ranking + European Mega-Offer estimator (#23886 / #23903)
     const ceilMap = { 7: 5, 8: 15, 9: 25, 10: 30 };
     const youthRanked = userYouth.map(y => {
       const fillsHole = holePosSet.has(y.pos);
@@ -516,7 +556,19 @@
       if ((y.age >= 20 || y.development >= 90) && y.hash >= 5) yAct = 'PROMOSIKAN SEKARANG';
       else if (y.hash >= 6 || (fillsHole && y.hash >= 5)) yAct = 'TAHAN & LATIH';
       const ceilBonus = y.development >= 60 ? (ceilMap[y.hash] || 0) : 0;
-      return { ...y, fillsHole, pipeScore: yScore, action: yAct, ceilBonus };
+      const isMegaProspect = Boolean(y.hash >= 9 || y.potCap >= 75);
+      const estMegaOffer = isMegaProspect
+        ? Math.round(Math.max(y.marketValue * 2.2, payrollRef * (y.hash >= 10 ? 0.35 : 0.22)))
+        : Math.round(Math.max(150000, y.marketValue * 1.4));
+      return {
+        ...y,
+        fillsHole,
+        pipeScore: yScore,
+        action: yAct,
+        ceilBonus,
+        isMegaProspect,
+        estMegaOffer,
+      };
     }).sort((a, b) => b.pipeScore - a.pipeScore);
 
     prog(42, 'Menganalisis stadion, tiket 6 fase, Club Shop & Member Plans...');
@@ -536,12 +588,13 @@
       if (occ in rawTmb) ticketMulBy[occ] = U.normalizeTicketMul(rawTmb[occ]);
     }
 
-    const curSim = E.simulateStadiumV9(sections, ticketMul, fanConf, userDiv, false, false);
-    const optLiga = E.optimizeTicketPricesV9(sections, fanConf, userDiv, false, false);
-    const optBig = E.optimizeTicketPricesV9(sections, fanConf, userDiv, true, true);
-    const ticketPhases = E.computeAllTicketPhases(sections, fanConf, userDiv, rawTmb, ticketMul);
+    const stadOpts = { homeRepLvl: repLevel, country: userCountry, kind: 'league' };
+    const curSim = E.simulateStadiumV9(sections, ticketMul, fanConf, userDiv, false, false, 0, stadOpts);
+    const optLiga = E.optimizeTicketPricesV9(sections, fanConf, userDiv, false, false, 0, 70.5, stadOpts);
+    const optBig = E.optimizeTicketPricesV9(sections, fanConf, userDiv, true, true, 1, 70.5, { ...stadOpts, koStage: 'final' });
+    const ticketPhases = E.computeAllTicketPhases(sections, fanConf, userDiv, rawTmb, ticketMul, stadOpts);
 
-    const memberAudit = E.evalMemberPlan(uTeam.memberPlan, uTeam.members, fanConf);
+    const memberAudit = E.evalMemberPlan(uTeam.memberPlan, uTeam.members, fanConf, userCountry, userDiv, repLevel);
     const shopAudit = E.evalClubShop(uTeam.shopPrice, uTeam.shopLog, userRoster, currentDate, fanConf, payrollRef);
     const cashflowMeta = E.computeCashflow3m(uTeam, uTeam.ledger, uTeam.lastLedger, totalPayroll, stadiumOps);
 
@@ -732,7 +785,9 @@
     }
 
     prog(58, 'Membedah jadwal 5 lawan terdekat (War Room H2H)...');
-    const simOpponents = (typeof S.extractSimOpponents === 'function') ? S.extractSimOpponents(save, userId, clubsMeta, compactTeams, staticPlayers) : [];
+    const simOpponents = (typeof S.extractSimOpponents === 'function')
+      ? S.extractSimOpponents(save, userId, clubsMeta, compactTeams, staticPlayers)
+      : [];
     const upcomingMatches = S.extractUpcomingMatches(
       save, userId, clubsMeta, compactTeams, staticPlayers,
       bestXi, sections, fanConf, userDiv, reputation, userRoster,
@@ -740,7 +795,7 @@
     );
 
     prog(75, 'Memindai Global Auto-Scout Moneyball (1.185+ klub AI)...');
-    const { scoutPool, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
+    const { scoutPool, youthScoutTargets, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
       save, staticPlayers, clubsMeta, userId, userCountry, holePositions, bestXi.avgScore
     );
 
@@ -763,19 +818,20 @@
       userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
       uTeam.naming, uTeam.sponsors, ticketMul, shopAudit, memberAudit,
       holes, upcomingMatches, trainAudit, preContracts, userDiv,
-      autoGuard, bestXi, optLiga.prices
+      autoGuard, bestXi, optLiga.prices, activeFormation
     );
 
     const fineSlumpPlayers = userRoster
       .filter(p => (p.fineSlump || 0) > 0)
       .map(p => ({ id: p.id, name: p.name, pos: p.pos, slumpPct: p.fineSlumpPct, days: p.fineSlumpDays }));
 
+    // #21866: cashHistory memakai format { d: "YYYY-MM-DD", v: number }
     const cashHist = [];
     if (Array.isArray(uTeam.cashHistory)) {
       uTeam.cashHistory.slice(-24).forEach((pt, idx) => {
         if (pt && typeof pt === 'object') {
           cashHist.push({
-            label: String(pt.date || pt.m || `M${idx + 1}`).slice(0, 10),
+            label: String(pt.date || pt.d || pt.m || `M${idx + 1}`).slice(0, 10),
             val: U.safeNum(('budget' in pt) ? pt.budget : pt.v, 0),
           });
         } else if (typeof pt === 'number') {
@@ -784,14 +840,18 @@
       });
     }
 
+    // #21866: statement memakai format tuple [isoDate, category, positiveAmount, ...meta]
     const stmt35 = [];
     if (Array.isArray(uTeam.statement)) {
       for (const row of uTeam.statement.slice(-35).reverse()) {
-        if (row && typeof row === 'object') {
+        const parsed = U.parseStatementRow(row);
+        if (parsed) {
           stmt35.push({
-            date: String(row.date || row.d || '').slice(0, 10),
-            label: String(row.label || row.desc || row.type || row.k || '-'),
-            amount: U.safeNum(('amount' in row) ? row.amount : row.v, 0),
+            date: parsed.date,
+            category: parsed.category,
+            label: parsed.label,
+            amount: parsed.amount,
+            isExpense: parsed.isExpense,
           });
         }
       }
@@ -803,6 +863,30 @@
       if (Array.isArray(rc)) spContracts = rc.filter(c => c && typeof c === 'object');
       else if (rc && typeof rc === 'object') spContracts = Object.values(rc).filter(c => c && typeof c === 'object');
     }
+
+    const fixedSponsor = (uTeam.fixedSponsor && typeof uTeam.fixedSponsor === 'object')
+      ? {
+          ...uTeam.fixedSponsor,
+          monthlyParcel: U.fixedSponsorParcel(uTeam.fixedSponsor),
+        }
+      : null;
+
+    const idolsList = Array.isArray(uTeam.idols) ? uTeam.idols : [];
+    const loanBuyWatch = userRoster
+      .filter(p => p.loanedFrom || p.loanBuyFee > 0)
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        age: p.age,
+        force: p.force,
+        potCap: p.potCap,
+        marketValue: p.marketValue,
+        loanedFrom: p.loanedFrom,
+        loanDays: p.loanDays,
+        loanBuyFee: p.loanBuyFee,
+        loanBuyChance: p.loanBuyChance,
+      }));
 
     const natId = save.userNationId || '';
     const nationInfo = natId ? {
@@ -849,6 +933,10 @@
         ...xiObj,
         xi: xiObj.xi.map(a => ({
           slot: a.slot,
+          ruleId: a.ruleId,
+          sectorCode: a.sectorCode,
+          wildcard: a.wildcard,
+          droppedByBug: a.droppedByBug,
           score: U.roundTo(a.score, 1),
           wrongFoot: a.wrongFoot,
           id: a.player.id,
@@ -864,7 +952,11 @@
           stackPct: a.player.stackPct,
           energy: a.player.energy,
           star: a.player.star,
+          starAwarded: a.player.starAwarded,
           top: a.player.top,
+          integration: a.player.integration,
+          rhythm: a.player.rhythm,
+          minsDeficit: a.player.minsDeficit || 0,
         })),
         bench: xiObj.bench.slice(0, 12).map(p => ({
           id: p.id,
@@ -874,6 +966,9 @@
           age: p.age,
           energy: p.energy,
           minPct: p.minPct || 0,
+          reqPct: p.reqPct || 0,
+          minsDeficit: p.minsDeficit || 0,
+          gamesDeficit: p.gamesDeficit || 0,
           moodTier: p.moodTier || 0,
           s1: p.s1,
           s2: p.s2,
@@ -898,7 +993,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.2.5 Web PWA (Engine v1.2.0 • Pure JS)',
+        version: 'v8.3 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,
@@ -916,6 +1011,8 @@
         budget: Math.round(budget),
         reputation: Math.round(reputation),
         repLevel,
+        userTeamLevel,
+        buyerForceCeiling: buyerCeiling,
         boardConf: Math.round(boardConf),
         fanConf: Math.round(fanConf),
         ctLevel,
@@ -925,10 +1022,14 @@
         youthCoach,
         bankLoan: Math.round(bankLoan),
         payroll: Math.round(totalPayroll),
+        youthPayroll: Math.round(youthPayroll),
         payrollRef: Math.round(payrollRef),
         squadValue: Math.round(totalSquadVal),
         activeFormation,
         foreignCap,
+        foreignMax,
+        foreignCountSquad,
+        teamGames,
         unhappyCount: unhappyCnt,
         lockerHitPct: U.roundTo(lockerHit * 100, 1),
         xiHold: Boolean(uTeam.xiHold),
@@ -941,7 +1042,8 @@
       fineSlumpPlayers,
       cashflow: E.buildCashflowPayload(
         cashflowMeta, uTeam, curSim, spContracts, shopAudit, memberAudit,
-        totalPayroll, stadiumOps, userDiv
+        totalPayroll, stadiumOps, userDiv,
+        { country: userCountry, repLvl: repLevel, youthPayroll }
       ),
       deltas,
       alerts,
@@ -949,6 +1051,9 @@
       holePositions,
       roster: rosterExport,
       youth: youthRanked,
+      youthScoutTargets,
+      loanBuyWatch,
+      idols: idolsList,
       trainAudit,
       bestXi: slimXi(bestXi),
       rotXi: slimXi(rotXi),
@@ -970,11 +1075,13 @@
         optLigaSim: optLiga.sim,
         optBigPrices: optBig.prices,
         optBigSim: optBig.sim,
+        lastGate: uTeam.lastGate || null,
         construction: uTeam.stadiumConstruction || null,
       },
       member: memberAudit,
       shop: shopAudit,
       naming: uTeam.naming || null,
+      fixedSponsor,
       sponsors: spContracts,
       presGoals: cleanPresGoals(uTeam.presGoals),
       preContracts,

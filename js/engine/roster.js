@@ -1,9 +1,10 @@
 /**
  * LigaFoot Optimizer Web Engine — roster.js
- * Port eksak 1:1 dari optimizer/analyzer_roster.py (v7.0 / v8.0):
- * - Merge data dinamis save dengan metadata statis (kompak array / objek JSON).
- * - Membaca fineSlump, fineSlumpDays, noAutoRenew, & deteksi Loophole 0%.
- * - Klasifikasi aksi otomatis untuk setiap pemain senior user.
+ * Port eksak 1:1 dari bytecode Hermes v1.2.0 (`disasm_v9.hasm`, `economyV = 9`):
+ * - Ekstraksi `playerDynamic`, `extraRows`, `youthPlayers`, & `freePlayers`
+ * - Chemistry (`ent[0]` integration & `rx` rhythm bitmask #21995)
+ * - Salary Cut Lock (`salaryCuts >= 2` #3541), Termination Fee Tiers (#21000)
+ * - Injured Sale Discount (#3542), Youth Scout Olheiro da Base (#23984), & Loan Buy-Option (#20496)
  */
 (function (root) {
   'use strict';
@@ -13,220 +14,318 @@
   const U = LF.utils;
   const T = LF.tactics;
 
-  function buildPlayerRecord(rawP, staticPlayers, isUser = false, teamId = '', teamName = '', teamCountry = '', div = 1) {
-    const rp = (rawP && typeof rawP === 'object') ? rawP : {};
-    const pid = String(rp.id || '');
-    const st = U.getStaticPlayer(staticPlayers, pid);
+  function calcNetSaleProceeds(grossFee) {
+    const tax = grossFee >= C.SELL_TAX_THRESHOLD ? C.SELL_TAX_HIGH : C.SELL_TAX_LOW;
+    return Math.round(grossFee * (1.0 - tax));
+  }
 
-    const name = rp.name || st.name || pid;
-    let pos = String(rp.position || rp.pos || st.pos || 'MC').toUpperCase();
-    if (!(pos in C.EXACT_CAT)) pos = 'MC';
+  function buildPlayerRecord(dyn, staticPlayers, isUserTeam = false, teamId = '', teamName = '', teamCountry = '', userDiv = 1) {
+    const pid = String(dyn.id || dyn.playerId || '');
+    const stat = U.getStaticPlayer(staticPlayers, pid);
 
-    const age = U.safeInt((rp.age !== undefined && rp.age !== null) ? rp.age : st.age, 24);
-    const force = U.safeInt(rp.force, U.safeInt(st.force, 30));
-    const effForce = U.safeInt(rp.effectiveForce, force);
-    const potential = U.safeInt(rp.potential, Math.max(force, U.safeInt(rp.potCap, force)));
-    const potCap = U.safeInt(rp.potCap, potential);
+    const name = dyn.name || stat.name || pid || 'Unknown';
+    const pos = dyn.pos || stat.pos || 'MC';
+    const foot = (dyn.foot || stat.foot || 'D').toUpperCase();
+    const nationality = (dyn.nationality || stat.nationality || teamCountry || '').toUpperCase();
+    const s1 = (dyn.s1 || stat.s1 || '').toUpperCase();
+    const s2 = (dyn.s2 || stat.s2 || '').toUpperCase();
 
-    const s1 = String(rp.skill1 || rp.s1 || st.s1 || '').toUpperCase();
-    const s2 = String(rp.skill2 || rp.s2 || st.s2 || '').toUpperCase();
-    const foot = String(rp.foot || st.foot || 'D').toUpperCase();
-    const nat = String(rp.nationality || st.nationality || teamCountry || '').toUpperCase();
-    const star = Boolean(('star' in rp) ? rp.star : (st.star || false));
-    const top = Boolean(rp.top || false);
+    const age = U.safeInt(dyn.age, 22);
+    const force = U.safeInt(dyn.force, 20);
+    const potential = U.safeInt(dyn.potential, force);
+    const potCap = U.safeInt(dyn.potCap, potential);
+    const hashVal = U.safeInt(dyn.hash, Math.max(1, Math.min(10, Math.round(potCap / 10))));
+    const growthFrac = U.roundTo(U.safeNum(dyn.growthFrac, 0.0), 3);
+    const effForce = U.roundTo(force + growthFrac, 2);
 
-    const salary = U.safeNum(rp.salary, 0);
-    const mv = U.safeNum(rp.marketValue, 0);
-    const cYears = U.safeInt(rp.contractYears, 1);
-    const cDays = (rp.contractDays !== undefined && rp.contractDays !== null)
-      ? U.safeInt(rp.contractDays, cYears * 365)
-      : (cYears * 365);
+    const salary = Math.round(U.safeNum(dyn.salary, 0));
+    const marketValue = Math.round(U.safeNum(dyn.marketValue, 0));
+    const contractDays = U.safeInt(dyn.contractDays, 365);
+    const contractYears = U.safeInt(dyn.contractYears, Math.max(1, Math.round(contractDays / 365)));
+    const energy = U.safeInt(dyn.energy, 100);
 
-    const growthFrac = U.safeNum(rp.growthFrac, 0.0);
-    const energy = U.safeNum(rp.energy, 100.0);
-    const injured = Boolean(rp.injured);
-    const injDays = U.safeInt(rp.injuryDays, U.safeInt(rp.injuryWeeks, 0) * 7);
-    const suspended = Boolean(rp.suspended);
-    const avgRating = U.safeNum(rp.avgRating, 0.0);
-    const gamesPlayed = U.safeInt(rp.gamesPlayed, 0);
-    const seasonMins = U.safeNum(rp.seasonMinutes, 0.0);
-    const goals = U.safeInt(rp.goals, 0);
-    const assists = U.safeInt(rp.assists, 0);
-    const cardsByComp = (rp.cardsByComp && typeof rp.cardsByComp === 'object' && !Array.isArray(rp.cardsByComp))
-      ? rp.cardsByComp
+    const injured = Boolean(dyn.injured);
+    const injuryDays = U.safeInt(dyn.injuryDays, 0);
+    const injTier = U.injuryTier(injuryDays);
+    const injurySaleMul = injured ? U.injurySaleFactor(injuryDays) : 1.0;
+
+    const suspended = Boolean(dyn.suspended);
+    const starAwarded = Boolean(dyn.starAwarded);
+    const star = Boolean(dyn.star || stat.star || starAwarded);
+    const top = Boolean(dyn.top);
+    const forSale = Boolean(dyn.forSale);
+    const loanable = Boolean(dyn.loanable);
+    const loanedFrom = dyn.loanedFrom || null;
+    const loanDays = U.safeInt(dyn.loanDays, 0);
+    const loanBuyFee = Math.round(U.safeNum(dyn.loanBuyFee, 0));
+    const squadRole = String(dyn.squadRole || 'auto');
+    const noAutoRenew = Boolean(dyn.noAutoRenew);
+
+    const salaryCuts = U.safeInt(dyn.salaryCuts, 0);
+    const renewRefusals = U.safeInt(dyn.renewRefusals, 0);
+    const salaryCutLocked = Boolean(salaryCuts >= 2 || renewRefusals >= 2);
+
+    const ent = Array.isArray(dyn.ent) ? dyn.ent : null;
+    const integration = T.integrationOf(dyn);
+    const rx = (dyn.rx !== undefined && dyn.rx !== null) ? U.safeInt(dyn.rx, 7) : 7;
+    const rhythm = U.roundTo(T.rhythmOf(dyn), 2);
+
+    const seasonGoals = U.safeInt(dyn.seasonGoals, 0);
+    const seasonAssists = U.safeInt(dyn.seasonAssists, 0);
+    const careerGoals = U.safeInt(dyn.careerGoals, 0);
+    const careerGames = U.safeInt(dyn.careerGames, 0);
+    const seasonMinutes = Math.round(U.safeNum(dyn.seasonMinutes, 0));
+    const seasonInjuryDays = U.safeInt(dyn.seasonInjuryDays, 0);
+
+    const rawSlump = U.safeNum(dyn.fineSlump, 0.0);
+    const fineSlumpPct = rawSlump > 0 ? U.roundTo(rawSlump <= 1.0 ? rawSlump * 100.0 : rawSlump, 1) : 0.0;
+    const fineSlumpDays = U.safeInt(dyn.fineSlumpDays, 0);
+
+    const boughtPrice = Math.round(U.safeNum(dyn.boughtPrice, 0));
+    const boughtDate = dyn.boughtDate || null;
+    const cardsByComp = (dyn.cardsByComp && typeof dyn.cardsByComp === 'object' && !Array.isArray(dyn.cardsByComp))
+      ? dyn.cardsByComp
       : {};
+    const matchRatings = Array.isArray(dyn.matchRatings) ? dyn.matchRatings : [];
 
-    const fineSlump = U.clamp(U.safeNum(rp.fineSlump, 0.0), 0.0, C.FINE_SLUMP_CAP);
-    const fineSlumpDays = U.safeInt(rp.fineSlumpDays, 0);
-    const noAutoRenew = Boolean(rp.noAutoRenew);
+    const stackInfo = T.evalSkillStacking(pos, s1, s2);
+    const cat = U.posCategory(pos);
+    const declineAge = U.getDeclineAge(pos);
+    const sellWarnAge = U.getSellWarnAge(pos);
+    const isDeclining = age >= declineAge;
 
-    const stEval = T.evalSkillStacking(pos, s1, s2);
-    const declineAge = C.DECLINE_START_AGE[pos] || 32;
-    const sellWarnAge = declineAge - 1;
-    const isDeclining = (age >= declineAge) || (growthFrac <= -0.15);
-    const nearDrop = (growthFrac <= -0.75);
+    const potGap = potCap - force;
+    const isTrap = (potential - potCap >= 4) && (potGap <= 2) && (age <= 24);
+    const isGem = (potGap >= 6) && (age <= 23) && !stackInfo.nonStack;
 
-    const isTrap = (potential - potCap) >= 4;
-    const isGem = (potCap - potential) >= 4 || (age <= 22 && (potCap - force) >= 8);
+    // Arbitrase Jual Counter +39% & +40% & Arab 1.4x + Jual Langsung v9 (INJURED_SALE + Pajak)
+    const gross39 = Math.round(marketValue * C.COUNTER_AVG_REALIZED * injurySaleMul);
+    const gross40 = Math.round(marketValue * C.COUNTER_MAX_NORMAL * injurySaleMul);
+    const grossArab = Math.round(marketValue * C.COUNTER_ARAB_BONUS * C.COUNTER_AVG_REALIZED * injurySaleMul);
+    const estCounter39 = calcNetSaleProceeds(gross39);
+    const estCounter40 = calcNetSaleProceeds(gross40);
+    const estArabNet = calcNetSaleProceeds(grossArab);
 
-    const ageBidMul = age < 20 ? 1.50 : (age <= 24 ? 1.35 : 1.30);
-    const estInitBid = U.pyRound(mv * ageBidMul);
-    const estCounter40 = U.pyRound(estInitBid * C.COUNTER_SAFE_MUL);
-    const estRealSale = U.pyRound(estInitBid * C.COUNTER_AVG_REALIZED);
+    const directSaleTaxRate = marketValue >= C.SELL_TAX_THRESHOLD ? C.SELL_TAX_HIGH : C.SELL_TAX_LOW;
+    const estDirectSaleNet = Math.round(marketValue * injurySaleMul * (1.0 - directSaleTaxRate));
+
+    // Pesangon Pemutusan Kontrak (#21000 terminationFeeRate)
+    const termFeeRate = U.terminationFeeRate(contractDays);
+    const estTerminationCost = Math.round(salary * (Math.max(0, contractDays) / 30.0) * termFeeRate);
+
+    // Golden Window (11-59 hari): Renew 3 Tahun = -12% gaji
+    const renew3yrSaveMonth = Math.round(salary * C.RENEW_DISCOUNT_3YR);
+    const doubleDipSaveYear = Math.round(salary * (1.0 - 0.88 * 0.88) * 12);
+
+    // Youth Scout (Olheiro da Base #23984): age <= 21, (potential - force) + max(0, hash - 6)*2 >= 10
+    const youthScoutGap = (potential - force) + Math.max(0, hashVal - 6) * 2;
+    const youthScoutEligible = Boolean(!isUserTeam && age <= C.YOUTH_SCOUT.maxAge && youthScoutGap >= C.YOUTH_SCOUT.minGrowthMargin && !forSale);
+    const youthScoutPrice = Math.round(Math.max(10000, marketValue) * C.YOUTH_SCOUT.priceFactor);
+
+    const retChance = U.retirementChance(age, pos, force);
+    const loanBuyChance = U.loanBuyDecisionChance({
+      loanedFrom,
+      loanBuyFee,
+      seasonMinutes,
+      seasonGoals,
+      matchRatings,
+      marketValue,
+    });
+
+    const gamesPlayed = Math.max(0, Math.round(seasonMinutes / 90.0));
+    const avgRating = matchRatings.length
+      ? U.roundTo(matchRatings.reduce((s, x) => s + U.safeNum(x, 6.5), 0) / matchRatings.length, 2)
+      : '-';
+    const nearDrop = growthFrac <= -0.75;
+    const stackNote = stackInfo.nonStack
+      ? 'Skill duplikat (tidak menumpuk di Match Engine v1.2.0)'
+      : `Kombinasi skill memberi +${stackInfo.stackPct}% kontribusi sektor (Grade ${stackInfo.grade})`;
 
     return {
       id: pid,
       name,
       pos,
-      cat: (pos in C.EXACT_CAT) ? C.EXACT_CAT[pos] : 3,
-      age,
+      cat,
       foot,
-      nationality: nat,
+      nationality,
+      age,
       force,
       effForce,
+      growthFrac,
+      nearDrop,
       potential,
       potCap,
+      potGap,
+      hash: hashVal,
       s1,
       s2,
-      stackPct: stEval.pct,
-      stackGrade: stEval.grade,
-      nonStack: stEval.nonStack,
-      stackNote: stEval.note,
+      stackPct: stackInfo.stackPct,
+      nonStack: stackInfo.nonStack,
+      stackGrade: stackInfo.grade,
+      stackNote,
+      salary,
+      marketValue,
+      contractDays,
+      contractYears,
+      energy,
+      injured,
+      injuryDays,
+      injuryTier: injTier,
+      injurySaleMul,
+      suspended,
       star,
+      starAwarded,
       top,
-      salary: Math.round(salary),
-      marketValue: Math.round(mv),
-      salPerForce: Math.round(salary / Math.max(1, force)),
-      contractYears: cYears,
-      contractDays: cDays,
-      growthFrac: U.roundTo(growthFrac, 3),
+      forSale,
+      loanable,
+      loanedFrom,
+      loanDays,
+      loanBuyFee,
+      loanBuyChance,
+      squadRole,
+      noAutoRenew,
+      salaryCuts,
+      renewRefusals,
+      salaryCutLocked,
+      ent,
+      integration,
+      rx,
+      rhythm,
+      seasonGoals,
+      seasonAssists,
+      goals: seasonGoals,
+      assists: seasonAssists,
+      gamesPlayed,
+      avgRating,
+      careerGoals,
+      careerGames,
+      seasonMinutes,
+      seasonInjuryDays,
+      fineSlump: rawSlump,
+      fineSlumpPct,
+      fineSlumpDays,
+      boughtPrice,
+      boughtDate,
+      cardsByComp,
       declineAge,
       sellWarnAge,
       isDeclining,
-      nearDrop,
       isTrap,
       isGem,
-      energy: Math.round(energy),
-      injured,
-      injuryDays: injDays,
-      suspended,
-      avgRating: U.roundTo(avgRating, 2),
-      gamesPlayed,
-      seasonMinutes: Math.round(seasonMins),
-      goals,
-      assists,
-      cardsByComp,
-      fineSlump: U.roundTo(fineSlump, 3),
-      fineSlumpPct: U.roundTo(fineSlump * 100.0, 1),
-      fineSlumpDays,
-      noAutoRenew,
-      forSale: Boolean(rp.forSale),
-      loanable: Boolean(rp.loanable),
-      loanedFrom: rp.loanedFrom || null,
-      freeSigned: Boolean(rp.freeSigned),
-      squadRole: String(rp.squadRole || ''),
-      roleSore: Boolean(rp.roleSore),
-      moodFrom: rp.moodFrom || null,
-      seasonInjuryDays: U.safeNum(rp.seasonInjuryDays, 0),
-      development: U.safeNum(rp.development, 0),
-      hash: U.safeInt(('hash' in rp) ? rp.hash : st.hash, 0),
-      isYouth: Boolean(rp.isYouth),
-      clubHistory: Array.isArray(rp.clubHistory) ? rp.clubHistory : [],
-      honors: Array.isArray(rp.honors) ? rp.honors : [],
+      estInitBid: marketValue,
+      estRealSale: estCounter39,
+      estCounter39,
+      estCounter40,
+      estArabNet,
+      estArabLow: estArabNet,
+      estArabHigh: Math.round(estArabNet * 1.15),
+      directSaleTaxRate,
+      estDirectSaleNet,
+      termFeeRate,
+      estTerminationCost,
+      renew3yrSaveMonth,
+      doubleDipSaveYear,
+      youthScoutGap,
+      youthScoutEligible,
+      youthScoutPrice,
+      retirementChance: retChance,
       teamId,
       teamName,
       teamCountry,
-      estInitBid,
-      estCounter40,
-      estRealSale,
-      estArabLow: U.pyRound(mv * 2.5),
-      estArabHigh: U.pyRound(mv * 3.0),
     };
   }
 
-  function extractTeamRoster(teamObj, staticPlayers, isUser = false, teamId = '', teamName = '', teamCountry = '', div = 1) {
-    const tobj = (teamObj && typeof teamObj === 'object') ? teamObj : {};
-    const roster = [];
-    const seen = new Set();
+  function classifyUserAction(p, rankIdx, isTop5Arab, moodsMap) {
+    const moodInfo = (moodsMap && moodsMap[p.id]) || {};
+    const mood = moodInfo.mood || 'ok';
 
-    for (const row of (tobj.playerDynamic || [])) {
-      const [pid, d] = U.parseDynamicRow(row);
-      if (pid && !seen.has(pid)) {
-        seen.add(pid);
-        roster.push(buildPlayerRecord(d, staticPlayers, isUser, teamId, teamName, teamCountry, div));
-      }
+    if (p.injured && p.forSale) {
+      return { action: 'TARIK DARI JUAL (PENALTI CEDERA!)', cls: 'b-red' };
     }
 
-    for (const row of (tobj.extraRows || [])) {
-      const [pid, d] = U.parseExtraRow(row);
-      if (pid && !seen.has(pid)) {
-        seen.add(pid);
-        roster.push(buildPlayerRecord(d, staticPlayers, isUser, teamId, teamName, teamCountry, div));
+    if (p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX) {
+      if (rankIdx < 16 || p.isGem || p.force >= 38) {
+        return { action: 'RENEW 3TH (-12% GAJI)', cls: 'b-gold' };
       }
+      return { action: 'LEPAS GRATIS (HEMAT GAJI)', cls: 'b-muted' };
+    }
+
+    if (p.contractDays <= 10) {
+      if ((rankIdx < 14 || p.isGem || p.force >= 40) && !p.loanedFrom) {
+        if (p.noAutoRenew) {
+          return { action: 'MATIKAN noAutoRenew → LOOPHOLE 0%', cls: 'b-red' };
+        }
+        return { action: 'LOOPHOLE AUTO-RENEW 0% (+180d)', cls: 'b-red' };
+      }
+      return { action: 'BIARKAN HABIS (JANGAN RENEW)', cls: 'b-muted' };
+    }
+
+    if (isTop5Arab && p.age >= p.sellWarnAge) {
+      return { action: 'JUAL ARAB 1.4x + COUNTER +40%', cls: 'b-gold' };
+    }
+    if (p.isDeclining && rankIdx >= 11) {
+      return { action: 'JUAL SEGERA (FASE REGRESI)', cls: 'b-red' };
+    }
+    if (p.isTrap && rankIdx >= 14) {
+      return { action: 'JUAL FLIP (TRAP POTCAP)', cls: 'b-amber' };
+    }
+    if (mood === 'unhappy' && rankIdx >= 11) {
+      return { action: 'SET ROLE RESERVE / ROTASI', cls: 'b-amber' };
+    }
+    if (p.isGem && (p.potCap - p.force) >= 6) {
+      return { action: 'SLOT SPECIAL TRAINING', cls: 'b-cyan' };
+    }
+    if (rankIdx < 11) {
+      return { action: 'INTI (STARTER XI)', cls: 'b-green' };
+    }
+    if (rankIdx < 18) {
+      return { action: 'ROTASI / SUPERSUB', cls: 'b-blue' };
+    }
+    return { action: 'CADANGAN (SET RESERVE)', cls: 'b-muted' };
+  }
+
+  function extractTeamRoster(teamObj, staticPlayers, isUserTeam = false, teamId = '', teamName = '', teamCountry = '', userDiv = 1) {
+    const rawDyn = (teamObj && teamObj.playerDynamic && typeof teamObj.playerDynamic === 'object')
+      ? teamObj.playerDynamic
+      : {};
+    const extraRows = Array.isArray(teamObj && teamObj.extraRows) ? teamObj.extraRows : [];
+    const seenIds = new Set();
+    const roster = [];
+
+    for (const [pid, dObj] of Object.entries(rawDyn)) {
+      if (!dObj || typeof dObj !== 'object') continue;
+      const merged = { ...dObj, id: dObj.id || pid };
+      const rec = buildPlayerRecord(merged, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
+      seenIds.add(rec.id);
+      roster.push(rec);
+    }
+
+    for (const row of extraRows) {
+      if (!row || typeof row !== 'object') continue;
+      const rid = String(row.id || row.playerId || '');
+      if (rid && seenIds.has(rid)) continue;
+      const rec = buildPlayerRecord(row, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
+      seenIds.add(rec.id);
+      roster.push(rec);
     }
 
     const youth = [];
-    if (isUser) {
-      for (const yp of (tobj.youthPlayers || [])) {
-        if (yp && typeof yp === 'object') {
-          youth.push(buildPlayerRecord({ ...yp, isYouth: true }, staticPlayers, true, teamId, teamName, teamCountry, div));
-        }
-      }
+    for (const yRow of (Array.isArray(teamObj && teamObj.youthPlayers) ? teamObj.youthPlayers : [])) {
+      if (!yRow || typeof yRow !== 'object') continue;
+      const yRec = buildPlayerRecord(yRow, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
+      yRec.development = U.safeInt(yRow.development, 50);
+      yRec.isYouth = true;
+      youth.push(yRec);
     }
 
+    roster.sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
     return { roster, youth };
   }
 
-  function classifyUserAction(p, rankIdx, isTop5Arab, moodsMap) {
-    const cd = p.contractDays;
-    const moodInfo = (moodsMap && moodsMap[p.id]) || {};
-    const isUnh = moodInfo.mood === 'unhappy';
-
-    if (p.injured && p.forSale) {
-      return { action: 'TARIK DR BURSA! (Cedera)', cls: 'crit' };
-    }
-    if (cd <= 10) {
-      if ((p.force >= 40 || p.isGem || rankIdx < 14) && !p.loanedFrom) {
-        return { action: '💎 TRIK AUTO-RENEW 0% (+180d)', cls: 'crit' };
-      }
-      return { action: 'LEPAS GRATIS', cls: 'muted' };
-    }
-    if (cd >= C.RENEW_GOLDEN_MIN && cd <= C.RENEW_GOLDEN_MAX) {
-      if (p.isDeclining || (rankIdx >= 17 && p.age >= 25 && !p.isGem)) {
-        return { action: 'LEPAS GRATIS (Hemat Gaji)', cls: 'warn' };
-      }
-      return { action: 'RENEW 3TH (-12% GAJI!)', cls: 'good' };
-    }
-    if ((p.fineSlump || 0) > 0) {
-      return { action: `SLUMP -${Math.round(p.fineSlumpPct)}% (${p.fineSlumpDays}d)`, cls: 'crit' };
-    }
-    if (p.isDeclining || p.age >= p.sellWarnAge) {
-      if (p.injured) return { action: 'TUNGGU SEMBUH -> JUAL', cls: 'warn' };
-      if (isTop5Arab) return { action: 'ARAB WATCH / JUAL +40%', cls: 'accent' };
-      return { action: `JUAL +40% (Regresi ${p.declineAge}th)`, cls: 'warn' };
-    }
-    if (isTop5Arab) {
-      return { action: 'INTI + ARAB WATCH (2.5-3x)', cls: 'accent' };
-    }
-    if (isUnh || p.roleSore) {
-      return { action: 'BERI MENIT / SET RESERVE', cls: 'warn' };
-    }
-    if (rankIdx >= 15 && p.age >= 24 && !p.isGem) {
-      if (p.injured) return { action: 'TUNGGU SEMBUH -> JUAL', cls: 'muted' };
-      return { action: 'JUAL +40% (Hemat Gaji)', cls: 'muted' };
-    }
-    if (p.isGem || (p.age <= 21 && (p.potCap - p.force) >= 4)) {
-      return { action: 'LATIH / ASET FLIP', cls: 'good' };
-    }
-    if (rankIdx < 11) {
-      return { action: 'INTI', cls: 'info' };
-    }
-    return { action: 'PELAPIS / ROTASI', cls: 'muted' };
-  }
-
   LF.roster = {
+    calcNetSaleProceeds,
     buildPlayerRecord,
-    extractTeamRoster,
     classifyUserAction,
+    extractTeamRoster,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

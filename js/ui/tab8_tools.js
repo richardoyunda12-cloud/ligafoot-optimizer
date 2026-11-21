@@ -23,10 +23,10 @@ function fillPfOptimal() {
   const mEl = document.getElementById('c-pf-mem');
   const dEl = document.getElementById('c-pf-disc');
   if (sEl) sEl.value = '1.00';
-  if (mEl) mEl.value = '1.05';
-  if (dEl) dEl.value = '4';
+  if (mEl) mEl.value = '1.00';
+  if (dEl) dEl.value = '6';
   calcAll();
-  showToast('Diisi ke puncak optimal v1.2.0 (1.00x / 1.05x·4%)');
+  showToast('Diisi ke puncak optimal v1.2.0 (#21325: Shop 1.00x / Member 1.00x · Diskon 6%)');
 }
 
 function fillCalcFromPlayer(kind, pid) {
@@ -128,19 +128,19 @@ function calcAll() {
       <div class="calc-naming-box"><b class="c-red">5 Thn</b><div>0.88x</div><div class="c-red" style="font-size:10px">Rugi ~${fmtM(loss5y)}/thn</div></div>
     </div>`;
 
-  // 4. priceFactor Tester (v1.2.0 #21338)
+  // 4. priceFactor Tester (v1.2.0 #21317 & #21322–#21330)
   const mSh = parseFloat((document.getElementById('c-pf-shop') || {}).value) || 1.0;
-  const mMb = parseFloat((document.getElementById('c-pf-mem') || {}).value) || 1.05;
-  const dMb = Math.max(0, Math.min(6, parseInt((document.getElementById('c-pf-disc') || {}).value, 10) || 0));
+  const mMb = parseFloat((document.getElementById('c-pf-mem') || {}).value) || 1.00;
+  const dMb = Math.max(0, Math.min(30, parseInt((document.getElementById('c-pf-disc') || {}).value, 10) || 0));
   const pfSh = priceFactorJS(mSh, 1.0, 1.3, 0.8);
   const idxSh = mSh * pfSh;
   const pfMb = priceFactorJS(mMb, 0.9, 1.2, 0.8);
-  const shAnnual = Math.min(0.55, 0.045 * dMb);
-  const demMb = pfMb * (1 + 0.0036 * dMb);
+  const shAnnual = Math.min(0.80, 0.03 * dMb);
+  const demMb = pfMb * (1 + 0.12 * shAnnual);
   const idxMb = mMb * (1 - shAnnual * (dMb / 100)) * demMb;
   document.getElementById('c-pf-out').innerHTML = `
     <div><b>Club Shop (${mSh.toFixed(2)}x):</b> Demand <b class="mono">${(pfSh * 100).toFixed(2)}%</b> → Indeks <b class="mono ${Math.abs(mSh - 1.0) < 0.01 ? 'c-green' : 'c-amber'}">${(idxSh * 100).toFixed(2)}%</b> (Puncak = 100.00% di 1.00x)</div>
-    <div style="margin-top:4px"><b>Member Plan (${mMb.toFixed(2)}x / ${dMb}%):</b> Eff Demand <b class="mono">${(demMb * 100).toFixed(2)}%</b> → Indeks <b class="mono ${idxMb >= 1.007 ? 'c-green' : 'c-sky'}">${(idxMb * 100).toFixed(2)}%</b> (Puncak = 100.79% di 1.05x / 4%)</div>`;
+    <div style="margin-top:4px"><b>Member Plan (${mMb.toFixed(2)}x / ${dMb}%):</b> Eff Demand <b class="mono">${(demMb * 100).toFixed(2)}%</b> (Tahunan ${Math.round(shAnnual * 100)}%) → Indeks <b class="mono ${idxMb >= 1.010 ? 'c-green' : 'c-sky'}">${(idxMb * 100).toFixed(2)}%</b> (Puncak = 101.06% di 1.00x / 6% · 101.02% di 1.05x / 6%)</div>`;
 
   // 5. Denda Kartu Merah (#3753 & #24491)
   const fineOut = document.getElementById('c-fine-out');
@@ -349,9 +349,9 @@ function renderTab8Extras() {
   // 3. Populate dropdown Pemain Skuad di 5 Kalkulator
   populateCalcSquadSelects();
 
-  // 4. Sub-Tab 6C: Pra-Kontrak + Preview Top 5 Bosman Gratis (≤180d)
+  // 4. Sub-Tab 6C: Pra-Kontrak + Preview Top 5 Bosman Gratis (≤180d & Reachable #23840/#23919)
   const bosmanTop5 = (D.scoutPool || [])
-    .filter(r => (String(r[18] || '').includes('BOSMAN') || Number(r[15]) <= 180) && !String(r[18] || '').includes('FREE') && !String(r[18] || '').includes('TRAP'))
+    .filter(r => String(r[18] || '').includes('BOSMAN') && !String(r[18] || '').includes('FREE') && !String(r[18] || '').includes('TRAP'))
     .sort((a, b) => (b[7] - a[7]) || (b[5] - a[5]))
     .slice(0, 5);
 
@@ -498,12 +498,12 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.2.5`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.2.5</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.3`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.3</span>`;
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)}) • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.2.5 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.3 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],

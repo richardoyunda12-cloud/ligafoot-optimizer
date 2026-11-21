@@ -81,6 +81,7 @@ function renderTab5() {
     ${acadTh('age', 'Usia')}
     ${acadTh('force', 'F')}
     <th>Plafon +</th>
+    <th>Est. Mega Eropa</th>
     <th>Skill Stack</th>
     ${acadTh('pipeScore', 'Skor')}
     <th class="col-desk-only">Aksi</th>
@@ -104,9 +105,50 @@ function renderTab5() {
       <td class="mono ${y.age >= 20 ? 'c-amber' : ''}"><b>${y.age}</b></td>
       <td class="mono">${y.force}</td>
       <td class="mono c-green">${y.ceilBonus ? '+' + y.ceilBonus : '-'}</td>
+      <td class="mono ${y.isMegaProspect ? 'c-green' : 'c-muted'}"><b>${fmtM(y.estMegaOffer || 0)}</b>${y.isMegaProspect ? ' 🔥' : ''}</td>
       <td><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></td>
       <td class="mono"><b>${y.pipeScore}</b></td>
       <td class="col-desk-only"><span class="badge ${actCls}">${esc(y.action)}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="10" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="11" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+
+  // Panel Baru v8.3: Radar Olheiro da Base (#23984 — Bajak U-21 Rival 1.5x MV, Kuota 2/Musim)
+  let ysBox = document.getElementById('t5-yscout-box');
+  if (!ysBox) {
+    const tblWrap = document.getElementById('t5-tbl') && document.getElementById('t5-tbl').parentNode;
+    if (tblWrap && tblWrap.parentNode) {
+      ysBox = document.createElement('div');
+      ysBox.id = 't5-yscout-box';
+      ysBox.className = 'mt-12';
+      tblWrap.parentNode.appendChild(ysBox);
+    }
+  }
+  if (ysBox) {
+    const ysList = (D.youthScoutTargets || []).slice(0, 10);
+    ysBox.innerHTML = ysList.length ? `
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <div class="flex-between mb-8">
+          <div>
+            <h3 style="margin:0">🎓 Radar Olheiro da Base (#23984 — Bajak U-21 Rival 1.5x MV)</h3>
+            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh ≥10 yang memenuhi syarat Youth Scout instan (kuota maks 2/musim).</div>
+          </div>
+          <span class="badge b-info mono">${(D.youthScoutTargets || []).length} Kandidat</span>
+        </div>
+        <div class="tbl-wrap tbl-sticky"><table>
+          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap Scout</th><th>Skill Stack</th><th>Harga 1.5x MV</th><th>Klub Asal</th></tr></thead>
+          <tbody>${ysList.map(t => `<tr>
+            <td>
+              <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>
+              ${t.isLocal ? ' <span class="badge b-good">LOCAL</span>' : ''}
+            </td>
+            <td class="mono"><b>${fmtPos(t.pos)}</b> • ${t.age}th • ${fmtFoot(t.foot)}</td>
+            <td class="mono"><b>${t.force}</b> → <b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
+            <td class="mono c-sky"><b>+${t.youthScoutGap}</b></td>
+            <td><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
+            <td class="mono c-amber"><b>${fmtM(t.scoutPrice)}</b></td>
+            <td>${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>` : '';
+  }
 }

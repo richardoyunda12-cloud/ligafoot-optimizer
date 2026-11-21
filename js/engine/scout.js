@@ -1,10 +1,11 @@
 /**
  * LigaFoot Optimizer Web Engine — scout.js
- * Port eksak 1:1 dari optimizer/analyzer_scout.py (v8.0):
- * - Pre-Match War Room (5 laga terdekat: H2H 15 formasi, ticketMulBy[occasion],
- *   chooseAITactics #23795, alarm 2 kartu kuning per compId, & 3 sub plan).
- * - Global Auto-Scout Moneyball (freePlayers + 1.185+ klub AI, strict LOCAL,
- *   SCARCE #23854, UNH, BOSMAN, & Flip Arbitrage Score).
+ * Port eksak 1:1 dari bytecode Hermes v1.2.0 (`disasm_v9.hasm`, `economyV = 9`):
+ * - Pre-Match War Room (5 laga terdekat: resolusi roundsLeft via m.ref -> 'runin',
+ *   H2H 15 formasi, ticketMulBy[occasion], chooseAITactics #23795, alarm 2 kartu kuning, & 3 sub plan).
+ * - Global Auto-Scout Moneyball dengan filter kelayakan transfer v9:
+ *   refusesDistance (#23840), teamLevelOf (#21518), buyerForceCeiling (#23839),
+ *   buyPersuadable (#23850), Bosman Pre-Contract Guard (#23919/#24474), & Youth Scout (#23984).
  */
 (function (root) {
   'use strict';
@@ -16,6 +17,35 @@
   const T = LF.tactics;
   const R = LF.roster;
 
+  function resolveRoundsLeftFromWorld(m, comps) {
+    if (!m || typeof m !== 'object' || !comps || typeof comps !== 'object') return null;
+    if (m.roundsLeft !== undefined && m.roundsLeft !== null) return U.safeInt(m.roundsLeft, null);
+
+    const ref = (m.ref && typeof m.ref === 'object') ? m.ref : null;
+    const cid = String((ref && ref.compId) || m.compId || m.competitionId || m.leagueId || '');
+    const comp = comps[cid];
+    if (!comp || typeof comp !== 'object' || !Array.isArray(comp.stages)) return null;
+
+    if (ref && ref.stageIdx !== undefined && ref.roundIdx !== undefined) {
+      const st = comp.stages[U.safeInt(ref.stageIdx, 0)];
+      if (st && String(st.kind || comp.kind || '') === 'table' && Array.isArray(st.rounds)) {
+        return Math.max(0, st.rounds.length - 1 - U.safeInt(ref.roundIdx, 0));
+      }
+    }
+
+    const rStr = String(m.roundName || m.round || '');
+    const numMatch = /(\d+)/.exec(rStr);
+    if (numMatch) {
+      const rNum = Number(numMatch[1]);
+      for (const st of comp.stages) {
+        if (st && String(st.kind || comp.kind || '') === 'table' && Array.isArray(st.rounds) && st.rounds.length >= rNum) {
+          return Math.max(0, st.rounds.length - rNum);
+        }
+      }
+    }
+    return null;
+  }
+
   function extractUpcomingMatches(
     save, userId, clubsMeta, compactTeams, staticPlayers,
     userXi, userSections, fanConf, userDiv, userRep, userRoster,
@@ -25,8 +55,11 @@
     const matches = [];
     const seenKeys = new Set();
     const userRepLv = T.repToLevel(userRep);
+    const world = (save.world && typeof save.world === 'object') ? save.world : {};
+    const comps = (world.comps && typeof world.comps === 'object') ? world.comps : {};
+    const todayNum = U.safeInt(world.today, 0);
 
-    function addMatchEntry(homeId, awayId, compId, compName, roundName = '', stageKind = '', day = null, roundsLeft = null, neutral = false) {
+    function addMatchEntry(homeId, awayId, compId, compName, roundName = '', stageKind = '', day = null, roundsLeft = null, neutral = false, classic = false) {
       if (homeId !== userId && awayId !== userId) return;
       const oppId = homeId === userId ? awayId : homeId;
       if (!oppId) return;
@@ -45,6 +78,7 @@
         day,
         roundsLeft,
         neutral: Boolean(neutral),
+        classic: Boolean(classic),
       });
     }
 
@@ -68,21 +102,19 @@
         if (m.isHome !== false) { h = userId; a = m.opponentId; }
         else { h = m.opponentId; a = userId; }
       }
+      const resolvedRl = resolveRoundsLeftFromWorld(m, comps);
       addMatchEntry(
         h, a,
-        m.compId || m.competitionId || m.leagueId || '',
+        m.compId || (m.ref && m.ref.compId) || m.competitionId || m.leagueId || '',
         m.compName || m.competitionName || m.matchType || 'Pertandingan',
         m.roundName || m.round || '',
         (m.knockout || m.isKnockout) ? 'knockout' : String(m.matchType || ''),
         m.day ?? m.date ?? null,
-        m.roundsLeft ?? null,
-        Boolean(m.neutral)
+        resolvedRl,
+        Boolean(m.neutral),
+        Boolean(m.classic)
       );
     }
-
-    const world = (save.world && typeof save.world === 'object') ? save.world : {};
-    const comps = (world.comps && typeof world.comps === 'object') ? world.comps : {};
-    const todayNum = U.safeInt(world.today, 0);
 
     const compFixtures = [];
     for (const [cid, comp] of Object.entries(comps)) {
@@ -101,7 +133,7 @@
           const rName = rnd.name || st.name || `Ronde ${rIdx + 1}`;
           for (const fx of (rnd.matches || [])) {
             if (!fx || typeof fx !== 'object') continue;
-            if (fx.played || fx.homeGoals !== undefined && fx.homeGoals !== null) continue;
+            if (fx.played || (fx.homeGoals !== undefined && fx.homeGoals !== null)) continue;
             const h = fx.home || fx.homeId || fx.h;
             const a = fx.away || fx.awayId || fx.a;
             if (h === userId || a === userId) {
@@ -110,6 +142,7 @@
                 sortKey: rDay >= todayNum ? rDay : (rDay + 10000),
                 h, a, cid, cname, rName, skind, rDay, rl,
                 neut: Boolean(fx.neutral),
+                classic: Boolean(fx.classic),
               });
             }
           }
@@ -120,7 +153,7 @@
     compFixtures.sort((a, b) => a.sortKey - b.sortKey);
     for (const f of compFixtures) {
       if (matches.length >= 5) break;
-      addMatchEntry(f.h, f.a, f.cid, f.cname, f.rName, f.skind, f.rDay, f.rl, f.neut);
+      addMatchEntry(f.h, f.a, f.cid, f.cname, f.rName, f.skind, f.rDay, f.rl, f.neut, f.classic);
     }
 
     const enriched = [];
@@ -138,7 +171,7 @@
       const oppWt = worldTeams[oppId] || {};
       const oppName = oppMeta.name || oppCm.name || oppId;
       const oppCountry = String(oppMeta.country || oppCm.country || '').toUpperCase();
-      const oppRep = U.safeNum(oppCm.reputation, U.safeNum(oppWt.rep, 50));
+      const oppRep = U.safeNum(oppCm.reputation, U.safeNum(oppWt.rep, oppMeta.rep || 50));
       const oppRepLv = T.repToLevel(oppRep);
       const oppForm = (oppCm.formation in C.FORMATIONS) ? oppCm.formation : '4-4-2';
 
@@ -154,17 +187,25 @@
       const koTokens = ['semi', 'quartas', 'quarter', 'perempat', 'oitavas', '16 besar', 'final'];
       const isKo = (fx.stageKind === 'knockout') || koTokens.some(k => rnLow.includes(k));
       let occasion = 'normal';
+      let koStage = null;
       if (isKo) {
-        if (rnLow.includes('semi')) occasion = 'sf';
-        else if (rnLow.includes('quartas') || rnLow.includes('quarter') || rnLow.includes('perempat')) occasion = 'qf';
-        else if (rnLow.includes('oitavas') || rnLow.includes('16')) occasion = 'r16';
-        else if (rnLow.includes('final') && !rnLow.includes('3º') && !rnLow.includes('terceiro') && !rnLow.includes('juara 3')) occasion = 'final';
+        if (rnLow.includes('semi')) { occasion = 'sf'; koStage = 'sf'; }
+        else if (rnLow.includes('quartas') || rnLow.includes('quarter') || rnLow.includes('perempat')) { occasion = 'qf'; koStage = 'qf'; }
+        else if (rnLow.includes('oitavas') || rnLow.includes('16')) { occasion = 'r16'; koStage = 'r16'; }
+        else if (rnLow.includes('final') && !rnLow.includes('3º') && !rnLow.includes('terceiro') && !rnLow.includes('juara 3')) { occasion = 'final'; koStage = 'final'; }
       } else if (fx.roundsLeft !== null && fx.roundsLeft <= 5) {
         occasion = 'runin';
       }
 
-      const isBig = (occasion === 'sf' || occasion === 'final') || (oppRep >= userRep + 10) || fx.compId.includes('cont:');
-      const repDiff = oppRep - userRep;
+      const isBig = Boolean(
+        fx.classic
+        || occasion === 'runin'
+        || occasion === 'sf'
+        || occasion === 'final'
+        || oppRep >= userRep + 10
+        || fx.compId.includes('cont:')
+      );
+      const repLvlDiff = oppRepLv - userRepLv;
 
       let ticketRec = null;
       if (fx.isHome && !fx.neutral) {
@@ -174,8 +215,15 @@
         for (const s of sectorKeys) {
           fxCurPrices[s] = Math.max(1, Math.round(basePrices[s] * fxMuls[s]));
         }
-        const opt = E.optimizeTicketPricesV9(userSections, fanConf, userDiv, isKo, isBig, repDiff);
-        const curSimFx = E.simulateStadiumV9(userSections, fxMuls, fanConf, userDiv, isKo, isBig, repDiff);
+        const simOpts = {
+          homeRepLvl: userRepLv,
+          country: userCountry,
+          kind: 'league',
+          koStage,
+          isClassic: fx.classic,
+        };
+        const opt = E.optimizeTicketPricesV9(userSections, fanConf, userDiv, isKo, isBig, repLvlDiff, 70.5, simOpts);
+        const curSimFx = E.simulateStadiumByPricesV9(userSections, fxCurPrices, fanConf, userDiv, isKo, isBig, repLvlDiff, simOpts);
         const diffs = [];
         for (const s of sectorKeys) {
           if (Math.abs(opt.prices[s] - fxCurPrices[s]) >= 1) {
@@ -186,6 +234,7 @@
           occasion,
           isBig,
           isKnockout: isKo,
+          koStage,
           usingPhasePreset: hasPhasePreset,
           prices: opt.prices,
           muls: opt.muls,
@@ -197,8 +246,7 @@
         };
       }
 
-      const edge = U.roundTo(userXi.avgScore - oppXi.avgScore, 1);
-      const safeRotate = (edge >= 4.0) && !isKo && !isBig;
+      const activeEdge = U.roundTo(userXi.avgScore - oppXi.avgScore, 1);
 
       const yellowRisks = [];
       const yellowIds = new Set();
@@ -211,11 +259,17 @@
         }
       }
 
+      const safeRotatePrelim = (activeEdge >= 4.0) && !isKo && !isBig;
       const matchup = T.recommendMatchupForOpponent(
         userRoster, oppXi, fx.isHome, isKo, isBig,
         foreignCap, userCountry, activeFormation,
-        yellowIds, safeRotate, userRepLv
+        yellowIds, safeRotatePrelim, userRepLv
       );
+
+      const recEdge = (matchup && matchup.recEdge !== undefined)
+        ? matchup.recEdge
+        : activeEdge;
+      const safeRotate = (recEdge >= 4.0) && !isKo && !isBig;
 
       const recBench = (matchup && matchup.recommended && matchup.recommended.bench) || userXi.bench || [];
       const needMinSubs = recBench
@@ -258,12 +312,14 @@
         oppFormation: oppForm,
         oppAvg: oppXi.avgScore,
         oppSectors: oppXi.sectors,
-        edge,
+        edge: recEdge,           // SSOT: Selaras dengan formasi rekomendasi terbaik War Room
+        recEdge,
+        activeEdge,              // Edge jika memakai formasi aktif save saat ini
         aiStyle: finalAi.aiStyle,
         aiFocus: finalAi.aiFocus,
         aiInfo: finalAi,
         counterTip: matchup ? matchup.playStyle : finalAi.counterTip,
-        focusTip: matchup ? matchup.attackFocus : 'Mixed',
+        focusTip: matchup ? matchup.attackFocus : finalAi.aiFocus,
         matchup,
         occasion,
         safeRotate,
@@ -278,14 +334,26 @@
     return enriched;
   }
 
+  /**
+   * Pemindai Global Auto-Scout Moneyball (freePlayers + 1.185+ klub AI)
+   * dengan evaluasi kelayakan transfer v9 (`userBuyPolicy`, `refusesDistance`, `buyPersuadable`, `KEY_LOCK`, `YSCOUT`).
+   */
   function buildGlobalScoutPool(save, staticPlayers, clubsMeta, userId, userCountry, holePositions, userAvgForce) {
     const compactTeams = (save.compactTeams && typeof save.compactTeams === 'object') ? save.compactTeams : {};
+    const worldComps = (save.world && save.world.comps) || {};
+    const uTeam = compactTeams[userId] || {};
+    const uMeta = U.getStaticClub(clubsMeta, userId);
+    const userRep = U.safeNum(uTeam.reputation, uMeta.rep || 50);
+    const userDiv = U.estimateDivisionFromLeague(save.league || uTeam.league || '', worldComps);
+    const userLevel = U.teamLevelOf(uTeam, userDiv, uMeta.level);
+
     const holesSet = new Set(holePositions || []);
     const candidates = [];
+    const youthScoutCandidates = [];
     let aiUnhappyTotal = 0;
     let aiBosmanTotal = 0;
 
-    function scoreTarget(p, isFree = false, isUnhappy = false, isScarce = false, clubCashCrisis = false) {
+    function scoreTarget(p, isFree = false, isUnhappy = false, isScarce = false, clubCashCrisis = false, pol = null, persuadable = false, isReachableBosman = false) {
       const gap = Math.max(0, p.potCap - p.force);
       let flip = 0.0;
       if (p.cat === 4) flip += 18.0;
@@ -301,11 +369,15 @@
       if (isFree) flip += 16.0;
       if (isUnhappy) flip += 14.0;
       if (p.forSale) flip += 10.0;
-      if (p.contractDays <= C.PRECONTRACT_DAYS) flip += 12.0;
+      if (isReachableBosman) flip += 14.0;
       if (clubCashCrisis) flip += 8.0;
       if (isScarce) flip -= 7.0;
       if (holesSet.has(p.pos)) flip += 9.0;
-      if (p.injured) flip -= 10.0;
+      if (p.injured) flip -= 6.0;
+
+      const blocked = Boolean(pol && pol.status === 'REFUSE' && !persuadable);
+      if (blocked) flip -= 35.0;
+      else if (persuadable) flip -= 6.0;
 
       let estBuy = isFree ? 0 : p.marketValue;
       if (!isFree) {
@@ -315,7 +387,13 @@
         if (p.contractDays <= C.PRECONTRACT_DAYS) mul *= 0.92;
         if (p.forSale) mul *= 0.90;
         if (isScarce) mul *= 1.15;
-        estBuy = Math.round(estBuy * mul);
+        if (p.injured && p.injurySaleMul < 1.0) mul *= p.injurySaleMul;
+        if (persuadable) {
+          mul = Math.max(mul, 1.50);
+        } else if (pol && pol.status === 'OK' && pol.ceilMult > 1.0) {
+          mul *= pol.ceilMult;
+        }
+        estBuy = Math.round(p.marketValue * mul);
       }
 
       let baseMv = p.marketValue;
@@ -331,7 +409,10 @@
       const futAge = p.age + (projGain >= 4 ? 2 : 1);
       const ageResaleMul = futAge >= p.declineAge ? 0.76 : ((p.age <= 21 && gap >= 5) ? 1.12 : 1.00);
       const estResale = Math.round(baseMv * Math.pow(1.11, projGain) * ageResaleMul * C.COUNTER_AVG_REALIZED);
-      const rel = flip + (p.force - userAvgForce) * 1.3 + (p.nationality === userCountry ? 8.0 : 0.0);
+      const rel = flip
+        + (p.force - userAvgForce) * 1.3
+        + (p.nationality === userCountry ? 10.0 : 0.0)
+        + (blocked ? -40.0 : 0.0);
 
       return {
         flip: U.roundTo(flip, 1),
@@ -347,11 +428,24 @@
       if (!fp || typeof fp !== 'object') continue;
       const p = R.buildPlayerRecord(fp, staticPlayers, false, 'FREE', 'Free Agent', '');
       if (p.force < Math.max(20, userAvgForce - 16)) continue;
-      const sc = scoreTarget(p, true);
+
+      const pol = T.userBuyPolicy(p, p.nationality, userCountry, 0, userLevel, userRep, userDiv, null, 3, true);
+      const persuadable = (pol.status === 'REFUSE')
+        ? T.buyPersuadable(p, p.nationality, userCountry, U.clamp(Math.round((p.force - 18) / 3), 1, 20), userLevel, pol)
+        : false;
+
+      const sc = scoreTarget(p, true, false, false, false, pol, persuadable, false);
       const flags = ['FREE'];
       if (p.isGem) flags.push('GEM');
       if (p.isTrap) flags.push('TRAP');
       if (p.stackGrade === 'GOD') flags.push('GOD');
+      if (userCountry && p.nationality === userCountry) flags.push('LOCAL');
+      if (pol.status === 'REFUSE') {
+        if (persuadable) flags.push('PERSUADE');
+        else flags.push(pol.code || 'REFUSE');
+      } else if (pol.code === 'CEIL_2X') {
+        flags.push('CEIL_2X');
+      }
       candidates.push({ rel: sc.rel, p, flip: sc.flip, estBuy: sc.estBuy, estResale: sc.estResale, projGain: sc.projGain, flags });
     }
 
@@ -361,6 +455,8 @@
       const cm = U.getStaticClub(clubsMeta, cid);
       const cname = cm.name || cobj.name || cid;
       const ccountry = String(cm.country || cobj.country || '').toUpperCase();
+      const cDiv = U.estimateDivisionFromLeague(cobj.league || '', worldComps);
+      const sellerLevel = U.teamLevelOf(cobj, cDiv, cm.level);
       const cashCrisis = U.safeNum(cobj.budget, 1000000) < 0;
 
       const { roster: cRoster } = R.extractTeamRoster(cobj, staticPlayers, false, cid, cname, ccountry);
@@ -368,19 +464,63 @@
 
       const posStock = {};
       for (const p of cRoster) {
-        posStock[p.pos] = (posStock[p.pos] || 0) + 1;
+        if (!p.injured) posStock[p.pos] = (posStock[p.pos] || 0) + 1;
       }
       const { moods: cMoods } = T.computeSquadMoodsV9(cRoster, true);
 
       for (const p of cRoster) {
         const isUnh = Boolean(cMoods[p.id] && cMoods[p.id].mood === 'unhappy');
-        const isBosman = (p.contractDays <= C.PRECONTRACT_DAYS) || (p.contractYears <= 1 && p.contractDays <= 200);
         const isScarce = (posStock[p.pos] || 0) <= 2;
-
         if (isUnh) aiUnhappyTotal++;
+
+        const pol = T.userBuyPolicy(
+          p, ccountry, userCountry, sellerLevel, userLevel,
+          userRep, userDiv, null, posStock[p.pos] || 1, false
+        );
+        const persuadable = (pol.status === 'REFUSE')
+          ? T.buyPersuadable(p, ccountry, userCountry, sellerLevel, userLevel, pol)
+          : false;
+        const isReachable = (pol.status === 'OK') || persuadable;
+
+        // Bosman Pre-Contract (#23919 & #24474): wajib <=180d, tidak sedang dipinjam, tidak KEY_LOCK, & tidak menolak pindah
+        const inBosmanWindow = (p.contractDays > 0 && p.contractDays <= C.PRECONTRACT_DAYS && !p.loanedFrom);
+        const isKeyLocked = Boolean(
+          inBosmanWindow
+          && (pol.isKeyTop || pol.isYoungStar)
+          && !cashCrisis
+          && !isUnh
+          && !p.forSale
+        );
+        const isBosman = Boolean(inBosmanWindow && !isKeyLocked && isReachable);
         if (isBosman) aiBosmanTotal++;
 
-        // Strict LOCAL = WNI / domestik asli (tidak makan kuota asing!)
+        // Youth Scout Olheiro da Base (#23984): U-21, gap >= 10, reachable, 1.5x MV
+        if (p.youthScoutEligible && isReachable) {
+          youthScoutCandidates.push({
+            id: p.id,
+            name: p.name,
+            pos: p.pos,
+            age: p.age,
+            foot: p.foot,
+            nationality: p.nationality,
+            force: p.force,
+            potential: p.potential,
+            potCap: p.potCap,
+            potGap: p.potGap,
+            hash: p.hash,
+            s1: p.s1,
+            s2: p.s2,
+            stackPct: p.stackPct,
+            stackGrade: p.stackGrade,
+            marketValue: p.marketValue,
+            scoutPrice: p.youthScoutPrice,
+            youthScoutGap: p.youthScoutGap,
+            teamName: cname,
+            teamCountry: ccountry,
+            isLocal: Boolean(userCountry && p.nationality === userCountry),
+          });
+        }
+
         const localFlag = Boolean(userCountry && p.nationality === userCountry);
         const sameLeague = Boolean(userCountry && ccountry === userCountry);
 
@@ -388,20 +528,41 @@
           if (p.force < userAvgForce - 6 && p.potCap < userAvgForce + 2) continue;
         }
 
-        const sc = scoreTarget(p, false, isUnh, isScarce, cashCrisis);
+        const sc = scoreTarget(p, false, isUnh, isScarce, cashCrisis, pol, persuadable, isBosman);
         const flags = [];
         if (isUnh) flags.push('UNH');
         if (isBosman) flags.push('BOSMAN');
+        if (isKeyLocked) flags.push('KEY_LOCK');
         if (p.forSale) flags.push('SALE');
         if (p.loanable) flags.push('LOAN');
         if (isScarce) flags.push('SCARCE');
         if (p.isGem) flags.push('GEM');
         if (p.isTrap) flags.push('TRAP');
         if (p.stackGrade === 'GOD') flags.push('GOD');
-        if (p.injured) flags.push('INJ');
+        if (p.injured) {
+          flags.push('INJ');
+          if (p.injurySaleMul < 1.0) flags.push('INJ_DISC');
+        }
         if (localFlag) flags.push('LOCAL');
+        if (p.youthScoutEligible && isReachable) flags.push('YSCOUT');
 
-        candidates.push({ rel: sc.rel, p, flip: sc.flip, estBuy: sc.estBuy, estResale: sc.estResale, projGain: sc.projGain, flags });
+        if (pol.status === 'REFUSE') {
+          if (persuadable) flags.push('PERSUADE');
+          else flags.push(pol.code || 'REFUSE');
+        } else if (pol.code === 'CEIL_2X') {
+          flags.push('CEIL_2X');
+        }
+
+        candidates.push({
+          rel: sc.rel,
+          p,
+          flip: sc.flip,
+          estBuy: sc.estBuy,
+          estResale: sc.estResale,
+          projGain: sc.projGain,
+          flags,
+          reachable: isReachable,
+        });
       }
     }
 
@@ -413,14 +574,15 @@
       const p = c.p;
       if (seenIds.has(p.id)) continue;
       const fSet = c.flags;
-      const mustKeep = (fSet.includes('FREE') && p.force >= userAvgForce - 8)
-        || fSet.includes('UNH')
-        || (fSet.includes('LOCAL') && p.force >= userAvgForce - 10);
+      const mustKeep = (c.reachable && fSet.includes('FREE') && p.force >= userAvgForce - 8)
+        || (c.reachable && fSet.includes('UNH'))
+        || (c.reachable && fSet.includes('BOSMAN') && p.force >= userAvgForce - 6)
+        || (c.reachable && fSet.includes('LOCAL') && p.force >= userAvgForce - 10);
 
       if (mustKeep || selected.length < 2400) {
         seenIds.add(p.id);
         const stCode = p.top ? 2 : (p.star ? 1 : 0);
-        // Format kompak 23 elemen 100% identik dengan Python v8.0 & Tab 7 UI
+        // Format kompak 23 elemen 100% kompatibel dengan UI Tab 7 & Python v8.3
         selected.push([
           p.name, p.pos, p.age, p.foot, p.nationality,
           p.force, p.potential, p.potCap,
@@ -433,9 +595,18 @@
       if (selected.length >= 2800) break;
     }
 
-    return { scoutPool: selected, aiUnhappyTotal, aiBosmanTotal };
-  }
+    youthScoutCandidates.sort((a, b) => {
+      const locDiff = (b.isLocal ? 1 : 0) - (a.isLocal ? 1 : 0);
+      return locDiff || (b.potCap - a.potCap) || (b.youthScoutGap - a.youthScoutGap) || (a.scoutPrice - b.scoutPrice);
+    });
 
+    return {
+      scoutPool: selected,
+      youthScoutTargets: youthScoutCandidates.slice(0, 24),
+      aiUnhappyTotal,
+      aiBosmanTotal,
+    };
+  }
 
   function extractSimOpponents(save, userId, clubsMeta, compactTeams, staticPlayers) {
     const world = (save.world && typeof save.world === 'object') ? save.world : {};
@@ -469,7 +640,7 @@
       const wt = worldTeams[cid] || {};
       const name = meta.name || cm.name || cid;
       const country = String(meta.country || cm.country || '').toUpperCase();
-      const rep = U.safeNum(cm.reputation, U.safeNum(wt.rep, 50));
+      const rep = U.safeNum(cm.reputation, U.safeNum(wt.rep, meta.rep || 50));
       const form = (cm.formation in C.FORMATIONS) ? cm.formation : '4-4-2';
       const { roster } = R.extractTeamRoster(cm, staticPlayers, false, cid, name, country);
       if (!roster.length) continue;
@@ -496,6 +667,7 @@
   }
 
   LF.scout = {
+    resolveRoundsLeftFromWorld,
     extractUpcomingMatches,
     buildGlobalScoutPool,
     extractSimOpponents,

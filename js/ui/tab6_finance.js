@@ -60,20 +60,25 @@ function renderTab6() {
       </div>
       <div class="grid g2" style="gap:8px">
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:8px 9px;font-size:11.5px">
-          <div class="c-green" style="font-weight:700;margin-bottom:4px">📥 Pemasukan Rutin</div>
-          <div class="mono">• Tiket (~2 kandang): <b>${fmtM(b.tickets)}</b></div>
-          <div class="mono">• Sponsor (amortisasi): <b>${fmtM(b.sponsors)}</b></div>
+          <div class="c-green" style="font-weight:700;margin-bottom:4px">📥 Pemasukan Rutin (#21866)</div>
+          <div class="mono">• Tiket Kandang: <b>${fmtM(b.tickets)}</b></div>
+          <div class="mono">• Hak Siar TV (#19879): <b>${fmtM(b.tv)}</b></div>
+          <div class="mono">• Sponsor Tetap (#19869): <b>${fmtM(b.fixedSponsor ?? b.sponsors)}</b></div>
+          ${b.varSponsor ? `<div class="mono">• Sponsor Bulanan: <b>${fmtM(b.varSponsor)}</b></div>` : ''}
           <div class="mono">• Naming Rights (/12): <b>${fmtM(b.naming)}</b></div>
-          <div class="mono">• Iuran Member: <b>${fmtM(b.members)}</b></div>
-          <div class="mono">• Hak Siar TV: <b>${fmtM(b.tv)}</b></div>
+          <div class="mono">• Iuran Member (#21330): <b>${fmtM(b.members)}</b></div>
           <div class="mono">• Club Shop: <b>${fmtM(b.shop)}</b></div>
         </div>
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:8px 9px;font-size:11.5px">
-          <div class="c-amber" style="font-weight:700;margin-bottom:4px">📤 Pengeluaran Rutin</div>
-          <div class="mono">• Gaji Skuad: <b>${fmtM(b.payroll)}</b></div>
+          <div class="c-amber" style="font-weight:700;margin-bottom:4px">📤 Pengeluaran Rutin (#21866)</div>
+          <div class="mono">• Gaji Senior: <b>${fmtM(b.seniorPayroll ?? b.payroll)}</b></div>
+          ${b.youthPayroll ? `<div class="mono">• Gaji Akademi: <b>${fmtM(b.youthPayroll)}</b></div>` : ''}
           <div class="mono">• Ops Stadion (&gt;20K): <b>${fmtM(b.stadiumOps)}</b></div>
-          <div class="c-muted" style="font-size:10.5px;margin-top:8px;padding-top:7px;border-top:1px solid var(--border)">
-            Belum termasuk hadiah kompetisi, bonus presiden, &amp; profit transfer pemain.
+          <div class="mono">• Maint. CT (#21495): <b>${fmtM(b.ctCost || 0)}</b></div>
+          <div class="mono">• Pelatih Akademi: <b>${fmtM(b.youthCost || 0)}</b></div>
+          ${b.bankLoanParcel ? `<div class="mono">• Cicilan Bank: <b>${fmtM(b.bankLoanParcel)}</b></div>` : ''}
+          <div class="c-muted" style="font-size:10.5px;margin-top:6px;padding-top:5px;border-top:1px solid var(--border)">
+            Sponsor Jersey <i>Upfront (Luvas)</i> sudah cair di awal musim &amp; tidak dihitung ganda.
           </div>
         </div>
       </div>`;
@@ -81,18 +86,18 @@ function renderTab6() {
 
   // 2. Kartu Club Shop, Member Plans & Komersial
   document.getElementById('t6-shop').innerHTML = `
-    <div class="mb-8">Harga Kini: <b class="mono">${(sh.cur_m || 1).toFixed(2)}x</b> (Demand <b class="mono">${((sh.cur_pf || 1) * 100).toFixed(1)}%</b> • ${String(sh.cur_word || 'flat').toUpperCase()})</div>
+    <div class="mb-8">Harga Kini: <b class="mono">${(sh.cur_m || 1).toFixed(2)}x</b> (Demand <b class="mono">${((sh.cur_pf || 1) * 100).toFixed(1)}%</b> • ${String(sh.cur_word || 'optimal').toUpperCase()})</div>
     <div class="mb-8">Optimal v1.2.0: <span class="badge b-good">1.00x (Puncak Mutlak!)</span> ${sh.is_optimal ? '<span class="c-green">✓ Optimal</span>' : `<span class="c-amber">+${sh.gain_pct}%</span>`}</div>
-    <div class="c-muted mb-8">Bonus Bintang: <b>+${sh.star_bonus_pct || 0}%</b> (${sh.star_cnt || 0} star, ${sh.top_cnt || 0} top) | Hype: <b class="c-green">+${sh.hype_bonus_pct || 0}%</b></div>
-    ${(sh.mega_signings || []).length ? `<div class="badge b-accent mb-8">🔥 MEGA (+30%): ${sh.mega_signings.map(x => esc(x.name) + ' ' + x.daysLeft + 'd').join(', ')}</div>` : ''}
-    ${(sh.big_signings || []).length ? `<div class="badge b-info mb-8">⚡ BIG (+8%): ${sh.big_signings.map(x => esc(x.name) + ' ' + x.daysLeft + 'd').join(', ')}</div>` : ''}
+    <div class="c-muted mb-8">Bonus Bintang: <b>+${sh.star_bonus_pct || 0}%</b> (${sh.star_cnt || 0} star, ${sh.top_cnt || 0} top) | Hype (#19856): <b class="c-green">+${sh.hype_bonus_pct || 0}%</b></div>
+    ${(sh.mega_signings || []).length ? `<div class="badge b-accent mb-8">🔥 MEGA (≥${fmtM(sh.mega_threshold)}): ${sh.mega_signings.map(x => esc(x.name) + ' ' + x.daysLeft + 'd').join(', ')}</div>` : ''}
+    ${(sh.big_signings || []).length ? `<div class="badge b-info mb-8">⚡ BIG (+8% ≥${fmtM(sh.big_threshold)}): ${sh.big_signings.map(x => esc(x.name) + ' ' + x.daysLeft + 'd').join(', ')}</div>` : ''}
     <div class="flex-between"><span class="c-muted">Bulan Lalu: <b class="mono c-green">${fmtM(sh.last_rev)}</b> (${(sh.last_shirts || 0).toLocaleString('id-ID')} jrs)</span><button type="button" class="btn btn-sm" onclick="goToView('t5','t5-shop')">Grafik &amp; Top 8 →</button></div>`;
 
   document.getElementById('t6-member').innerHTML = `
-    <div class="mb-8">Anggota Aktif: <b class="mono">${(mb.n || 0).toLocaleString('id-ID')}</b> (Rasio Cap g = <b class="mono">${((mb.g || 0) * 100).toFixed(1)}%</b>)</div>
-    <div class="mb-8">Setelan Kini: <b class="mono">${(mb.cur_m || 1).toFixed(2)}x</b> • Diskon Tahunan <b class="mono">${mb.cur_d || 0}%</b></div>
-    <div class="mb-8">Optimal v1.2.0: <span class="badge b-good">${(mb.opt_m || 1.05).toFixed(2)}x + Diskon ${mb.opt_d ?? 4}%</span> ${mb.is_optimal ? '<span class="c-green">✓ Optimal</span>' : `<span class="c-amber">+${mb.gain_pct}%</span>`}</div>
-    <div class="c-muted">Puncak matematis <code>priceFactor</code> di <b>${(mb.opt_m || 1.05).toFixed(2)}x / ${mb.opt_d ?? 4}%</b> (Indeks ${((mb.opt_idx || 1) * 100).toFixed(2)}%, bebas potongan cap).</div>`;
+    <div class="mb-8">Basis Member: <b class="mono">${(mb.n || 0).toLocaleString('id-ID')}</b> (Cap <b class="mono">${(mb.cap || 60000).toLocaleString('id-ID')}</b> • Bayar <b class="mono c-sky">${(mb.cur_paying || mb.n || 0).toLocaleString('id-ID')}</b>)</div>
+    <div class="mb-8">Setelan Kini: <b class="mono">${(mb.cur_m || 1).toFixed(2)}x</b> • Diskon <b class="mono">${mb.cur_d || 0}%</b> → <b class="mono c-green">${fmtM(mb.cur_parcel || 0)}/bln</b></div>
+    <div class="mb-8">Optimal v1.2.0 (#21325): <span class="badge b-good">${(mb.opt_m || 1.00).toFixed(2)}x + Diskon ${mb.opt_d ?? 6}%</span> ${mb.is_optimal ? '<span class="c-green">✓ Optimal</span>' : `<span class="c-amber">+${mb.gain_pct}% (${fmtM(mb.opt_parcel || 0)}/bln)</span>`}</div>
+    <div class="c-muted">Puncak <code>memberDemand × memberNet</code> di <b>${(mb.opt_m || 1.00).toFixed(2)}x / Diskon ${mb.opt_d ?? 6}%</b> (Indeks ${(mb.opt_yield || 101.06).toFixed(2)}%, ${(mb.opt_paying || 0).toLocaleString('id-ID')} anggota membayar).</div>`;
 
   const nm = D.naming;
   const needSponsorCalc = (D.sponsors || []).length < 3 || !nm || (nm.monthsLeft <= 2);
@@ -266,24 +271,42 @@ function calcStadiumRoiSim() {
 
   const sec = secEl.value || 'camarotes';
   const addSeats = Math.max(10, parseInt(seatsEl.value, 10) || 100);
-  const costM = Math.max(0.1, parseFloat(costEl.value) || 2.0);
   const gamesYr = Math.max(1, parseInt(gamesEl.value, 10) || 22);
-  const costVal = costM * 1_000_000;
+  const secs = (D.stadium && D.stadium.sections) || { geral: 6000, arquibancada: 13000, cadeiras: 900, camarotes: 100 };
 
-  const bp = (D.stadium && D.stadium.basePrices) || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 };
-  const optP = (D.stadium && D.stadium.optLigaPrices) || { geral: 12, arquibancada: 20, cadeiras: 47, camarotes: 160 };
-  const ticketP = sec === 'camarotes' ? (bp.camarotes * 2) : (sec === 'cadeiras' ? (bp.cadeiras * 2) : (optP[sec] || Math.round(bp[sec] * 1.3)));
-  const fillEst = sec === 'arquibancada' ? 0.90 : 1.00;
+  let tierCost = 0;
+  let deltaRevMatch = 0;
+  let deltaOpsMonth = 0;
+  let newFillPct = 0;
 
-  const curSeats = Number((D.stadium && D.stadium.totalSeats) || 20000);
-  const taxableNewSeats = Math.max(0, (curSeats + addSeats) - 20000) - Math.max(0, curSeats - 20000);
-  const opsAddYr = taxableNewSeats * 35 * 12;
-  const grossYr = Math.round(addSeats * fillEst * ticketP * gamesYr);
+  if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.calcStadiumRoi === 'function') {
+    const opts = {
+      homeRepLvl: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
+      country: (D.meta && D.meta.country) || 'OTHER',
+      kind: 'league',
+    };
+    const roi = LFEngine.economy.calcStadiumRoi(
+      secs, { [sec]: addSeats }, (D.meta && D.meta.fanConf) || 80,
+      (D.meta && D.meta.division) || 1, gamesYr, opts
+    );
+    tierCost = roi.buildCost;
+    deltaRevMatch = roi.deltaRevPerMatch;
+    deltaOpsMonth = roi.deltaOpsMonth;
+    newFillPct = roi.newFillPct;
+  }
+
+  const userCostM = parseFloat(costEl && costEl.value);
+  const costVal = (!isNaN(userCostM) && userCostM > 0) ? (userCostM * 1_000_000) : Math.max(100000, tierCost);
+  const opsAddYr = deltaOpsMonth * 12;
+  const grossYr = Math.round(deltaRevMatch * gamesYr);
   const netYr = grossYr - opsAddYr;
   const netPerGame = netYr / gamesYr;
   const paybackGames = netPerGame > 0 ? Math.ceil(costVal / netPerGame) : 9999;
   const paybackSeasons = netYr > 0 ? (costVal / netYr).toFixed(1) : '∞';
   const roiPctYr = costVal > 0 ? Math.round((netYr / costVal) * 100) : 0;
+  const saturatedWarn = deltaRevMatch <= 0
+    ? `<div class="c-red" style="margin-top:4px"><b>⚠️ Peringatan Permintaan (#19915):</b> Sektor ini sudah melampaui <code>BASE_ATTENDANCE</code> di reputasi klub saat ini — kursi baru belum terisi penuh di laga liga normal!</div>`
+    : '';
 
   outEl.innerHTML = `
     <div class="roi-res-grid mono">
@@ -304,18 +327,23 @@ function calcStadiumRoiSim() {
       </div>
     </div>
     <div class="c-muted" style="font-size:11px">
-      Asumsi: harga tiket <b class="mono">${ticketP}</b> (fill ${Math.round(fillEst * 100)}%) × <b>${gamesYr}</b> laga kandang/thn = Gross <b class="mono">${fmtM(grossYr)}/thn</b>.
-      <br/>💡 <b>Tip Engine:</b> Bangun dalam porsi besar sekaligus untuk hemat biaya tetap proyek <code>WORK_FIXED_COST (300K × mul)</code> &amp; penutupan <b>12% kursi</b> selama renovasi. Hindari bangun General!
+      ΔGate Riil (#19915): <b class="mono ${deltaRevMatch > 0 ? 'c-green' : 'c-red'}">${deltaRevMatch >= 0 ? '+' : ''}${fmtM(deltaRevMatch)}/laga</b> × <b>${gamesYr}</b> laga = Gross <b class="mono">${fmtM(grossYr)}/thn</b> (Fill baru <b>${newFillPct}%</b> · Est. Biaya Tier: <b class="mono">${fmtM(tierCost)}</b>).
+      ${saturatedWarn}
+      <br/>💡 <b>Tip Engine:</b> Prioritaskan <b>Boxes VIP (camarotes)</b> &amp; <b>Seats (cadeiras)</b> karena margin tiket per kursi tertinggi dibanding biaya ops 35/kursi/bln.
     </div>`;
 }
 
 function onRoiSectorPreset() {
-  const sec = (document.getElementById('roi-sec') || {}).value;
+  const sec = (document.getElementById('roi-sec') || {}).value || 'camarotes';
   const seatsEl = document.getElementById('roi-seats');
   const costEl = document.getElementById('roi-cost');
-  if (sec === 'camarotes') { if (seatsEl) seatsEl.value = 100; if (costEl) costEl.value = 2.6; }
-  else if (sec === 'cadeiras') { if (seatsEl) seatsEl.value = 1000; if (costEl) costEl.value = 4.5; }
-  else { if (seatsEl) seatsEl.value = 3000; if (costEl) costEl.value = 7.2; }
+  const defSeats = sec === 'camarotes' ? 100 : (sec === 'cadeiras' ? 500 : 2000);
+  if (seatsEl) seatsEl.value = defSeats;
+  if (costEl && window.LFEngine && LFEngine.economy && typeof LFEngine.economy.calcExpansionCost === 'function') {
+    const secs = (D.stadium && D.stadium.sections) || {};
+    const tc = LFEngine.economy.calcExpansionCost(sec, secs[sec] || 0, defSeats);
+    costEl.value = Math.max(0.2, +(tc / 1_000_000).toFixed(2));
+  }
   calcStadiumRoiSim();
 }
 
@@ -370,7 +398,8 @@ function renderFacilityStatusCard() {
 
   const baseLv = ctw && ctw.to ? Number(ctw.to) : Number(D.meta.ctLevel || 1);
   const nextCt = Math.min(10, baseLv + 1);
-  const nextCtDesc = ((D.ctMilestones || []).find(x => x[0] === nextCt) || [nextCt, 'Maksimal (Lv 10)'])[1];
+  const msHit = (D.ctMilestones || []).find(x => (x.level || x[0]) >= nextCt);
+  const nextCtDesc = msHit ? (msHit.perk || msHit[1]) : 'Fasilitas Kelas Dunia (Lv 10)';
   const curSlots = 3 + Math.floor((Math.max(1, Math.min(10, Number(D.meta.ctLevel || 1))) - 1) / 2);
 
   el.innerHTML = `

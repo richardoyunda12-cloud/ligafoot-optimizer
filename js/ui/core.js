@@ -12,20 +12,29 @@ let cartOut = {}; // playerId -> { arab: bool }
 let cartIn = {};  // playerId -> scoutRow
 let cartInBosman = {}; // playerId -> bool (0€ Pra-Kontrak)
 
-// Single Source of Truth dari optimizer/config.py via D.cfg
+// Single Source of Truth dari js/engine/config.js via D.cfg
 const CFG = D.cfg || {};
-const EXACT_CAT = CFG.EXACT_CAT || { G:0, LD:1, LE:1, LAT:1, ZD:2, ZE:2, ZAG:2, VOL:3, MC:3, MD:3, ME:3, MA:3, MEI:3, PD:4, PE:4, SA:4, ATA:4 };
-const SLOT_FOOT_PREF = CFG.SLOT_FOOT_PREF || { LE:'E', LD:'D' }; // Khusus Fullback (#21882)
+const EXACT_CAT = CFG.EXACT_CAT || {
+  G:0,
+  LD:1, LE:1, LAT:1,
+  Z:2, ZD:2, ZE:2, ZAG:2,
+  V:3, VOL:3, MC:3, MD:3, ME:3, MO:3, MA:3, MEI:3,
+  PD:4, PE:4, SA:4, A:4, ATA:4
+};
+const SLOT_FOOT_PREF = CFG.SLOT_FOOT_PREF || { LE:'E', LD:'D' }; // Khusus Fullback/Wingback (#21882)
 const POS_EN = CFG.POS_EN || {
-  G:'GK', LD:'RB', LE:'LB', LAT:'FB', ZD:'RCB', ZE:'LCB', ZAG:'CB',
-  VOL:'CDM', MC:'CM', MD:'RM', ME:'LM', MA:'CAM', MEI:'MID',
-  PD:'RW', PE:'LW', SA:'SS', ATA:'ST'
+  G:'GK', LD:'RB', LE:'LB', LAT:'FB',
+  Z:'CB', ZD:'RCB', ZE:'LCB', ZAG:'CB',
+  V:'DM', VOL:'CDM', MC:'CM', MD:'RM', ME:'LM',
+  MO:'AM', MA:'CAM', MEI:'MID',
+  PD:'RW', PE:'LW', SA:'SS', A:'ST', ATA:'ST'
 };
 const FOOT_EN = CFG.FOOT_EN || { D:'R', E:'L', A:'Both', B:'Both' };
 const SKILL_EN = CFG.SKILL_EN || {
-  FIN:'FIN', PAS:'PAS', ARM:'PLY', DES:'TCK', MAR:'MRK',
-  CAB:'HDG', CRU:'CRS', DRI:'DRI', VEL:'PAC', RES:'STA',
-  COL:'POS', REF:'REF', SAI:'RUS', DPE:'PEN'
+  FIN:'FIN', PAS:'PAS', ARM:'PLY', DES:'TAC', MAR:'MRK',
+  CAB:'HEA', CRU:'CRO', DRI:'DRI', VEL:'PAC', RES:'STA',
+  COL:'POS', REF:'REF', SAI:'OUT', PEN:'PEN', DPE:'PEN',
+  FOR:'STR', LID:'LEA'
 };
 const FORM_EN = CFG.FORM_EN || {
   '4-4-2 def.':'4-4-2 Def', '4-4-2 ofe.':'4-4-2 Off',
@@ -79,210 +88,136 @@ function switchTab(t) {
   goToView(m[0], m[1]);
 }
 
-// ==================== EXACT v1.2.0 ENGINE MATH IN JS ====================
+// ==================== EXACT v1.2.0 ENGINE MATH IN JS (SSOT via LFEngine) ====================
 function priceFactorJS(m, lin, up, down) {
-  const dx = m - 1.0;
-  const k = dx >= 0 ? up : down;
-  const v = Math.exp(-lin * dx - k * dx * dx);
-  return Math.max(0.25, Math.min(1.60, v));
+  if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.priceFactorV9 === 'function') {
+    return LFEngine.economy.priceFactorV9(m, { lin, up, down });
+  }
+  const d = Number(m || 1) - 1.0;
+  const raw = d >= 0 ? (1.0 - lin * d - up * d * d) : (1.0 - lin * d - down * d * d);
+  return Math.max(0.10, Math.min(1.35, raw));
 }
 
 function ticketDemandJS(m, big) {
+  if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.ticketDemandV9 === 'function') {
+    return LFEngine.economy.ticketDemandV9(m, big);
+  }
   const cm = Math.max(0.5, Math.min(2.0, m));
   const slope = big ? 0.2 : 0.7;
   return cm < 1.0 ? 1.0 + 0.4 * (1.0 - cm) : Math.max(0.25, 1.0 - slope * (cm - 1.0));
 }
 
 function simulateStadiumJS(prices, big) {
-  const bp = D.stadium.basePrices;
-  const secs = D.stadium.sections;
-  const totalCap = Math.max(1, D.stadium.totalSeats);
-  const fanFactor = 0.62 + 0.48 * Math.max(0, Math.min(1, D.meta.fanConf / 100));
-  const matchBonus = big ? 0.35 : 0.0;
-  const baseFill = Math.max(0.35, Math.min(1.55, fanFactor + matchBonus));
-  const sm = { geral: 0.92, arquibancada: 1.08, cadeiras: 2.40, camarotes: 4.20 };
-  let totAtt = 0, totRev = 0;
-  const out = {};
-  ['geral', 'arquibancada', 'cadeiras', 'camarotes'].forEach(s => {
-    const cap = secs[s] || 0;
-    const p = prices[s] || bp[s];
-    const mul = p / bp[s];
-    const dem = ticketDemandJS(mul, big);
-    const fill = Math.max(0, Math.min(1, baseFill * sm[s] * dem));
-    const att = Math.round(cap * fill);
-    const rev = att * p;
-    totAtt += att; totRev += rev;
-    out[s] = { cap, bp: bp[s], p, mul, att, fillPct: +(fill * 100).toFixed(1), rev };
-  });
-  const fillPct = +((totAtt / totalCap) * 100).toFixed(1);
-  return { totAtt, totRev, fillPct, crowdFull: fillPct >= 70.0, sectors: out };
+  const bp = (D.stadium && D.stadium.basePrices) || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 };
+  const secs = (D.stadium && D.stadium.sections) || { geral: 6000, arquibancada: 13000, cadeiras: 900, camarotes: 100 };
+  if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.simulateStadiumByPricesV9 === 'function') {
+    const opts = {
+      homeRepLvl: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
+      country: (D.meta && D.meta.country) || 'OTHER',
+      kind: 'league',
+      koStage: big ? 'final' : null,
+    };
+    const res = LFEngine.economy.simulateStadiumByPricesV9(
+      secs, prices, (D.meta && D.meta.fanConf) || 80, (D.meta && D.meta.division) || 1,
+      Boolean(big), Boolean(big), big ? 1 : 0, opts
+    );
+    const out = {};
+    ['geral', 'arquibancada', 'cadeiras', 'camarotes'].forEach(s => {
+      const bs = res.bySector[s];
+      out[s] = {
+        cap: bs.cap,
+        bp: bs.basePrice,
+        p: bs.price,
+        mul: bs.mul,
+        att: bs.att,
+        demandRaw: bs.demandRaw,
+        fillPct: bs.fillPct,
+        rev: bs.rev,
+      };
+    });
+    return {
+      totAtt: res.totalAtt,
+      totRev: res.totalRev,
+      fillPct: res.fillPct,
+      crowdFull: res.homeMidBonus,
+      sectors: out,
+    };
+  }
+  return { totAtt: 0, totRev: 0, fillPct: 0, crowdFull: false, sectors: { geral: { cap: 0, bp: bp.geral, p: bp.geral, mul: 1, att: 0, fillPct: 0, rev: 0 }, arquibancada: { cap: 0, bp: bp.arquibancada, p: bp.arquibancada, mul: 1, att: 0, fillPct: 0, rev: 0 }, cadeiras: { cap: 0, bp: bp.cadeiras, p: bp.cadeiras, mul: 1, att: 0, fillPct: 0, rev: 0 }, camarotes: { cap: 0, bp: bp.camarotes, p: bp.camarotes, mul: 1, att: 0, fillPct: 0, rev: 0 } } };
 }
 
 function optimalPricesJS(big) {
-  const bp = D.stadium.basePrices;
-  const totalCap = Math.max(1, D.stadium.totalSeats);
-  const minAtt = Math.ceil(totalCap * 0.705);
-  const pareto = {};
-  ['geral', 'arquibancada', 'cadeiras', 'camarotes'].forEach(s => {
-    const lo = Math.max(1, Math.round(bp[s] * 0.5));
-    const hi = Math.max(lo, Math.round(bp[s] * 2.0));
-    const step = bp[s] >= 50 ? 5 : 1;
-    const opts = [];
-    for (let p = lo; p <= hi; p += step) {
-      const sim = simulateStadiumJS({ ...bp, [s]: p }, big).sectors[s];
-      opts.push([p, sim.att, sim.rev]);
-    }
-    if (opts[opts.length - 1][0] !== hi) {
-      const sim = simulateStadiumJS({ ...bp, [s]: hi }, big).sectors[s];
-      opts.push([hi, sim.att, sim.rev]);
-    }
-    opts.sort((a, b) => (b[1] - a[1]) || (b[2] - a[2]));
-    const pf = [];
-    let bestR = -1;
-    for (const o of opts) { if (o[2] > bestR) { pf.push(o); bestR = o[2]; } }
-    pareto[s] = pf;
-  });
-  let bestFeas = null, bestAny = null;
-  for (const g of pareto.geral)
-    for (const a of pareto.arquibancada)
-      for (const c of pareto.cadeiras)
-        for (const v of pareto.camarotes) {
-          const att = g[1] + a[1] + c[1] + v[1];
-          const rev = g[2] + a[2] + c[2] + v[2];
-          const pr = { geral: g[0], arquibancada: a[0], cadeiras: c[0], camarotes: v[0] };
-          if (!bestAny || rev > bestAny.rev) bestAny = { rev, att, pr };
-          if (att >= minAtt && (!bestFeas || rev > bestFeas.rev)) bestFeas = { rev, att, pr };
-        }
-  return (bestFeas || bestAny).pr;
+  if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.optimizeTicketPricesV9 === 'function') {
+    const secs = (D.stadium && D.stadium.sections) || { geral: 6000, arquibancada: 13000, cadeiras: 900, camarotes: 100 };
+    const opts = {
+      homeRepLvl: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
+      country: (D.meta && D.meta.country) || 'OTHER',
+      kind: 'league',
+      koStage: big ? 'final' : null,
+    };
+    const opt = LFEngine.economy.optimizeTicketPricesV9(
+      secs, (D.meta && D.meta.fanConf) || 80, (D.meta && D.meta.division) || 1,
+      Boolean(big), Boolean(big), big ? 1 : 0, 70.5, opts
+    );
+    return { ...opt.prices };
+  }
+  return { ...((D.stadium && (big ? D.stadium.optBigPrices : D.stadium.optLigaPrices)) || { geral: 12, arquibancada: 21, cadeiras: 48, camarotes: 160 }) };
 }
 
-// v7.0 EXACT entryValue (#21882): outOfPosition=0.70, wrongFoot khusus Fullback,
-// bonus star/top per repLevel, penalti unhappy -3%, dan fineSlump (cap -20%).
-function slotScoreJS(p, sl, rotMode) {
-  const pc = EXACT_CAT[p.pos] ?? 3, sc = EXACT_CAT[sl] ?? 3;
-  let pm = 0.70;
-  if (p.pos === sl) pm = 1.0;
-  else if (pc === sc) pm = 0.99;
-  else if (pc === 0 || sc === 0) pm = 0.35;
-
-  const pref = SLOT_FOOT_PREF[sl];
-  const wf = Boolean(pref && p.foot && p.foot !== pref && (p.foot === 'D' || p.foot === 'E'));
-  const fm = (wf && pc === sc) ? 0.95 : 1.0;
-  const en = p.energy >= 80 ? 1.0 : (p.energy >= 65 ? 0.96 : (p.energy >= 50 ? 0.90 : 0.80));
-  const repLv = D.meta.repLevel || 3;
-  const starMul = p.top ? (repLv > 3 ? 1.10 : 1.05) : (p.star ? (repLv > 3 ? 1.05 : 1.02) : 1.0);
-  const unhMul = p.mood === 'unhappy' ? 0.97 : 1.0;
-  const slumpMul = 1.0 - Math.max(0, Math.min(0.20, Number(p.fineSlump) || 0));
-
-  const score = (p.force || 0) * pm * fm * (1 + (p.stackPct || 0) / 100) * en * starMul * unhMul * slumpMul;
-  let pickScore = score;
-  if (rotMode && sl !== 'G') {
-    const has2Y = Object.values(p.cardsByComp || {}).some(v => v && (v.y || 0) >= 2 && (v.s || 0) === 0);
-    if (has2Y) pickScore *= 0.86;
-    if ((p.energy ?? 100) < 90) pickScore *= 0.88;
-    else if ((p.energy ?? 100) < 95) pickScore *= 0.94;
-    else if ((p.energy ?? 100) >= 97 && (p.minPct ?? 100) < 65) pickScore *= 1.12;
-    if (p.moodTier === 1 && (p.minPct ?? 100) < 25) pickScore *= 1.14;
-    else if (p.age <= 21 && (p.potCap - p.force) >= 5) pickScore *= 1.13;
-    else if ((p.minPct ?? 100) < 40) pickScore *= 1.06;
+function slotScoreJS(p, sl, rotMode, ruleId = null) {
+  if (window.LFEngine && LFEngine.tactics && typeof LFEngine.tactics.evalPlayerForSlot === 'function') {
+    const repLv = (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3;
+    const ev = LFEngine.tactics.evalPlayerForSlot(p, sl, true, repLv, ruleId);
+    let pickScore = ev.score;
+    if (rotMode && sl !== 'G') {
+      pickScore += ((p.energy ?? 100) - 80) * 0.35;
+      if (p.moodTier === 1 && (p.minPct ?? 100) < 12.0) pickScore += 4.5;
+      else if (p.mood === 'unhappy' || p.mood === 'warn') pickScore += 3.0;
+      if ((p.potCap - p.force) >= 6 && p.age <= 22) pickScore += 2.0;
+    }
+    return { score: ev.score, pickScore, wf: ev.wrongFoot };
   }
-  return { score, pickScore, wf };
+  return { score: p.force || 0, pickScore: p.force || 0, wf: false };
 }
 
 function solveBestXiJS(formKey, rotMode) {
-  const slots = D.formations[formKey] || D.formations['4-3-3'];
-  const pool = D.roster.filter(p => !p.injured && !p.suspended);
-  const fCap = D.meta.foreignCap;
-  const hc = D.meta.country;
-  const isF = p => Boolean(hc && p.nationality && p.nationality !== hc);
-
-  const assigned = new Array(slots.length).fill(null);
-  const used = new Set();
-  let fUsed = 0;
-
-  const gks = [...pool].sort((a, b) => slotScoreJS(b, 'G', rotMode).pickScore - slotScoreJS(a, 'G', rotMode).pickScore);
-  if (gks.length) {
-    let g = gks[0];
-    if (isF(g) && fCap <= 0) { const lg = gks.find(x => !isF(x)); if (lg) g = lg; }
-    const r = slotScoreJS(g, 'G', rotMode);
-    assigned[0] = { slot: 'G', p: g, score: r.score, pickScore: r.pickScore, wf: r.wf };
-    used.add(g.id);
-    if (isF(g)) fUsed++;
+  const fk = (D.formations && formKey in D.formations) ? formKey : ((D.meta && D.meta.activeFormation) || '4-3-3');
+  if (window.LFEngine && LFEngine.tactics && typeof LFEngine.tactics.solveBestXi === 'function') {
+    const repLv = (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3;
+    const res = LFEngine.tactics.solveBestXi(
+      D.roster || [], fk, (D.meta && D.meta.foreignCap) || 7,
+      (D.meta && D.meta.country) || '', null, Boolean(rotMode), repLv
+    );
+    const xi = (res.xi || []).map(a => ({
+      slot: a.slot,
+      ruleId: a.ruleId,
+      sectorCode: a.sectorCode,
+      wildcard: a.wildcard,
+      droppedByBug: a.droppedByBug,
+      p: a.player,
+      score: a.score,
+      pickScore: a.score,
+      wf: a.wrongFoot,
+    }));
+    return {
+      xi,
+      bench: res.bench || [],
+      tot: res.totalScore,
+      avg: res.avgScore,
+      fCnt: res.foreignCount,
+      wfCnt: res.wrongFootCount,
+      falseNine: res.falseNine,
+      chemistry: res.chemistry,
+      chemMul: res.chemMul,
+      sectors: res.sectors,
+      engineSectors: res.engineSectors,
+      hasFormationBug: res.hasFormationBug,
+      formationBugInfo: res.formationBugInfo,
+      setPieces: res.setPieces,
+      f9Players: [],
+    };
   }
-  const open = [];
-  for (let i = 1; i < slots.length; i++) open.push(i);
-  while (open.length) {
-    let best = null;
-    for (const si of open) {
-      for (const p of pool) {
-        if (used.has(p.id)) continue;
-        if (isF(p) && fUsed >= fCap) continue;
-        const r = slotScoreJS(p, slots[si], rotMode);
-        if (!best || r.pickScore > best.pickScore) best = { si, p, score: r.score, pickScore: r.pickScore, wf: r.wf };
-      }
-    }
-    if (!best) break;
-    assigned[best.si] = { slot: slots[best.si], p: best.p, score: best.score, pickScore: best.pickScore, wf: best.wf };
-    used.add(best.p.id);
-    if (isF(best.p)) fUsed++;
-    open.splice(open.indexOf(best.si), 1);
-  }
-  // 2-opt internal swap
-  for (let pass = 0; pass < 3; pass++) {
-    let imp = false;
-    for (let i = 1; i < slots.length; i++) {
-      for (let j = i + 1; j < slots.length; j++) {
-        if (!assigned[i] || !assigned[j]) continue;
-        const pi = assigned[i].p, pj = assigned[j].p;
-        const ri = slotScoreJS(pj, slots[i], rotMode);
-        const rj = slotScoreJS(pi, slots[j], rotMode);
-        if (ri.pickScore + rj.pickScore > assigned[i].pickScore + assigned[j].pickScore + 0.05) {
-          assigned[i] = { slot: slots[i], p: pj, score: ri.score, pickScore: ri.pickScore, wf: ri.wf };
-          assigned[j] = { slot: slots[j], p: pi, score: rj.score, pickScore: rj.pickScore, wf: rj.wf };
-          imp = true;
-        }
-      }
-    }
-    if (!imp) break;
-  }
-  // Cross-bench foreign-vs-local swap
-  if (fCap < 50) {
-    for (let iter = 0; iter < 4; iter++) {
-      const bfList = pool.filter(p => !used.has(p.id) && isF(p));
-      const blList = pool.filter(p => !used.has(p.id) && !isF(p));
-      if (!bfList.length || !blList.length) break;
-      let bestG = 0.05, move = null;
-      for (let i = 0; i < assigned.length; i++) {
-        if (!assigned[i] || !isF(assigned[i].p)) continue;
-        let bLoc = null;
-        for (const lp of blList) {
-          const r = slotScoreJS(lp, slots[i], rotMode);
-          if (!bLoc || r.pickScore > bLoc.pickScore) bLoc = { p: lp, ...r };
-        }
-        const loss = assigned[i].pickScore - bLoc.pickScore;
-        for (let j = 0; j < assigned.length; j++) {
-          if (!assigned[j] || j === i || isF(assigned[j].p)) continue;
-          for (const bf of bfList) {
-            const r = slotScoreJS(bf, slots[j], rotMode);
-            const gain = (r.pickScore - assigned[j].pickScore) - loss;
-            if (gain > bestG) { bestG = gain; move = { i, bLoc, j, bf, r }; }
-          }
-        }
-      }
-      if (!move) break;
-      used.delete(assigned[move.i].p.id); used.delete(assigned[move.j].p.id);
-      assigned[move.i] = { slot: slots[move.i], p: move.bLoc.p, score: move.bLoc.score, pickScore: move.bLoc.pickScore, wf: move.bLoc.wf };
-      assigned[move.j] = { slot: slots[move.j], p: move.bf, score: move.r.score, pickScore: move.r.pickScore, wf: move.r.wf };
-      used.add(move.bLoc.p.id); used.add(move.bf.id);
-    }
-  }
-  const xi = assigned.filter(Boolean);
-  const bench = pool.filter(p => !used.has(p.id)).sort((a, b) => b.force - a.force);
-  const tot = xi.reduce((s, a) => s + a.score, 0);
-  const fCnt = xi.filter(a => isF(a.p)).length;
-  const wfCnt = xi.filter(a => a.wf).length;
-  const f9Players = xi.map(a => a.p).filter(p => (p.pos === 'ATA' || p.pos === 'SA') && (p.s1 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'PAS' || p.s2 === 'ARM')).map(p => p.name);
-  return { xi, bench, tot: +tot.toFixed(1), avg: xi.length ? +(tot / xi.length).toFixed(1) : 0, fCnt, wfCnt, falseNine: f9Players.length >= 2, f9Players };
+  return { xi: [], bench: [], tot: 0, avg: 0, fCnt: 0, wfCnt: 0, falseNine: false, chemistry: 100, f9Players: [] };
 }
 
 // ==================== KAMUS ISTILAH & TOOLTIP OTOMATIS (v7.1) ====================
@@ -305,7 +240,15 @@ const BADGE_TIPS = {
   GOLDEN: 'Golden Window (11–59 hari): perpanjang kontrak 3 tahun di jendela ini untuk potong gaji -12% GRATIS!',
   LOOPHOLE: 'Loophole Auto-Renew 0%: nyalakan Auto-Renew sementara untuk pemain inti ≤10 hari agar diperpanjang +180 hari dengan gaji lama (0% naik).',
   SWAP: 'Rekomendasi tukar beli target + jual pemain skuad lama (hitung net kas, selisih gaji & upgrade performa Eff).',
-  FLIP: 'Strategi beli pemain muda (17–21 thn) murah, latih 1–2 musim, lalu jual mahal (+40% counter) untuk cetak kas!'
+  FLIP: 'Strategi beli pemain muda (17–21 thn) murah, latih 1–2 musim, lalu jual mahal (+40% counter) untuk cetak kas!',
+  REFUSEDIST: 'Menolak Pindah (#23840 refusesDistance): pemain dari liga Eropa / benua lain tanpa afiliasi menolak pindah ke level liga klubmu.',
+  REFUSELVL: 'Menolak Turun Kasta (#23847 clubLevelLow): selisih level klub terlalu jauh (>2 level untuk usia <29 thn).',
+  PERSUADE: 'Bisa Dibujuk (#23850 buyPersuadable): awalnya menolak, tapi mau pindah jika ditawar >=1.5x Market Value (+2 slack level).',
+  CEIL2X: 'Di Atas Plafon Force (#23839 buyerForceCeiling): membutuhkan tawaran 2.0x Market Value.',
+  KEYLOCK: 'Dikunci Klub AI (#23919): bintang utama / wonderkid klub AI yang sehat finansial — otomatis diperpanjang sebelum Bosman.',
+  YSCOUT: 'Olheiro da Base (#23984): U-21 berpotensi besar (gap >=10) yang bisa dibajak instan seharga 1.5x MV (kuota 2/musim).',
+  INJDISC: 'Diskon Cedera (#3542 INJURED_SALE): harga pasar sedang terpotong -10% s.d. -50% karena cedera.',
+  BUG343: 'Bug Engine v1.2.0 (#34992): slot ke-11 pada formasi 3-4-3 memakai rule 18 yang jatuh ke sektor X (ATK hilang -33%)!'
 };
 function tipFor(code) {
   const k = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -587,23 +530,27 @@ function openPlayerDrawer(kind, id) {
       </div>
 
       <div class="drawer-sec">
-        <h3>⚡ Kondisi, Statistik &amp; Ruang Ganti</h3>
+        <h3>⚡ Kondisi, Chemistry &amp; Ruang Ganti (#21546 / #21995)</h3>
         <div class="drawer-kv"><span>Energi / Stamina</span>${energyPillHtml(p.energy)}</div>
-        <div class="drawer-kv"><span>Statistik Musim Ini</span><span class="mono"><b>${p.gamesPlayed}</b> laga • <b>${p.goals}</b> gol • <b>${p.assists}</b> asis • Avg <b>${p.avgRating}</b></span></div>
-        <div class="drawer-kv"><span>Mood &amp; Role v9</span><span class="badge ${p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'happy' ? 'b-good' : 'b-info')}">${p.mood.toUpperCase()} · ${esc(p.moodReason)}</span></div>
+        <div class="drawer-kv"><span>Chemistry Integrasi &amp; Ritme</span><span class="mono">Integrasi <b class="c-green">${p.integration ?? 100}%</b> • Ritme 3 Laga <b>${Math.round((p.rhythm ?? 1) * 100)}%</b> <span class="c-muted">(rx=${p.rx ?? 7})</span></span></div>
+        <div class="drawer-kv"><span>Statistik Musim Ini</span><span class="mono"><b>${p.gamesPlayed}</b> laga (${p.seasonMinutes || 0} mnt) • <b>${p.goals}</b> gol • <b>${p.assists}</b> asis • Avg <b>${p.avgRating}</b></span></div>
+        <div class="drawer-kv"><span>Mood &amp; Role v9</span><span class="badge ${p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'warn' ? 'b-warn' : 'b-info')}">${p.mood.toUpperCase()} · ${esc(p.moodReason)}</span></div>
         <div class="drawer-kv"><span>Menit Main (Target ${p.reqPct}%)</span>${minutesQuotaBarHtml(p.minPct, p.reqPct, p.mood)}</div>
+        ${(p.minsDeficit > 0 && !p.moodImmune) ? `<div class="drawer-kv"><span>Defisit Menit Main</span><b class="mono c-amber">Kurang ${p.minsDeficit} mnt (~${p.gamesDeficit} laga penuh)</b></div>` : ''}
         ${cardsList.length ? `<div class="drawer-kv"><span>Kartu Aktif</span><span class="mono c-amber">${esc(cardsList.join(' · '))}</span></div>` : ''}
       </div>
 
       <div class="drawer-sec">
-        <h3>💰 Kontrak &amp; Proyeksi Nilai Jual</h3>
+        <h3>💰 Kontrak, Salary Cut &amp; Nilai Jual (#3541 / #21000)</h3>
         <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${p.contractDays <= 10 ? 'c-red' : (p.contractDays <= 59 ? 'c-green' : '')}">${p.contractDays} hari</b></div>
         <div class="drawer-kv"><span>Status Golden Window (11–59d)</span><span class="mono">${p.contractDays <= 10 ? '<b class="c-red">Zona Jebakan — pakai Loophole 0%!</b>' : (p.contractDays <= 59 ? '<b class="c-green">AKTIF SEKARANG (-12% gaji!)</b>' : `Masuk dalam ~${toGolden} hari`)}</span></div>
-        <div class="drawer-kv"><span>Gaji Bulanan</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
-        ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan (#20882)</span><b class="mono c-sky">Hemat ekstra -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
-        <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)}</span></div>
-        <div class="drawer-kv"><span>Est. Cair Jual (Real 1.25x)</span><b class="mono c-green">${fmtM(p.estRealSale)} <span class="c-muted">(Ctr +40%: ${fmtM(p.estCounter40)})</span></b></div>
-        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (2.5–3x)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
+        <div class="drawer-kv"><span>Gaji Bulanan (Lantai ${Math.round((p.salaryFloorFactor || 0.85) * 100)}%)</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
+        <div class="drawer-kv"><span>Kuota Potong Gaji (salaryCuts)</span><span class="mono ${p.salaryCutLocked ? 'c-red' : 'c-green'}"><b>${p.salaryCuts || 0}/2</b> dipakai ${p.salaryCutLocked ? '(TERKUNCI — menolak potong lagi!)' : '(Masih bisa negosiasi potong)'}</span></div>
+        ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan (#3541)</span><b class="mono c-sky">Lantai 0.72x → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
+        <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)} ${p.injured ? `<b class="c-red">(Diskon cedera ${Math.round((p.injurySaleMul || 1) * 100)}%)</b>` : ''}</span></div>
+        <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +39%: ${fmtM(p.estCounter39)} · +40%: ${fmtM(p.estCounter40)}</span></b></div>
+        <div class="drawer-kv"><span>Biaya Putus Kontrak (${Math.round((p.termFeeRate || 0.5) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
+        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (1.4x × 1.39x)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
       </div>
 
       <div class="pill-row mt-12">
@@ -634,6 +581,7 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Development</span><b class="mono c-green">${y.development}%</b></div>
         <div class="mini-bar-bg" style="height:9px;margin:4px 0 8px"><div class="mini-bar-fill" style="width:${Math.min(100, y.development)}%;background:var(--green)"></div></div>
         <div class="drawer-kv"><span>Bonus Tembus Plafon Klub (v9)</span><b class="mono c-sky">${y.ceilBonus ? '+' + y.ceilBonus + ' PotCap' : 'Belum (butuh ★7+ & Dev ≥60)'}</b></div>
+        <div class="drawer-kv"><span>Est. Tawaran Mega Eropa (#23886)</span><b class="mono ${y.isMegaProspect ? 'c-green' : 'c-muted'}">${fmtM(y.estMegaOffer || 0)} ${y.isMegaProspect ? '🔥 (Prospek ★9+)' : ''}</b></div>
         <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></div>
         <div class="drawer-kv"><span>Skor Pipeline Akademi</span><b class="mono">${y.pipeScore}</b></div>
       </div>

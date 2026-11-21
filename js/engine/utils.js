@@ -1,7 +1,9 @@
 /**
  * LigaFoot Optimizer Web Engine — utils.js
- * Utilitas aman (zero-crash), translator ID/EN, tanggal kalender UTC eksak,
- * parser baris save LigaFoot, dan adapter static_db kompak (.min.json.gz).
+ * Port eksak 1:1 dari bytecode Hermes v1.2.0 (`disasm_v9.hasm`, `economyV = 9`):
+ * helper matematika, konversi tanggal, PAYROLL_REF (#19856), teamLevelOf (#21518),
+ * countryGroup/hasAffinity (#21513/#21517), parser tuple statement (#21866),
+ * & pembacaan static_db v2 (compact array [name, short, country, level, rep]).
  */
 (function (root) {
   'use strict';
@@ -9,358 +11,336 @@
   const LF = (root.LFEngine = root.LFEngine || {});
   const C = LF.config;
 
-  function posEn(code) {
-    const c = String(code || '').toUpperCase();
-    return C.POS_EN[c] || c;
+  function safeNum(val, fallback = 0.0) {
+    if (val === null || val === undefined || typeof val === 'boolean' || val === '') {
+      return fallback;
+    }
+    const n = Number(val);
+    return Number.isFinite(n) ? n : fallback;
   }
 
-  function footEn(code) {
-    const c = String(code || '').toUpperCase();
-    return C.FOOT_EN[c] || c;
-  }
-
-  function skillEn(code) {
-    const c = String(code || '').toUpperCase();
-    return C.SKILL_EN[c] || c;
-  }
-
-  function formEn(fk) {
-    return C.FORM_EN[fk] || fk;
+  function safeInt(val, fallback = 0) {
+    if (val === null || val === undefined || typeof val === 'boolean' || val === '') {
+      return fallback;
+    }
+    const n = Number(val);
+    return Number.isFinite(n) ? Math.trunc(n) : fallback;
   }
 
   function clamp(val, lo, hi) {
-    const v = Number(val);
-    if (!Number.isFinite(v)) return lo;
-    return Math.max(lo, Math.min(hi, v));
+    return Math.max(lo, Math.min(hi, val));
   }
 
-  function safeNum(val, defVal = 0.0) {
-    if (val === null || val === undefined || typeof val === 'boolean' || val === '') return defVal;
-    const v = Number(val);
-    return Number.isFinite(v) ? v : defVal;
+  function roundTo(val, digits = 2) {
+    const f = Math.pow(10, digits);
+    return Math.round(val * f) / f;
   }
 
-  function pyRound(val) {
-    const v = Number(val);
-    if (!Number.isFinite(v)) return 0;
-    const fl = Math.floor(v);
-    const diff = v - fl;
-    if (Math.abs(diff - 0.5) < 1e-12) {
-      return (fl % 2 === 0) ? fl : fl + 1;
+  function fmtMoney(v) {
+    const n = Number(v) || 0;
+    const sg = n < 0 ? '-' : '';
+    const a = Math.abs(n);
+    if (a >= 1e6) return sg + (a / 1e6).toFixed(2) + 'M';
+    if (a >= 1e3) return sg + Math.round(a / 1e3) + 'K';
+    return sg + Math.round(a);
+  }
+
+  function posCategory(posCode) {
+    return C.POS_CATEGORY[posCode] !== undefined ? C.POS_CATEGORY[posCode] : 2;
+  }
+
+  function posEn(posCode) {
+    if (!posCode) return '-';
+    return C.POS_PT_TO_EN[posCode] || posCode;
+  }
+
+  function skillEn(skillCode) {
+    if (!skillCode) return '';
+    return (C.SKILL_PT_TO_EN[skillCode] || skillCode).trim();
+  }
+
+  function getDeclineAge(posCode) {
+    const cat = posCategory(posCode);
+    return C.DECLINE_AGE_BY_CAT[cat] !== undefined ? C.DECLINE_AGE_BY_CAT[cat] : 33;
+  }
+
+  function getSellWarnAge(posCode) {
+    const cat = posCategory(posCode);
+    return C.SELL_WARN_AGE_BY_CAT[cat] !== undefined ? C.SELL_WARN_AGE_BY_CAT[cat] : 31;
+  }
+
+  // Bytecode #19854 reputationLevel: <20->0, <35->1, <50->2, <68->3, <82->4, >=82->5
+  function reputationLevel(rep) {
+    const r = safeNum(rep, 50);
+    if (r < 20) return 0;
+    if (r < 35) return 1;
+    if (r < 50) return 2;
+    if (r < 68) return 3;
+    if (r < 82) return 4;
+    return 5;
+  }
+
+  // Bytecode #19856 payrollRef (TAHUNAN / ANNUAL)
+  function payrollRef(country = 'OTHER', division = 1, repLvl = 0) {
+    const c = String(country || '').toUpperCase();
+    const div = safeInt(division, 1);
+    const rLv = safeInt(repLvl, 0);
+    if (div === 1 && rLv >= 4) {
+      const bigTbl = C.PAYROLL_REF_BIG[c] || C.PAYROLL_REF_BIG.OTHER;
+      const bigVal = bigTbl[Math.min(5, rLv)];
+      if (bigVal) return bigVal;
     }
-    return Math.round(v);
+    const tbl = C.PAYROLL_REF[c] || C.PAYROLL_REF.OTHER;
+    if (div === 0) return Math.round((tbl[4] || 5900000) * 0.5);
+    return tbl[div] || tbl[2] || 18700000;
   }
 
-  function safeInt(val, defVal = 0) {
-    return Math.round(safeNum(val, defVal));
+  // Legacy wrapper agar pemanggil lama tetap mendapatkan nilai PAYROLL_REF tahunan eksak
+  function estimatePayrollRef(division = 1, _currentPayroll = 0, country = 'OTHER', repLvl = 0) {
+    return payrollRef(country, division, repLvl);
   }
 
-  function roundTo(val, decimals = 1) {
-    const p = Math.pow(10, decimals);
-    return Math.round((safeNum(val, 0) + Number.EPSILON) * p) / p;
+  // Bytecode #21513 countryGroup
+  function countryGroup(code) {
+    const c = String(code || '').toUpperCase();
+    const groups = C.COUNTRY_GROUPS || {};
+    for (const [gId, list] of Object.entries(groups)) {
+      if (Array.isArray(list) && list.includes(c)) return Number(gId);
+    }
+    return 5;
   }
 
-  function fmtMoney(val) {
-    const v = safeNum(val, 0.0);
-    const sign = v < 0 ? '-' : '';
-    const av = Math.abs(v);
-    if (av >= 1e6) return `${sign}${(av / 1e6).toFixed(2)}M`;
-    if (av >= 1e3) return `${sign}${Math.round(av / 1e3)}K`;
-    return `${sign}${Math.round(av)}`;
+  // Bytecode #21515 sameCountry (UK_CODES diperlakukan satu negara)
+  function sameCountry(a, b) {
+    const ca = String(a || '').toUpperCase();
+    const cb = String(b || '').toUpperCase();
+    if (!ca || !cb) return false;
+    if (ca === cb) return true;
+    const uk = C.UK_CODES || [];
+    return uk.includes(ca) && uk.includes(cb);
   }
 
-  /**
-   * Parse tanggal ISO "YYYY-MM-DD" secara murni UTC (bebas bug timezone/DST).
-   * Mengembalikan timestamp UTC ms (number) atau null.
-   */
-  function parseIsoDateMs(dateStr) {
-    if (!dateStr) return null;
-    const s = String(dateStr).slice(0, 10);
+  // Bytecode #21517 hasAffinity
+  function hasAffinity(a, b) {
+    const ca = String(a || '').toUpperCase();
+    const cb = String(b || '').toUpperCase();
+    if (!ca || !cb) return false;
+    if (sameCountry(ca, cb)) return true;
+    for (const cl of (C.AFFINITY_CLUSTERS || [])) {
+      if (cl.includes(ca) && cl.includes(cb)) return true;
+    }
+    return false;
+  }
+
+  // Bytecode #21518 teamLevelOf
+  function teamLevelOf(team, division = 1, staticLevel = null) {
+    const lv = safeInt(team && team.level, safeInt(staticLevel, 0));
+    if (lv > 0) {
+      const divBonus = (safeInt(division, 1) === 1) ? 1 : 0;
+      return clamp(lv + divBonus, 1, 22);
+    }
+    const rep = safeNum(team && team.reputation, 50);
+    return clamp(Math.round(rep / 5), 1, 20);
+  }
+
+  // Bytecode #21490 getForeignLimit
+  function getForeignLimit(country) {
+    const c = String(country || '').toUpperCase();
+    const lims = C.FOREIGN_LIMITS || {};
+    return lims[c] || lims.DEFAULT || { max: 9, field: 7 };
+  }
+
+  // Bytecode #21000 terminationFeeRate
+  function terminationFeeRate(daysLeft) {
+    const d = Math.max(0, safeInt(daysLeft, 0));
+    for (const t of (C.TERMINATION_FEE_TIERS || [])) {
+      if (d <= t.maxDays) return t.rate;
+    }
+    return 0.70;
+  }
+
+  // Bytecode #20892/#20893 injuryTier & injurySaleFactor
+  function injuryTier(days) {
+    const d = safeInt(days, 0);
+    if (d <= 0) return 'none';
+    const cfg = C.INJURED_SALE || { minorMaxDays: 14, moderateMaxDays: 45 };
+    if (d <= cfg.minorMaxDays) return 'minor';
+    if (d <= cfg.moderateMaxDays) return 'moderate';
+    return 'severe';
+  }
+
+  function injurySaleFactor(days) {
+    const tier = injuryTier(days);
+    const cfg = C.INJURED_SALE || { minorFactor: 0.90, moderateFactor: 0.72, severeFactor: 0.50 };
+    if (tier === 'none') return 1.0;
+    if (tier === 'minor') return cfg.minorFactor;
+    if (tier === 'moderate') return cfg.moderateFactor;
+    return cfg.severeFactor;
+  }
+
+  // Bytecode #20901 retirementChance
+  function retirementChance(age, pos, force) {
+    const a = safeInt(age, 25);
+    const f = safeInt(force, 50);
+    const startAge = (pos === 'G') ? 37 : 35;
+    if (a < startAge) return 0;
+    const yearsOver = a - startAge;
+    let chance = 0.15 + yearsOver * 0.18;
+    if (f < 25) chance += 0.20;
+    else if (f < 40) chance += 0.10;
+    return Math.min(0.95, roundTo(chance, 2));
+  }
+
+  // Bytecode #20496 loanBuyDecisionChance (probabilitas AI menebus pemain pinjaman di akhir musim)
+  function loanBuyDecisionChance(p) {
+    if (!p || !p.loanedFrom || safeNum(p.loanBuyFee, 0) <= 0) return 0;
+    const cfg = C.LOAN_OPTION || { baseChance: 0.35, playedBonus: 0.25, goalsBonus: 0.20, ratingBonus: 0.15, highFeePenalty: 0.25 };
+    let chance = cfg.baseChance;
+    const mins = safeNum(p.seasonMinutes, 0);
+    if (mins >= 900) chance += cfg.playedBonus;
+    else if (mins >= 450) chance += cfg.playedBonus * 0.5;
+    const goals = safeInt(p.seasonGoals, 0);
+    if (goals >= 8) chance += cfg.goalsBonus;
+    else if (goals >= 4) chance += cfg.goalsBonus * 0.5;
+    const ratings = Array.isArray(p.matchRatings) ? p.matchRatings : [];
+    if (ratings.length > 0) {
+      const avgR = ratings.reduce((s, x) => s + safeNum(x, 6.0), 0) / ratings.length;
+      if (avgR >= 7.0) chance += cfg.ratingBonus;
+    }
+    const mv = Math.max(1, safeNum(p.marketValue, 1));
+    if (safeNum(p.loanBuyFee, 0) > mv * 1.3) chance -= cfg.highFeePenalty;
+    return clamp(roundTo(chance, 2), 0.05, 0.90);
+  }
+
+  // Bytecode #19869 fixedSponsorParcel
+  function fixedSponsorParcel(fs) {
+    if (!fs || typeof fs !== 'object') return 0;
+    const paid = safeInt(fs.paid, 0);
+    const total = safeNum(fs.total, 0);
+    if (paid >= 12 || total <= 0) return 0;
+    const cumNext = Math.round((total * (paid + 1)) / 12);
+    const cumPrev = Math.round((total * paid) / 12);
+    return Math.max(0, cumNext - cumPrev);
+  }
+
+  // Bytecode #21866 statement row parser (mendukung tuple [date, cat, amt, ...meta] & object fallback)
+  const EXPENSE_CATEGORIES = new Set([
+    'salaries', 'purchases', 'stadium', 'ct', 'termination', 'loans', 'loanInterest', 'youthCoach',
+  ]);
+
+  const STMT_CAT_LABELS = {
+    tickets: 'Tiket Kandang',
+    sponsors: 'Sponsor & TV',
+    prize: 'Hadiah Kompetisi',
+    sales: 'Penjualan Pemain',
+    shop: 'Club Shop (Jersey)',
+    members: 'Iuran Member (Sócio)',
+    naming: 'Naming Rights Stadion',
+    fines: 'Denda Pemain',
+    salaries: 'Gaji Skuad',
+    purchases: 'Pembelian Pemain',
+    stadium: 'Stadion (Ops / Konstruksi)',
+    ct: 'Training Center (CT)',
+    termination: 'Pesangon / Pemutusan',
+    loans: 'Cicilan Pinjaman Bank',
+    loanInterest: 'Bunga Pinjaman Bank',
+    youthCoach: 'Pelatih Akademi',
+  };
+
+  function parseStatementRow(row) {
+    if (!row) return null;
+    if (Array.isArray(row) && row.length >= 3) {
+      const date = String(row[0] || '').slice(0, 10);
+      const cat = String(row[1] || 'other');
+      const rawAmt = Math.abs(safeNum(row[2], 0));
+      const isExpense = EXPENSE_CATEGORIES.has(cat);
+      const signedAmt = isExpense ? -rawAmt : rawAmt;
+      const dayStr = date.slice(8, 10);
+      const isCapEx = (cat === 'purchases' || cat === 'termination' || cat === 'sales')
+        || ((cat === 'stadium' || cat === 'ct') && dayStr !== '02' && rawAmt > 200000);
+      const baseLabel = STMT_CAT_LABELS[cat] || cat;
+      const extraMeta = row[3] && typeof row[3] === 'string' ? ` (${row[3]})` : '';
+      return {
+        date,
+        category: cat,
+        label: baseLabel + extraMeta,
+        rawAmount: rawAmt,
+        amount: signedAmt,
+        isExpense,
+        isCapEx,
+      };
+    }
+    if (typeof row === 'object') {
+      const date = String(row.date || row.d || '').slice(0, 10);
+      const cat = String(row.category || row.type || row.k || row.label || row.desc || '-');
+      const amt = safeNum(('amount' in row) ? row.amount : row.v, 0);
+      const isExpense = amt < 0 || EXPENSE_CATEGORIES.has(cat);
+      const rawAmt = Math.abs(amt);
+      const signedAmt = isExpense && amt > 0 ? -rawAmt : amt;
+      const dayStr = date.slice(8, 10);
+      const isCapEx = (cat === 'purchases' || cat === 'termination' || cat === 'sales')
+        || ((cat === 'stadium' || cat === 'ct') && dayStr !== '02' && rawAmt > 200000);
+      return {
+        date,
+        category: cat,
+        label: STMT_CAT_LABELS[cat] || String(row.label || row.desc || cat),
+        rawAmount: rawAmt,
+        amount: signedAmt,
+        isExpense,
+        isCapEx,
+      };
+    }
+    return null;
+  }
+
+  function parseIsoDateUtc(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const s = dateStr.trim().slice(0, 10);
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
     if (!m) return null;
-    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-    const ms = Date.UTC(y, mo - 1, d);
+    const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     return Number.isFinite(ms) ? ms : null;
   }
 
-  function msToIsoDate(ms) {
-    const d = new Date(ms);
-    const y = d.getUTCFullYear();
-    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const da = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${mo}-${da}`;
+  function daysBetweenDates(d1Str, d2Str) {
+    const ms1 = parseIsoDateUtc(d1Str);
+    const ms2 = parseIsoDateUtc(d2Str);
+    if (ms1 === null || ms2 === null) return 9999;
+    return Math.abs(Math.round((ms2 - ms1) / 86400000));
   }
 
-  function daysBetweenIso(fromStr, toStr) {
-    const a = parseIsoDateMs(fromStr);
-    const b = parseIsoDateMs(toStr);
-    if (a === null || b === null) return null;
-    return Math.round((b - a) / 86400000);
-  }
-
-  /**
-   * Ubah angka hari kalender LigaFoot (1 Januari = hari 0; 2028-03-14 = hari 73)
-   * menjadi tanggal YYYY-MM-DD eksak (otomatis pilih tahun ini atau tahun lalu).
-   */
-  function formatMatchDay(rawDay, seasonStartDate = null, currentDate = null) {
-    if (rawDay === null || rawDay === undefined || rawDay === '') return '-';
-    const s = String(rawDay).trim();
-    if (s.length >= 8 && s.includes('-')) return s.slice(0, 10);
-
-    const dayNum = Math.trunc(Number(s));
-    if (!Number.isFinite(dayNum)) return s.slice(0, 10);
-
-    const curMs = parseIsoDateMs(currentDate);
-    if (curMs !== null && dayNum >= 0 && dayNum <= 366) {
-      const curYear = new Date(curMs).getUTCFullYear();
-      const jan1Cur = Date.UTC(curYear, 0, 1);
-      const curDoy = Math.round((curMs - jan1Cur) / 86400000);
-      if (dayNum <= curDoy + 2) {
-        return msToIsoDate(jan1Cur + dayNum * 86400000);
+  function estimateDivisionFromLeague(leagueId, worldComps = null) {
+    if (!leagueId) return 1;
+    const lid = String(leagueId);
+    if (worldComps && typeof worldComps === 'object' && worldComps[lid]) {
+      const comp = worldComps[lid];
+      if (comp && typeof comp === 'object') {
+        const div = safeInt(comp.division !== undefined ? comp.division : comp.tier, 0);
+        if (div >= 1 && div <= 4) return div;
       }
-      const jan1Prev = Date.UTC(curYear - 1, 0, 1);
-      return msToIsoDate(jan1Prev + dayNum * 86400000);
     }
-
-    const baseMs = parseIsoDateMs(seasonStartDate);
-    if (baseMs !== null) {
-      return msToIsoDate(baseMs + dayNum * 86400000);
+    const low = lid.toLowerCase();
+    for (const d of [1, 2, 3, 4]) {
+      if (
+        low.endsWith(`:${d}`) ||
+        low.endsWith(`_${d}`) ||
+        low.endsWith(`-${d}`) ||
+        low.includes(`div${d}`) ||
+        low.includes(`serie_${['a', 'b', 'c', 'd'][d - 1]}`)
+      ) {
+        return d;
+      }
     }
-    return `Hari ${dayNum}`;
-  }
-
-  function translateCompName(name, compId = '') {
-    const raw = String(name || '').trim();
-    const cid = String(compId || '').toLowerCase();
-    const low = raw.toLowerCase();
-
-    if (!raw || low === 'league') {
-      if (cid.includes('indonesia1')) return 'Liga 1 Indonesia';
-      if (cid.includes('indonesia2')) return 'Liga 2 Indonesia';
-      return 'Liga';
-    }
-
-    const codeMap = {
-      indonesia1: 'Super League Indonesia',
-      indonesia2: 'Liga 2 Indonesia',
-      'cont:afc2': 'AFC Champions League Two',
-      'cont:afc1': 'AFC Champions League Elite',
-      'cup:indonesia:presiden': 'Piala Presiden',
-    };
-    if (codeMap[low]) return codeMap[low];
-    if (codeMap[cid]) return codeMap[cid];
-
-    const exactMap = {
-      'super league da indonésia': 'Super League Indonesia',
-      'liga dos campeões da afc two': 'AFC Champions League Two',
-      'liga dos campeões da afc': 'AFC Champions League',
-      'liga dos campeões da uefa': 'UEFA Champions League',
-      'liga europa da uefa': 'UEFA Europa League',
-      'liga conferência da uefa': 'UEFA Conference League',
-      'copa libertadores': 'Copa Libertadores',
-      'copa sul-americana': 'Copa Sudamericana',
-      'mundial de clubes': 'Piala Dunia Antarklub',
-    };
-    if (exactMap[low]) return exactMap[low];
-
-    let out = raw;
-    const reps = [
-      [/\bLiga dos Campeões da\b/gi, 'Liga Champions'],
-      [/\bLiga dos Campeões\b/gi, 'Liga Champions'],
-      [/\bSupercopa da\b/gi, 'Piala Super'],
-      [/\bSupercopa do\b/gi, 'Piala Super'],
-      [/\bSupercopa de\b/gi, 'Piala Super'],
-      [/\bCopa da\b/gi, 'Piala'],
-      [/\bCopa do\b/gi, 'Piala'],
-      [/\bCopa de\b/gi, 'Piala'],
-      [/\bTaça da\b/gi, 'Piala'],
-      [/\bTaça do\b/gi, 'Piala'],
-      [/\bTaça de\b/gi, 'Piala'],
-      [/\bCampeonato\b/gi, 'Liga'],
-      [/\bda Indonésia\b/gi, 'Indonesia'],
-      [/\bdo Brasil\b/gi, 'Brasil'],
-      [/\bda Inglaterra\b/gi, 'Inggris'],
-      [/\bda Espanha\b/gi, 'Spanyol'],
-      [/\bda Itália\b/gi, 'Italia'],
-      [/\bda Alemanha\b/gi, 'Jerman'],
-      [/\bda França\b/gi, 'Prancis'],
-      [/\bPré-temporada\b/gi, 'Pramusim'],
-      [/\bAmistoso\b/gi, 'Uji Coba'],
-    ];
-    for (const [re, rep] of reps) {
-      out = out.replace(re, rep);
-    }
-    return out.trim();
-  }
-
-  function translateRoundName(rn) {
-    const s = String(rn || '').trim();
-    if (!s) return '';
-
-    let m = /^(\d+)\s*[ªºa]?\s*rodada$/i.exec(s);
-    if (m) return `Pekan ${m[1]}`;
-    m = /^rodada\s*(\d+)$/i.exec(s);
-    if (m) return `Pekan ${m[1]}`;
-
-    let out = s;
-    const reps = [
-      [/\bQuartas de final\b/gi, 'Perempat Final'],
-      [/\bOitavas de final\b/gi, '16 Besar'],
-      [/\bSemifinais\b/gi, 'Semifinal'],
-      [/\bFase de grupos\b/gi, 'Fase Grup'],
-      [/\bFase preliminar\b/gi, 'Babak Kualifikasi'],
-      [/\bDisputa de 3º lugar\b/gi, 'Perebutan Juara 3'],
-      [/\bTerceiro lugar\b/gi, 'Perebutan Juara 3'],
-      [/\b3º lugar\b/gi, 'Perebutan Juara 3'],
-      [/\bPré-temporada\b/gi, 'Pramusim'],
-      [/\bAmistoso\b/gi, 'Uji Coba'],
-      [/\(\s*ida\s*\)/gi, '(Leg 1)'],
-      [/\(\s*volta\s*\)/gi, '(Leg 2)'],
-      [/\bida\b/gi, 'Leg 1'],
-      [/\bvolta\b/gi, 'Leg 2'],
-    ];
-    for (const [re, rep] of reps) {
-      out = out.replace(re, rep);
-    }
-    return out.trim();
-  }
-
-  function translateSponsorSlot(slot) {
-    const s = String(slot || '').trim().toLowerCase();
-    const map = {
-      master: 'Utama (Master)',
-      material: 'Apparel / Jersey',
-      secundario: 'Sekunder',
-      secondary: 'Sekunder',
-      manga: 'Lengan',
-      costas: 'Punggung',
-    };
-    return map[s] || slot || 'Sponsor';
-  }
-
-  function translatePhaseName(phase) {
-    const s = String(phase || '').trim().toLowerCase();
-    const map = {
-      season: 'Musim Berjalan',
-      preseason: 'Pramusim',
-      offseason: 'Jeda Musim',
-      end: 'Akhir Musim',
-      transfer: 'Bursa Transfer',
-    };
-    return map[s] || String(phase || '-');
-  }
-
-  /**
-   * Parser referensi teruji untuk playerDynamic (user = object, AI = array[6..7]).
-   */
-  function parseDynamicRow(row) {
-    if (row && typeof row === 'object' && !Array.isArray(row)) {
-      return [row.id || null, { ...row }];
-    }
-    if (Array.isArray(row) && row.length >= 6) {
-      const extra = (row.length > 6 && row[6] && typeof row[6] === 'object' && !Array.isArray(row[6]))
-        ? row[6]
-        : {};
-      const d = {
-        ...extra,
-        id: row[0],
-        age: row[1],
-        force: row[2],
-        contractYears: row[3],
-        salary: row[4],
-        marketValue: row[5],
-      };
-      return [row[0], d];
-    }
-    return [null, null];
-  }
-
-  /**
-   * Parser referensi teruji untuk extraRows (regen/transfer: object atau array[14..16]).
-   */
-  function parseExtraRow(row) {
-    if (row && typeof row === 'object' && !Array.isArray(row)) {
-      const d = { ...row, _source: 'regen' };
-      return [d.id || null, d];
-    }
-    if (Array.isArray(row) && row.length >= 14) {
-      const extra = (row.length > 15 && row[15] && typeof row[15] === 'object' && !Array.isArray(row[15]))
-        ? row[15]
-        : {};
-      const d = {
-        id: row[0],
-        name: row[1],
-        position: row[2],
-        age: row[3],
-        nationality: row[4],
-        foot: row[5],
-        force: row[6],
-        potential: row[7],
-        skill1: row[8],
-        skill2: row[9],
-        star: row[10],
-        salary: row[11],
-        marketValue: row[12],
-        contractYears: row[13],
-        photo: row.length > 14 ? row[14] : '',
-        _source: 'regen',
-        ...extra,
-      };
-      return [d.id || null, d];
-    }
-    return [null, null];
-  }
-
-  /**
-   * Adapter universal Static DB: mendukung baik objek JSON asli ligafoot_static_db.json
-   * MAUPUN format array kompak static_db.min.json.gz:
-   *   Player: ["Name", "Pos", "S1", "S2", "Nat", "Foot", age, force, starInt, hashInt]
-   *   Club:   ["Name", "Short", "Country"]
-   */
-  function getStaticPlayer(staticPlayers, pid) {
-    if (!staticPlayers || !pid) return {};
-    const entry = staticPlayers[pid];
-    if (!entry) return {};
-    if (Array.isArray(entry)) {
-      return {
-        id: pid,
-        name: entry[0] || pid,
-        pos: entry[1] || '',
-        s1: entry[2] || '',
-        s2: entry[3] || '',
-        nationality: entry[4] || '',
-        foot: entry[5] || 'D',
-        age: entry[6],
-        force: entry[7],
-        star: Boolean(entry[8]),
-        hash: entry[9] || 0,
-      };
-    }
-    return entry;
-  }
-
-  function getStaticClub(clubsMeta, cid) {
-    if (!clubsMeta || !cid) return {};
-    const entry = clubsMeta[cid];
-    if (!entry) return {};
-    if (Array.isArray(entry)) {
-      return {
-        id: cid,
-        name: entry[0] || cid,
-        short: entry[1] || '',
-        country: entry[2] || '',
-      };
-    }
-    return entry;
+    return 1;
   }
 
   function normalizeTicketMul(rawMul) {
     const def = { geral: 1.0, arquibancada: 1.0, cadeiras: 1.0, camarotes: 1.0 };
     if (typeof rawMul === 'number') {
-      const v = clamp(rawMul, 0.5, 2.0);
+      const v = clamp(safeNum(rawMul, 1.0), 0.5, 2.0);
       return { geral: v, arquibancada: v, cadeiras: v, camarotes: v };
     }
-    if (rawMul && typeof rawMul === 'object') {
+    if (rawMul && typeof rawMul === 'object' && !Array.isArray(rawMul)) {
       return {
         geral: clamp(safeNum(rawMul.geral, 1.0), 0.5, 2.0),
         arquibancada: clamp(safeNum(rawMul.arquibancada, 1.0), 0.5, 2.0),
@@ -371,52 +351,208 @@
     return def;
   }
 
-  function estimateDivisionFromLeague(leagueId, worldComps = null) {
-    if (worldComps && typeof worldComps === 'object' && worldComps[leagueId]) {
-      const meta = (worldComps[leagueId] && worldComps[leagueId].meta) || {};
-      const d = safeInt(meta.div || meta.division || meta.tier, 0);
-      if (d >= 1 && d <= 4) return d;
+  function formatMatchDay(rawVal, seasonStartDate = null, currentDate = null) {
+    if (rawVal === null || rawVal === undefined || rawVal === '') return '-';
+    if (typeof rawVal === 'string') {
+      const s = rawVal.trim();
+      if (s.length >= 10 && s[4] === '-' && s[7] === '-') return s.slice(0, 10);
+      if (/^\d+$/.test(s)) rawVal = Number(s);
+      else return s;
     }
-    const lid = String(leagueId || '').toLowerCase();
-    const letters = ['a', 'b', 'c', 'd'];
-    for (let d = 1; d <= 4; d++) {
-      if (lid.endsWith(String(d)) || lid.includes(`div${d}`) || lid.includes(`serie${letters[d - 1]}`)) {
-        return d;
+    if (typeof rawVal === 'number') {
+      const dayInt = Math.trunc(rawVal);
+      if (seasonStartDate) {
+        const ms = parseIsoDateUtc(seasonStartDate);
+        if (ms !== null) {
+          const dt = new Date(ms + dayInt * 86400000);
+          return dt.toISOString().slice(0, 10);
+        }
       }
+      if (currentDate && String(currentDate).length >= 4) {
+        const yr = Number(String(currentDate).slice(0, 4));
+        if (Number.isFinite(yr)) {
+          const ms = Date.UTC(yr, 0, 1);
+          const dt = new Date(ms + dayInt * 86400000);
+          return dt.toISOString().slice(0, 10);
+        }
+      }
+      return `Hari ke-${dayInt}`;
     }
-    return 1;
+    return String(rawVal);
   }
 
-  function estimatePayrollRef(division, teamPayroll) {
-    const baseByDiv = { 1: 2200000, 2: 900000, 3: 400000, 4: 200000 };
-    return Math.max(safeNum(teamPayroll, 0), baseByDiv[division] || 1500000);
+  function translatePhaseName(phaseStr) {
+    if (!phaseStr) return '-';
+    const p = String(phaseStr).trim().toLowerCase();
+    const mapping = {
+      regular: 'Musim Reguler',
+      preseason: 'Pra-Musim',
+      pre_season: 'Pra-Musim',
+      offseason: 'Akhir Musim',
+      off_season: 'Akhir Musim',
+      knockout: 'Fase Gugur',
+      playoffs: 'Play-off',
+      finals: 'Final',
+      group: 'Fase Grup',
+      groups: 'Fase Grup',
+    };
+    return mapping[p] || String(phaseStr);
+  }
+
+  function translateCompName(compStr, compId = '') {
+    const raw = String(compStr || compId || '').trim();
+    if (!raw) return 'Kompetisi';
+    const low = raw.toLowerCase();
+
+    if (low.startsWith('league:')) {
+      const parts = raw.split(':');
+      const iso = parts[1] ? parts[1].toUpperCase() : '';
+      const div = parts[2] || '1';
+      return `Liga ${iso} Divisi ${div}`;
+    }
+    if (low.startsWith('cup:')) {
+      const parts = raw.split(':');
+      const iso = parts[1] ? parts[1].toUpperCase() : '';
+      return `Piala Domestik ${iso}`;
+    }
+    if (low.startsWith('supercup:')) {
+      const parts = raw.split(':');
+      const iso = parts[1] ? parts[1].toUpperCase() : '';
+      return `Piala Super ${iso}`;
+    }
+    if (low.startsWith('cont:')) {
+      return raw.split(':').slice(1).join(' ').toUpperCase() || 'Piala Kontinental';
+    }
+
+    let out = raw;
+    const ptIdMap = [
+      ['Campeonato', 'Liga'],
+      ['Copa Nacional', 'Piala Nasional'],
+      ['Copa ', 'Piala '],
+      ['Supercopa', 'Piala Super'],
+      ['Taça', 'Piala'],
+      ['Divisão', 'Divisi'],
+      ['Série A', 'Serie A'],
+      ['Série B', 'Serie B'],
+      ['Série C', 'Serie C'],
+      ['Série D', 'Serie D'],
+      ['Amistoso', 'Laga Persahabatan'],
+    ];
+    for (const [pt, idn] of ptIdMap) {
+      if (out.includes(pt)) out = out.split(pt).join(idn);
+    }
+    return out;
+  }
+
+  function translateRoundName(rStr) {
+    if (!rStr) return '';
+    const s = String(rStr).trim();
+    const low = s.toLowerCase();
+    const exactMap = {
+      'oitavas': '16 Besar (R16)',
+      'oitavas de final': '16 Besar (R16)',
+      'round of 16': '16 Besar (R16)',
+      'r16': '16 Besar (R16)',
+      'quartas': 'Perempat Final (QF)',
+      'quartas de final': 'Perempat Final (QF)',
+      'quarter-finals': 'Perempat Final (QF)',
+      'quarterfinals': 'Perempat Final (QF)',
+      'qf': 'Perempat Final (QF)',
+      'semi': 'Semifinal (SF)',
+      'semifinal': 'Semifinal (SF)',
+      'semi-final': 'Semifinal (SF)',
+      'semifinais': 'Semifinal (SF)',
+      'sf': 'Semifinal (SF)',
+      'final': 'Final',
+      'finais': 'Final',
+      'fase de grupos': 'Fase Grup',
+      'group stage': 'Fase Grup',
+      '3º lugar': 'Perebutan Juara 3',
+      'terceiro lugar': 'Perebutan Juara 3',
+    };
+    if (exactMap[low]) return exactMap[low];
+    if (low.startsWith('rodada ')) return 'Pekan ' + s.slice(7);
+    if (low.startsWith('round ')) return 'Pekan ' + s.slice(6);
+    if (low.startsWith('jornada ')) return 'Pekan ' + s.slice(8);
+    if (low.startsWith('ronde ')) return 'Pekan ' + s.slice(6);
+    return s;
+  }
+
+  /**
+   * Normalisasi record pemain dari static_db:
+   * Mendukung format compact array `[name, pos, foot, nat, s1, s2]` maupun object penuh.
+   */
+  function getStaticPlayer(staticPlayers, pid) {
+    if (!staticPlayers || !pid) return {};
+    const rec = staticPlayers[pid];
+    if (!rec) return {};
+    if (Array.isArray(rec)) {
+      return {
+        name: rec[0] || '',
+        pos: rec[1] || 'MC',
+        foot: rec[2] || 'D',
+        nationality: rec[3] || '',
+        s1: rec[4] || '',
+        s2: rec[5] || '',
+      };
+    }
+    return rec;
+  }
+
+  /**
+   * Normalisasi record klub dari static_db (v1 & v2):
+   * Mendukung format compact array `[name, shortName, country, level, rep]` maupun object penuh.
+   */
+  function getStaticClub(clubsMeta, cid) {
+    if (!clubsMeta || !cid) return {};
+    const rec = clubsMeta[cid];
+    if (!rec) return {};
+    if (Array.isArray(rec)) {
+      return {
+        name: rec[0] || '',
+        shortName: rec[1] || '',
+        country: rec[2] || '',
+        level: safeInt(rec[3], 0),
+        rep: safeInt(rec[4], 0),
+      };
+    }
+    return rec;
   }
 
   LF.utils = {
-    posEn,
-    footEn,
-    skillEn,
-    formEn,
-    clamp,
     safeNum,
-    pyRound,
     safeInt,
+    clamp,
     roundTo,
     fmtMoney,
-    parseIsoDateMs,
-    msToIsoDate,
-    daysBetweenIso,
+    posCategory,
+    posEn,
+    skillEn,
+    getDeclineAge,
+    getSellWarnAge,
+    reputationLevel,
+    payrollRef,
+    estimatePayrollRef,
+    countryGroup,
+    sameCountry,
+    hasAffinity,
+    teamLevelOf,
+    getForeignLimit,
+    terminationFeeRate,
+    injuryTier,
+    injurySaleFactor,
+    retirementChance,
+    loanBuyDecisionChance,
+    fixedSponsorParcel,
+    parseStatementRow,
+    daysBetweenDates,
+    estimateDivisionFromLeague,
+    normalizeTicketMul,
     formatMatchDay,
+    translatePhaseName,
     translateCompName,
     translateRoundName,
-    translateSponsorSlot,
-    translatePhaseName,
-    parseDynamicRow,
-    parseExtraRow,
     getStaticPlayer,
     getStaticClub,
-    normalizeTicketMul,
-    estimateDivisionFromLeague,
-    estimatePayrollRef,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

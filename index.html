@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
-<title>LigaFoot Optimizer v8.1 — Web App &amp; PWA</title>
+<title>LigaFoot Optimizer v8.3 — Web App &amp; PWA</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
@@ -22,8 +22,8 @@
       <div class="brand">
         <div class="brand-ico">⚽</div>
         <div>
-          <h1>LigaFoot Optimizer <span class="c-green">v8.1 PWA</span></h1>
-          <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 • Tanpa Upload</div>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.3 PWA</span></h1>
+          <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 (Bytecode v9) • Tanpa Upload</div>
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
@@ -97,7 +97,7 @@
         <div class="brand">
           <div class="brand-ico">⚽</div>
           <div>
-            <h1 id="hdr-title">LigaFoot Optimizer v8.1</h1>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.3</h1>
             <div class="sub" id="hdr-sub">Memuat data...</div>
           </div>
         </div>
@@ -106,7 +106,7 @@
           <button type="button" class="btn" onclick="openSearch()" title="Cari Cepat (Ctrl+K)">🔍<span class="btn-lbl-mob-hide"> Cari</span></button>
           <button type="button" class="btn" onclick="openGlossary()" title="Kamus Istilah">📖<span class="btn-lbl-mob-hide"> Kamus</span></button>
           <button class="btn" id="btn-density" onclick="toggleDensity()" title="Ganti kepadatan tampilan tabel &amp; kartu">↕️ Mode: Lega</button>
-          <span class="badge b-good" id="hdr-badge">v8.1 PWA</span>
+          <span class="badge b-good" id="hdr-badge">v8.3 PWA</span>
         </div>
       </div>
       <nav class="tabs" id="nav-tabs">
@@ -355,9 +355,10 @@
           <select id="s-pos-mob" onchange="syncScoutQuick('pos', this.value)">
             <option value="">Pos: All</option>
             <option value="G">GK</option><option value="LD">RB</option><option value="LE">LB</option>
-            <option value="ZD">RCB</option><option value="ZE">LCB</option><option value="VOL">CDM</option>
-            <option value="MC">CM</option><option value="MA">CAM</option><option value="PD">RW</option>
-            <option value="PE">LW</option><option value="SA">SS</option><option value="ATA">ST</option>
+            <option value="Z">CB</option><option value="V">DM</option>
+            <option value="MC">CM</option><option value="MD">RM</option><option value="ME">LM</option>
+            <option value="MO">AM</option><option value="PD">RW</option>
+            <option value="PE">LW</option><option value="SA">SS</option><option value="A">ST</option>
           </select>
           <select id="s-sort-mob" onchange="syncScoutQuick('sort', this.value)">
             <option value="SMART">Urut: Pintar</option>
@@ -378,11 +379,11 @@
               <select id="s-pos" onchange="syncScoutDesktopToMob();resetScoutLimitAndRender()">
                 <option value="">Semua Posisi</option>
                 <option value="G">GK — Kiper</option><option value="LD">RB — Bek Kanan</option><option value="LE">LB — Bek Kiri</option>
-                <option value="ZD">RCB — Bek Tengah Kanan</option><option value="ZE">LCB — Bek Tengah Kiri</option>
-                <option value="VOL">CDM — Gelandang Bertahan</option><option value="MC">CM — Gelandang Tengah</option>
-                <option value="MA">CAM — Gelandang Serang</option><option value="MD">RM — Gelandang Kanan</option>
-                <option value="ME">LM — Gelandang Kiri</option><option value="PD">RW — Sayap Kanan</option>
-                <option value="PE">LW — Sayap Kiri</option><option value="SA">SS — Second Striker</option><option value="ATA">ST — Striker</option>
+                <option value="Z">CB — Bek Tengah</option><option value="V">DM — Gelandang Bertahan</option>
+                <option value="MC">CM — Gelandang Tengah</option><option value="MD">RM — Gelandang Kanan</option>
+                <option value="ME">LM — Gelandang Kiri</option><option value="MO">AM — Gelandang Serang</option>
+                <option value="PD">RW — Sayap Kanan</option><option value="PE">LW — Sayap Kiri</option>
+                <option value="SA">SS — Second Striker</option><option value="A">ST — Striker</option>
               </select>
               <select id="s-foot" onchange="resetScoutLimitAndRender()">
                 <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>
@@ -404,6 +405,7 @@
               </select>
             </div>
             <div class="pill-row" style="margin-bottom:4px">
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-reach" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> ✅ Hanya Mau Pindah (Bebas Refuse)</label>
               <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-afford" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> 💰 Masuk Daya Beli</label>
               <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-stack" type="checkbox" onchange="resetScoutLimitAndRender()" /> Hanya Stack Optimal</label>
               <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> Sembunyikan TRAP</label>
@@ -650,13 +652,13 @@
           </div>
           <div class="calc-grid-3">
             <label class="calc-field">Shop Mul
-              <input id="c-pf-shop" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.00" oninput="calcAll()" />
+              <input id="c-pf-shop" class="input" type="number" step="0.05" min="0.5" max="2.0" value="1.00" oninput="calcAll()" />
             </label>
             <label class="calc-field">Member Mul
-              <input id="c-pf-mem" class="input" type="number" step="0.05" min="0.5" max="1.5" value="1.05" oninput="calcAll()" />
+              <input id="c-pf-mem" class="input" type="number" step="0.05" min="0.5" max="2.0" value="1.00" oninput="calcAll()" />
             </label>
             <label class="calc-field">Disc %
-              <input id="c-pf-disc" class="input" type="number" min="0" max="6" value="4" oninput="calcAll()" />
+              <input id="c-pf-disc" class="input" type="number" min="0" max="30" value="6" oninput="calcAll()" />
             </label>
           </div>
           <div id="c-pf-out" style="font-size:12px"></div>
