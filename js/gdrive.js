@@ -14,9 +14,11 @@
   const DRIVE_API = 'https://www.googleapis.com/drive/v3';
   const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
+  const OLD_ORG_CLIENT_ID = '838675130193-1fdugv6f859tv7euqqgtv092b3m71ae6.apps.googleusercontent.com';
+
   // Client ID OAuth Web & lokasi default (root = My Drive di luar folder mana pun)
   const DEFAULT_CFG = {
-    clientId: '838675130193-1fdugv6f859tv7euqqgtv092b3m71ae6.apps.googleusercontent.com',
+    clientId: '573515773660-mcqctuj51c2rlhe99b3tvqsdcp7sjea8.apps.googleusercontent.com',
     folderId: 'root',
     folderName: 'My Drive (Di Luar Folder)',
     fileName: 'ligafoot_slot1.ligafoot',
@@ -39,7 +41,10 @@
       if (raw) {
         const parsed = JSON.parse(raw) || {};
         const merged = Object.assign({}, DEFAULT_CFG, parsed);
-        if (!merged.clientId) merged.clientId = DEFAULT_CFG.clientId;
+        if (!merged.clientId || merged.clientId === OLD_ORG_CLIENT_ID) {
+          merged.clientId = DEFAULT_CFG.clientId;
+          clearToken();
+        }
         if (!merged.folderId && DEFAULT_CFG.folderId) {
           merged.folderId = DEFAULT_CFG.folderId;
           merged.folderName = merged.folderName || DEFAULT_CFG.folderName;
