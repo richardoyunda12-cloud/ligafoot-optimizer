@@ -139,8 +139,8 @@
       estInitBid,
       estCounter40,
       estRealSale,
-      estArabLow: Math.round(mv * 2.5),
-      estArabHigh: Math.round(mv * 3.0),
+      estArabLow: U.pyRound(mv * 2.5),
+      estArabHigh: U.pyRound(mv * 3.0),
     };
   }
 

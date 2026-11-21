@@ -240,10 +240,14 @@
     <div id="sub-t3-squad" class="subpanel">
       <div class="card">
         <div class="flex-between mb-8">
-          <h2 style="margin:0">🧾 Audit Skuad Senior, Regresi per Posisi &amp; Kontrak</h2>
-          <div class="pill-row" style="margin:0">
-            <input id="t4-search" class="input" placeholder="Filter nama / posisi..." oninput="renderRosterTable()" />
-            <select id="t4-filter" onchange="renderRosterTable()">
+          <h2 style="margin:0">🧾 Audit Skuad Senior &amp; Kontrak</h2>
+          <button type="button" class="btn btn-sm btn-green" onclick="exportRosterCsv()">⬇ CSV</button>
+        </div>
+        <details class="mobile-filter-box" id="t3b-filter-box" open>
+          <summary><span>🔍 Filter &amp; Cari Skuad</span><span>▼</span></summary>
+          <div class="pill-row mobile-filter-body" style="margin-bottom:0">
+            <input id="t4-search" class="input" style="flex:1;min-width:140px" placeholder="Filter nama / posisi..." oninput="renderRosterTable()" />
+            <select id="t4-filter" style="flex:1;min-width:140px" onchange="renderRosterTable()">
               <option value="ALL">Semua Pemain</option>
               <option value="GOLDEN">Golden Window (11–59d)</option>
               <option value="DECLINE">Regresi / Ambang Usia</option>
@@ -254,9 +258,8 @@
               <option value="SLUMP">Fine Slump Aktif</option>
               <option value="LOOPHOLE">Loophole Auto-Renew 0%</option>
             </select>
-            <button class="btn btn-green" onclick="exportRosterCsv()">⬇ Export CSV</button>
           </div>
-        </div>
+        </details>
         <div id="t4-contract-timeline" class="mb-8"></div>
         <div class="tbl-wrap tbl-sticky"><table id="t4-tbl"></table></div>
       </div>
@@ -319,71 +322,69 @@
     <div id="sub-t4-exp" class="subpanel">
       <div class="card">
         <div class="flex-between mb-8">
-          <h2 style="margin:0">🔎 Global Auto-Scout <span id="t7-cnt" class="badge b-info">0</span></h2>
-          <button class="btn btn-sm btn-green" onclick="exportScoutCsv()">⬇ CSV</button>
+          <h2 style="margin:0">🔎 Eksplorasi Pasar <span id="t7-cnt" class="badge b-info">0</span></h2>
+          <button type="button" class="btn btn-sm btn-green" onclick="exportScoutCsv()">⬇ CSV</button>
         </div>
         <div class="scout-quick-bar">
-          <input id="s-q" class="input" placeholder="Cari nama pemain / klub..." oninput="renderScout()" />
-          <select id="s-pos" onchange="renderScout()" style="max-width:145px">
-            <option value="">Semua Posisi</option>
-            <option value="G">GK — Kiper</option>
-            <option value="LD">RB — Bek Kanan</option>
-            <option value="LE">LB — Bek Kiri</option>
-            <option value="ZD">RCB — Bek Tengah Kanan</option>
-            <option value="ZE">LCB — Bek Tengah Kiri</option>
-            <option value="VOL">CDM — Gelandang Bertahan</option>
-            <option value="MC">CM — Gelandang Tengah</option>
-            <option value="MA">CAM — Gelandang Serang</option>
-            <option value="MD">RM — Gelandang Kanan</option>
-            <option value="ME">LM — Gelandang Kiri</option>
-            <option value="PD">RW — Sayap Kanan</option>
-            <option value="PE">LW — Sayap Kiri</option>
-            <option value="SA">SS — Second Striker</option>
-            <option value="ATA">ST — Striker</option>
+          <input id="s-q-mob" class="input" placeholder="Cari nama / klub..." oninput="document.getElementById('s-q').value=this.value;renderScout()" />
+          <select id="s-pos-mob" onchange="document.getElementById('s-pos').value=this.value;renderScout()">
+            <option value="">Semua Pos</option>
+            <option value="G">GK</option><option value="LD">RB</option><option value="LE">LB</option>
+            <option value="ZD">RCB</option><option value="ZE">LCB</option><option value="VOL">CDM</option>
+            <option value="MC">CM</option><option value="MA">CAM</option><option value="PD">RW</option>
+            <option value="PE">LW</option><option value="SA">SS</option><option value="ATA">ST</option>
           </select>
         </div>
-        <details id="scout-filter-details" class="mobile-filter-box" open>
-          <summary><span>🎛️ Preset &amp; Filter Lanjutan (Bosman, Flip, Harga, Usia)</span><span>▼</span></summary>
+        <details class="mobile-filter-box" id="t4b-filter-box" open>
+          <summary><span>🎛️ Filter Lanjutan &amp; Preset Scout (Bosman / Unhappy / Flip)</span><span>▼</span></summary>
           <div class="mobile-filter-body">
-          <div class="pill-row">
-            <button class="btn btn-sm" onclick="applyScoutPreset('ALL')">Reset</button>
-            <button class="btn btn-sm btn-green" onclick="applyScoutPreset('HOLES')">Isi Lubang</button>
-            <button class="btn btn-sm btn-amber" onclick="applyScoutPreset('FLIP')" title="Pemain muda 17–21 thn buat dibeli murah, dilatih, lalu dijual mahal">Top Flip</button>
-            <button class="btn btn-sm" onclick="applyScoutPreset('BOSMAN')" title="Kontrak ≤180 hari — bisa rekrut GRATIS via Pra-Kontrak!">Bosman ≤180d</button>
-            <button class="btn btn-sm" onclick="applyScoutPreset('UNH')" title="Pemain tidak bahagia di klub AI — diskon harga -15% &amp; gaji -50%">Unhappy -15%</button>
-            <button class="btn btn-sm" onclick="applyScoutPreset('GEM')">Gems</button>
-            <button class="btn btn-sm" onclick="applyScoutPreset('FREE')">Free</button>
-            <button class="btn btn-sm" onclick="applyScoutPreset('LOCAL')">Lokal</button>
-            <button class="btn btn-sm" onclick="applyScoutPreset('SHORTLIST')">⭐ Shortlist</button>
-          </div>
-          <div class="pill-row">
-          <select id="s-foot" onchange="renderScout()">
-            <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>
-          </select>
-          <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="renderScout()" />
-          <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="renderScout()" />
-          <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="renderScout()" />
-          <select id="s-price-unit" onchange="renderScout()">
-            <option value="1000000">M (Juta)</option>
-            <option value="1000">K (Ribu)</option>
-            <option value="1">Penuh (€)</option>
-          </select>
-          <select id="s-sort" onchange="renderScout()">
-            <option value="SMART">Urut: Rekomendasi Pintar</option>
-            <option value="UPGRADE">Urut: Upgrade XI (ΔEff)</option>
-            <option value="ROI">Urut: Flip ROI % Tertinggi</option>
-            <option value="PROFIT">Urut: Est. Profit Tertinggi</option>
-            <option value="CHEAP">Urut: Harga Termurah</option>
-            <option value="FORCE">Urut: Force Tertinggi</option>
-            <option value="POTCAP">Urut: PotCap Tertinggi</option>
-          </select>
-        </div>
-        <div class="pill-row" style="margin-bottom:8px">
-          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-afford" type="checkbox" checked onchange="renderScout()" /> 💰 Hanya Masuk Daya Beli (Kas/Swap)</label>
-          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-stack" type="checkbox" onchange="renderScout()" /> Hanya Stack Optimal</label>
-          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="renderScout()" /> Sembunyikan TRAP</label>
-          <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-inj" type="checkbox" checked onchange="renderScout()" /> Sembunyikan Cedera</label>
-        </div>
+            <div class="pill-row">
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('ALL')">Reset</button>
+              <button type="button" class="btn btn-sm btn-green" onclick="applyScoutPreset('HOLES')">Isi Lubang</button>
+              <button type="button" class="btn btn-sm btn-amber" onclick="applyScoutPreset('FLIP')">Top Flip</button>
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('BOSMAN')">Bosman ≤180d</button>
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('UNH')">Unhappy -15%</button>
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('GEM')">Gems</button>
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('FREE')">Free</button>
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('LOCAL')">Lokal</button>
+              <button type="button" class="btn btn-sm" onclick="applyScoutPreset('SHORTLIST')">⭐ Shortlist</button>
+            </div>
+            <div class="pill-row">
+              <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="renderScout()" />
+              <select id="s-pos" onchange="renderScout()">
+                <option value="">Semua Posisi</option>
+                <option value="G">GK — Kiper</option><option value="LD">RB — Bek Kanan</option><option value="LE">LB — Bek Kiri</option>
+                <option value="ZD">RCB — Bek Tengah Kanan</option><option value="ZE">LCB — Bek Tengah Kiri</option>
+                <option value="VOL">CDM — Gelandang Bertahan</option><option value="MC">CM — Gelandang Tengah</option>
+                <option value="MA">CAM — Gelandang Serang</option><option value="MD">RM — Gelandang Kanan</option>
+                <option value="ME">LM — Gelandang Kiri</option><option value="PD">RW — Sayap Kanan</option>
+                <option value="PE">LW — Sayap Kiri</option><option value="SA">SS — Second Striker</option><option value="ATA">ST — Striker</option>
+              </select>
+              <select id="s-foot" onchange="renderScout()">
+                <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>
+              </select>
+              <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="renderScout()" />
+              <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="renderScout()" />
+              <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="renderScout()" />
+              <select id="s-price-unit" onchange="renderScout()">
+                <option value="1000000">M (Juta)</option><option value="1000">K (Ribu)</option><option value="1">Penuh (€)</option>
+              </select>
+              <select id="s-sort" onchange="renderScout()">
+                <option value="SMART">Urut: Rekomendasi Pintar</option>
+                <option value="UPGRADE">Urut: Upgrade XI (ΔEff)</option>
+                <option value="ROI">Urut: Flip ROI % Tertinggi</option>
+                <option value="PROFIT">Urut: Est. Profit Tertinggi</option>
+                <option value="CHEAP">Urut: Harga Termurah</option>
+                <option value="FORCE">Urut: Force Tertinggi</option>
+                <option value="POTCAP">Urut: PotCap Tertinggi</option>
+              </select>
+            </div>
+            <div class="pill-row" style="margin-bottom:4px">
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-afford" type="checkbox" checked onchange="renderScout()" /> 💰 Masuk Daya Beli</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-only-stack" type="checkbox" onchange="renderScout()" /> Hanya Stack Optimal</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="renderScout()" /> Sembunyikan TRAP</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-inj" type="checkbox" checked onchange="renderScout()" /> Sembunyikan Cedera</label>
+            </div>
           </div>
         </details>
         <details class="glossary-inline">

@@ -719,6 +719,7 @@
     }
 
     prog(58, 'Membedah jadwal 5 lawan terdekat (War Room H2H)...');
+    const simOpponents = (typeof S.extractSimOpponents === 'function') ? S.extractSimOpponents(save, userId, clubsMeta, compactTeams, staticPlayers) : [];
     const upcomingMatches = S.extractUpcomingMatches(
       save, userId, clubsMeta, compactTeams, staticPlayers,
       bestXi, sections, fanConf, userDiv, reputation, userRoster,
@@ -939,6 +940,7 @@
       formCompare,
       formations: C.FORMATIONS,
       upcoming: upcomingMatches,
+      simOpponents,
       liveCoach: C.LIVE_COACH_GUIDE,
       stadium: {
         sections,

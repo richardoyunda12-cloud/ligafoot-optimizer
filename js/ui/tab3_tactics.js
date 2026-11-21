@@ -94,28 +94,68 @@ function renderTab3Pitch() {
 
   const pitch = document.getElementById('t3-pitch');
   pitch.querySelectorAll('.p-node').forEach(n => n.remove());
-  const usedCoords = {};
-  res.xi.forEach(a => {
-    const cList = PITCH_COORDS[a.slot] || [[50, 50]];
-    const idx = usedCoords[a.slot] || 0;
-    usedCoords[a.slot] = idx + 1;
-    const [x, y] = cList[Math.min(idx, cList.length - 1)];
-    const isRotIn = rotInSet.has(a.p.id);
-    const d = document.createElement('div');
-    d.className = 'p-node' + (a.wf ? ' wf' : '') + (isRotIn ? ' rot-in' : '');
-    d.style.left = x + '%'; d.style.top = y + '%';
-    d.title = `Klik untuk buka profil ${a.p.name}`;
-    d.onclick = () => openPlayerDrawer('roster', a.p.id);
+  // v8.1 Dynamic Row-Band Pitch Engine: 0 tabrakan di SEMUA 15 formasi pada layar 360px!
+  const fkStr = String(fk || '');
+  const defSlots = res.xi.filter(a => ['LE', 'LD', 'ZE', 'ZD', 'ZAG', 'LAT'].includes(a.slot));
+  const isFiveBack = defSlots.length >= 5;
+  const is433 = fkStr.startsWith('4-3-3');
+  const isMidWings = fkStr === '4-1-4-1' || fkStr === '4-4-1-1';
 
-    const en = a.p.energy ?? 100;
-    const enCol = en >= 90 ? '#10b981' : (en >= 80 ? '#38bdf8' : (en >= 65 ? '#f59e0b' : '#ef4444'));
-    const ico = isRotIn ? '🔄 ' : (a.p.top ? '👑 ' : (a.p.star ? '⭐ ' : ''));
-    const penTag = a.p.fineSlump > 0 ? ` ⚠-${a.p.fineSlumpPct}%` : (a.wf ? ' ⚠FB' : '');
-    d.innerHTML = `
-      <div class="pn">${ico}${esc(a.p.name)}</div>
-      <div class="ps mono">${fmtPos(a.slot)} • <b>${a.p.force}</b>${penTag} • ${en}%</div>
-      <div class="p-en-bar"><div class="p-en-fill" style="width:${Math.min(100, en)}%;background:${enCol}"></div></div>`;
-    pitch.appendChild(d);
+  const bands = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  res.xi.forEach(a => {
+    const sl = a.slot;
+    if (sl === 'G') bands[0].push(a);
+    else if (['ZE', 'ZD', 'ZAG'].includes(sl)) bands[1].push(a);
+    else if (['LE', 'LD', 'LAT'].includes(sl)) bands[isFiveBack ? 2 : 1].push(a);
+    else if (sl === 'VOL') bands[3].push(a);
+    else if (['ME', 'MC', 'MD'].includes(sl)) bands[4].push(a);
+    else if (['MA', 'SA'].includes(sl)) bands[5].push(a);
+    else if (['PE', 'PD'].includes(sl)) bands[is433 ? 6 : (isMidWings ? 4 : 5)].push(a);
+    else bands[6].push(a); // ATA
+  });
+
+  // Urutkan kiri -> kanan di dalam setiap baris agar posisi lapangan alami
+  const lrRank = { LE: 1, ME: 1, PE: 1, ZE: 2, ZAG: 3, VOL: 3, MC: 3, MA: 3, SA: 3, ATA: 3, ZD: 4, LD: 5, MD: 5, PD: 5 };
+  const activeBands = Object.keys(bands)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map(k => bands[k])
+    .filter(arr => arr.length > 0);
+
+  activeBands.forEach(arr => arr.sort((a, b) => (lrRank[a.slot] || 3) - (lrRank[b.slot] || 3)));
+
+  const rowCount = activeBands.length;
+  activeBands.forEach((arr, rowIdx) => {
+    // Baris 0 = Kiper di bawah (y=91%), baris teratas = Penyerang di atas (y=9%)
+    const y = rowCount <= 1 ? 50 : +(91 - (rowIdx * (82 / (rowCount - 1)))).toFixed(1);
+    const n = arr.length;
+    const isWidePair = (n === 2 && arr.every(a => ['LE', 'LD', 'PE', 'PD', 'ME', 'MD'].includes(a.slot)));
+    let xs;
+    if (n === 1) xs = [50];
+    else if (n === 2) xs = isWidePair ? [16, 84] : [28, 72];
+    else if (n === 3) xs = [16, 50, 84];
+    else if (n === 4) xs = [11.5, 37.2, 62.8, 88.5];
+    else xs = arr.map((_, i) => +(11 + (i * (78 / Math.max(1, n - 1)))).toFixed(1));
+
+    arr.forEach((a, colIdx) => {
+      const x = xs[colIdx];
+      const isRotIn = rotInSet.has(a.p.id);
+      const d = document.createElement('div');
+      d.className = 'p-node' + (a.wf ? ' wf' : '') + (isRotIn ? ' rot-in' : '');
+      d.style.left = x + '%'; d.style.top = y + '%';
+      d.title = `Klik untuk buka profil ${a.p.name}`;
+      d.onclick = () => openPlayerDrawer('roster', a.p.id);
+
+      const en = a.p.energy ?? 100;
+      const enCol = en >= 90 ? '#10b981' : (en >= 80 ? '#38bdf8' : (en >= 65 ? '#f59e0b' : '#ef4444'));
+      const ico = isRotIn ? '🔄 ' : (a.p.top ? '👑 ' : (a.p.star ? '⭐ ' : ''));
+      const penTag = a.p.fineSlump > 0 ? ` -${a.p.fineSlumpPct}%` : (a.wf ? ' ⚠' : '');
+      d.innerHTML = `
+        <div class="pn">${ico}${esc(a.p.name)}</div>
+        <div class="ps mono">${fmtPos(a.slot)} <b>${a.p.force}</b>${penTag} ${en}%</div>
+        <div class="p-en-bar"><div class="p-en-fill" style="width:${Math.min(100, en)}%;background:${enCol}"></div></div>`;
+      pitch.appendChild(d);
+    });
   });
 
   const xiPls = res.xi.map(a => a.p);

@@ -34,14 +34,14 @@ const FORM_EN = CFG.FORM_EN || {
 const FORMATION_MODS = CFG.FORMATION_MODS || {};
 const PITCH_COORDS = CFG.PITCH_COORDS || {
   G:[[50,91]],
-  LE:[[13,66]], LD:[[87,66]],
-  ZE:[[36,78]], ZD:[[64,78],[50,79]], ZAG:[[50,79]],
-  VOL:[[50,56],[22,57],[78,57]],
-  ME:[[14,45]], MD:[[86,45]],
-  MC:[[27,45],[73,45],[50,44]],
-  MA:[[50,32],[20,34],[80,34]],
-  PE:[[15,22]], PD:[[85,22]],
-  SA:[[50,23]], ATA:[[50,12],[23,15],[77,15]]
+  LE:[[12,74]], LD:[[88,74]],
+  ZE:[[37,74]], ZD:[[63,74],[50,74]], ZAG:[[50,74]],
+  VOL:[[50,56],[28,56],[72,56]],
+  ME:[[14,44]], MD:[[86,44]],
+  MC:[[50,44],[28,44],[72,44]],
+  MA:[[50,30],[28,30],[72,30]],
+  PE:[[16,12]], PD:[[84,12]],
+  SA:[[50,26]], ATA:[[50,10],[28,10],[72,10]]
 };
 
 function fmtPos(c) { return POS_EN[c] || c || '-'; }
@@ -342,6 +342,13 @@ function goToView(tab, sub) {
     if (panel) {
       panel.querySelectorAll('.subpanel').forEach(sp => sp.classList.toggle('active', sp.id === 'sub-' + targetSub));
     }
+  }
+  if (t === 't2' && typeof renderTab2 === 'function') {
+    const am = document.getElementById('t2-active-match');
+    if (!am || !am.innerHTML.trim()) { try { renderTab2(); } catch (e) { console.error(e); } }
+  }
+  if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+    window.scrollTo(0, 0);
   }
   try {
     localStorage.setItem('lf_opt_v8_nav', JSON.stringify({ tab: activeTab, subs: activeSubTabs }));

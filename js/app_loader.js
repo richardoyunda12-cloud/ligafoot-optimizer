@@ -86,6 +86,15 @@
     }
   }
 
+
+  function syncMobileFilters() {
+    const isMob = window.innerWidth <= 768;
+    document.querySelectorAll('.mobile-filter-box').forEach((el) => {
+      if (isMob) el.removeAttribute('open');
+      else el.setAttribute('open', '');
+    });
+  }
+
   function mountDashboard(dataObj) {
     window.D = dataObj;
     // Pastikan konstanta client selalu sinkron dari Engine
@@ -96,6 +105,7 @@
     if (typeof window.LFInitDashboard === 'function') {
       window.LFInitDashboard();
     }
+    syncMobileFilters();
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
 

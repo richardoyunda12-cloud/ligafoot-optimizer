@@ -84,7 +84,7 @@ function renderTab8Extras() {
 
   document.getElementById('t8-precontracts').innerHTML = `<h3>📜 Pra-Kontrak / Bosman Aktif (${D.preContracts.length})</h3>` +
     (D.preContracts.length ? D.preContracts.map(pc => `<div>• <b>${esc(pc.playerName)}</b> (dari ${esc(pc.fromTeam)}) — tiba ${pc.arriveDate}, gaji ${fmtM(pc.salary)}/bln</div>`).join('')
-    : '<div class="c-muted">Belum ada pra-kontrak aktif. Cek preset <b>Bosman (≤180d)</b> di Tab 4 Transfer &amp; Scout!</div>');
+    : '<div class="c-muted mb-8">Belum ada pra-kontrak aktif. Rekrut bintang kontrak ≤180 hari secara <b>GRATIS (0€)</b>!</div><button type="button" class="btn btn-sm btn-green" onclick="goToView(\'t4\',\'t4-exp\');applyScoutPreset(\'BOSMAN\')">🔎 Cari Target Bosman (≤180d) →</button>');
 
   document.getElementById('t8-nation').innerHTML = `<h3>🌍 Status Tim Nasional</h3>` +
     (D.nation ? `<div>Melatih Timnas: <span class="badge b-good">${esc(D.nation.iso)}</span> • Pemain dipanggil: <b>${D.nation.squadCount}</b></div>`
@@ -140,14 +140,19 @@ window.LFInitDashboard = function () {
     `${D.meta.currentDate} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${D.meta.country}) • ${D.meta.version}`;
   document.getElementById('hdr-badge').textContent = `v8.1 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
-  renderTab1();
-  renderTab2();
-  initTab3();
-  renderRosterTable();
-  renderTab5();
-  renderTab6();
-  renderTab7All();
-  calcAll();
-  renderTab8Extras();
+  const _steps = [
+    ['Tab1', renderTab1],
+    ['Tab2', renderTab2],
+    ['Tab3', initTab3],
+    ['Tab4', renderRosterTable],
+    ['Tab5', renderTab5],
+    ['Tab6', renderTab6],
+    ['Tab7', renderTab7All],
+    ['Calc', calcAll],
+    ['Tab8', renderTab8Extras],
+  ];
+  for (const [nm, fn] of _steps) {
+    try { fn(); } catch (err) { console.error('[LFInitDashboard] Gagal render ' + nm, err); }
+  }
   restoreLastView();
 };

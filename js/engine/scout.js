@@ -52,6 +52,9 @@
     if (save.currentMatch && typeof save.currentMatch === 'object' && !Array.isArray(save.currentMatch)) {
       rawList.push(save.currentMatch);
     }
+    if (save.nextMatch && typeof save.nextMatch === 'object' && !Array.isArray(save.nextMatch)) {
+      rawList.push(save.nextMatch);
+    }
     if (Array.isArray(save.pendingMatches)) {
       for (const m of save.pendingMatches) {
         if (m && typeof m === 'object') rawList.push(m);
@@ -59,8 +62,8 @@
     }
 
     for (const m of rawList) {
-      let h = m.homeId || m.home || (m.homeTeam && m.homeTeam.id);
-      let a = m.awayId || m.away || (m.awayTeam && m.awayTeam.id);
+      let h = m.homeId || m.home || m.h || (m.homeTeam && m.homeTeam.id);
+      let a = m.awayId || m.away || m.a || (m.awayTeam && m.awayTeam.id);
       if (!h && m.opponentId) {
         if (m.isHome !== false) { h = userId; a = m.opponentId; }
         else { h = m.opponentId; a = userId; }
@@ -94,13 +97,13 @@
         for (let rIdx = 0; rIdx < totalR; rIdx++) {
           const rnd = rounds[rIdx];
           if (!rnd || typeof rnd !== 'object') continue;
-          const rDay = U.safeInt(rnd.day, 0);
+          const rDay = U.safeInt((rnd.day !== undefined && rnd.day !== null) ? rnd.day : rnd.d, 0);
           const rName = rnd.name || st.name || `Ronde ${rIdx + 1}`;
           for (const fx of (rnd.matches || [])) {
             if (!fx || typeof fx !== 'object') continue;
             if (fx.played || fx.homeGoals !== undefined && fx.homeGoals !== null) continue;
-            const h = fx.home || fx.homeId;
-            const a = fx.away || fx.awayId;
+            const h = fx.home || fx.homeId || fx.h;
+            const a = fx.away || fx.awayId || fx.a;
             if (h === userId || a === userId) {
               const rl = skind === 'table' ? Math.max(0, totalR - 1 - rIdx) : null;
               compFixtures.push({
@@ -433,8 +436,66 @@
     return { scoutPool: selected, aiUnhappyTotal, aiBosmanTotal };
   }
 
+
+  function extractSimOpponents(save, userId, clubsMeta, compactTeams, staticPlayers) {
+    const world = (save.world && typeof save.world === 'object') ? save.world : {};
+    const worldTeams = (world.teams && typeof world.teams === 'object') ? world.teams : {};
+    const standings = Array.isArray(save.standings) ? save.standings : [];
+    const candIds = [];
+    const seen = new Set([userId]);
+
+    for (const row of standings) {
+      const tid = row && (row.teamId || row.id);
+      if (tid && !seen.has(tid) && compactTeams[tid]) {
+        seen.add(tid);
+        candIds.push(tid);
+      }
+    }
+    if (candIds.length < 12) {
+      const extra = Object.entries(compactTeams)
+        .filter(([cid, obj]) => !seen.has(cid) && obj && typeof obj === 'object')
+        .sort((a, b) => U.safeNum(b[1].reputation, 0) - U.safeNum(a[1].reputation, 0))
+        .slice(0, 12 - candIds.length);
+      for (const [cid] of extra) {
+        seen.add(cid);
+        candIds.push(cid);
+      }
+    }
+
+    const out = [];
+    for (const cid of candIds.slice(0, 18)) {
+      const cm = compactTeams[cid] || {};
+      const meta = U.getStaticClub(clubsMeta, cid);
+      const wt = worldTeams[cid] || {};
+      const name = meta.name || cm.name || cid;
+      const country = String(meta.country || cm.country || '').toUpperCase();
+      const rep = U.safeNum(cm.reputation, U.safeNum(wt.rep, 50));
+      const form = (cm.formation in C.FORMATIONS) ? cm.formation : '4-4-2';
+      const { roster } = R.extractTeamRoster(cm, staticPlayers, false, cid, name, country);
+      if (!roster.length) continue;
+      const xi = T.solveBestXi(roster, form, 99, country, null, false, T.repToLevel(rep));
+      const stars = roster.filter(p => !p.injured).sort((a, b) => b.force - a.force).slice(0, 3)
+        .map(p => ({ name: p.name, pos: p.pos, force: p.force, s1: p.s1, s2: p.s2, star: p.star }));
+      const injured = roster.filter(p => p.injured).slice(0, 3)
+        .map(p => ({ name: p.name, pos: p.pos, force: p.force, days: p.injuryDays }));
+      out.push({
+        id: cid,
+        name,
+        country,
+        rep: Math.round(rep),
+        formation: form,
+        avgScore: xi.avgScore,
+        sectors: xi.sectors,
+        stars,
+        injured,
+      });
+    }
+    return out.sort((a, b) => b.avgScore - a.avgScore);
+  }
+
   LF.scout = {
     extractUpcomingMatches,
     buildGlobalScoutPool,
+    extractSimOpponents,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

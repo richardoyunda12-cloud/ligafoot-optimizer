@@ -545,154 +545,204 @@ main { padding-bottom: 86px; }
   }
 }
 
-/* === v8.1 MOBILE UX POLISH (0 OVERFLOW, >=34px TAP TARGET, STICKY CAP) === */
+/* === v8.1 MOBILE-FIRST UX OVERHAUL (STRICT 360px, TOUCH >=34px, 0 OVERLAP) === */
 html, body {
-  overflow-x: clip;
   max-width: 100%;
+  overflow-x: clip;
 }
-.card, .panel, .subpanel, .grid > * {
+.card, .grid > *, .tbl-wrap, .hero-match, .deal-card, .alert-item, .aq-item {
   min-width: 0;
 }
-.tbl-wrap {
-  max-width: 100%;
-}
-.mobile-filter-box {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin-bottom: 8px;
-}
+
+/* Collapsible filter box: selalu terbuka seperti blok biasa di desktop, bisa dilipat di HP */
+.mobile-filter-box { margin-bottom: 10px; }
 .mobile-filter-box > summary {
   display: none;
   cursor: pointer;
   list-style: none;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--sky);
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 12px;
-  min-height: 36px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sky);
   align-items: center;
   justify-content: space-between;
 }
 .mobile-filter-box > summary::-webkit-details-marker { display: none; }
+.scout-quick-bar { display: none; }
 
 @media (max-width: 768px) {
-  .g2, .g3, .g4, .g-main-side, .deal-grid, .timeline-grid {
+  /* 1. Strict 360px Anti-Overflow di seluruh 17 tampilan */
+  .wrap { padding: 0 10px; max-width: 100vw; overflow-x: clip; }
+  .card { padding: 10px; border-radius: 12px; }
+  .card h2 { font-size: 13px; margin-bottom: 8px; }
+  .g2, .g3, .g4, .g-main-side, .timeline-grid, .shop-kpi-strip {
     grid-template-columns: minmax(0, 1fr) !important;
   }
-  #t1-kpis {
+  #t1-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  #t1-kpis .kpi-val { font-size: 17px; }
+  #t1-kpis .kpi-sub { font-size: 10px; }
+  .ticket-4grid, #t6-ticket-sim {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px;
-  }
-  .match-selector {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
   }
   .shop-kpi-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
   }
-  .card {
-    padding: 12px 10px;
+  .shop-kpi-strip .kpi-val { font-size: 17px; }
+
+  /* Bar Pemilih Laga War Room: swipe horizontal 1 baris rapi (bukan 3 baris panjang!) */
+  .match-selector {
+    display: flex !important;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .match-pill {
+    flex: 0 0 170px;
+    min-height: 62px;
+    scroll-snap-align: start;
   }
 
-  /* 1. Touch Target Ramah Ibu Jari (>= 34px di seluruh tombol, subtab & star) */
-  .btn, .btn-sm, .subtab, .star-btn {
+  /* Header lebih hemat tinggi di HP */
+  .topbar { padding: 6px 0; gap: 6px; }
+  .brand-ico { width: 32px; height: 32px; font-size: 16px; }
+  .brand h1 { font-size: 13px; }
+  .brand .sub { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 210px; }
+  .top-actions { width: 100%; justify-content: space-between; gap: 6px; }
+  .top-actions .btn { flex: 1; text-align: center; padding: 7px 8px; min-height: 34px; font-size: 11px; }
+
+  /* Input & select anti-clipping kanan */
+  .input, select {
+    max-width: 100%;
+    min-height: 34px;
+    font-size: 12px;
+  }
+  .pill-row { gap: 6px; margin-bottom: 8px; }
+  .tbl-wrap { max-width: 100%; -webkit-overflow-scrolling: touch; }
+  .hero-match { padding: 11px 12px; gap: 8px; }
+  .hero-match .btn { width: 100%; min-height: 36px; }
+
+  /* 2. Tap Target Ramah Ibu Jari (>= 34px tinggi & lebar!) */
+  .btn, .btn-sm, .star-btn, .subtab {
     min-height: 34px;
     min-width: 34px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 6px 10px;
-    font-size: 11.5px;
-    line-height: 1.15;
+    touch-action: manipulation;
   }
-  .star-btn {
-    padding: 5px 8px;
-    font-size: 14px;
-  }
-  .subtab {
-    padding: 7px 11px;
-    font-size: 11.5px;
-  }
-  .input, select {
-    min-height: 36px;
-    font-size: 12px;
-  }
+  .btn-sm { padding: 6px 10px; font-size: 11px; }
+  .star-btn { padding: 5px 8px; font-size: 14px; }
+  .subtab { padding: 7px 11px; font-size: 11px; }
 
-  /* 2. Batasi lebar kolom sticky pertama (<= 41% layar HP 360px) */
+  /* 3. Batasi Lebar Kolom Sticky Pertama <= 38% Layar HP */
   .tbl-sticky table th:first-child,
   .tbl-sticky table td:first-child {
-    max-width: 144px;
-    min-width: 108px;
+    max-width: 130px;
+    width: 130px;
     white-space: normal;
     word-break: break-word;
     line-height: 1.25;
   }
   .tbl-sticky table td:first-child .badge,
-  .tbl-sticky table td:first-child .micro-tag {
+  .tbl-sticky table td:first-child .micro-tags {
     font-size: 10px;
-    margin-top: 2px;
   }
 
-  /* 3. Pitch v2 Anti-Tabrakan di Layar 360px + Teks >= 10px */
+  /* 4. Pitch v2 Dynamic Row-Band Anti-Tabrakan 15 Formasi di 360px (strict 1-line nowrap!) */
   .pitch {
-    height: 395px;
+    height: 460px;
   }
   .p-node {
-    width: 72px;
-    padding: 3px 3px;
+    width: 68px;
+    padding: 3px 2px;
     border-radius: 8px;
   }
   .p-node .pn {
     font-size: 10px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .p-node .ps {
     font-size: 10px;
-    letter-spacing: -0.02em;
+    line-height: 1.15;
+    letter-spacing: -0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  /* 4. Perapian Tab 5C Jersey Row agar 0 overflow */
+  /* 5. Perapian Tab 5C Jersey Row agar strict 360px */
   .jersey-row {
     grid-template-columns: 28px minmax(0, 1fr) 74px;
-    gap: 7px;
+    gap: 6px;
     padding: 7px 8px;
   }
   .jersey-row .mini-bar-wrap {
     display: none;
   }
 
-  /* 5. Kompresi Budget Strip & Filter Scout Mobile agar tabel tampil di layar pertama */
+  /* 6. Kompresi Budget Strip, Subtabs & Filter Scout Mobile -> Tabel Scout muncul di Y < 430px! */
+  main { padding-top: 10px; }
+  .subtabs {
+    margin-bottom: 6px;
+    padding: 4px;
+    gap: 4px;
+  }
   .budget-strip {
+    padding: 6px 8px;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .budget-strip > div:first-child {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px 6px !important;
+    width: 100%;
+  }
+  .budget-strip > div:first-child > div > div {
+    font-size: 12px !important;
+    line-height: 1.2;
+  }
+  .budget-strip .kpi-lbl { font-size: 10px; }
+  .budget-strip .pill-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 5px;
+  }
+  #sub-t4-exp .glossary-inline { display: none; }
+  .sticky-cart-bar {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    transform: none;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     padding: 8px 10px;
-    gap: 8px;
-    margin-bottom: 8px;
+    font-size: 11px;
   }
-  .budget-strip .kpi-lbl {
-    font-size: 10px;
-  }
-  .mobile-filter-box > summary {
-    display: flex;
-  }
-  .mobile-filter-box .mobile-filter-body {
-    margin-top: 8px;
-  }
+  .mobile-filter-box { margin-bottom: 6px; }
+  .mobile-filter-box > summary { display: flex; padding: 5px 10px; min-height: 34px; }
+  .mobile-filter-box .mobile-filter-body { margin-top: 6px; }
   .scout-quick-bar {
     display: flex;
     gap: 6px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
-  .scout-quick-bar .input {
-    flex: 1;
-    min-width: 0;
-  }
-  .hero-match {
-    padding: 11px 12px;
-  }
-  .h2h-row {
-    grid-template-columns: 32px 36px minmax(0, 1fr) 42px 36px;
-    gap: 4px;
-  }
+  .scout-quick-bar .input { flex: 1; min-width: 0; }
+  .scout-quick-bar select { width: 112px; flex-shrink: 0; }
+
+  /* 7. Rapikan Player Drawer & Modal di 360px */
+  .drawer-panel { width: 95vw; padding: 13px 13px 28px; }
+  .drawer-kv { font-size: 11px; }
+  .aq-item .flex-between { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .aq-item .flex-between .btn-sm { align-self: flex-end; }
 }

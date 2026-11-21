@@ -50,7 +50,17 @@ function renderTab1() {
         <button class="btn btn-green" onclick="activeMatchIdx=0;renderTab2();goToView('t2')">⚔️ Buka War Room →</button>
       </div>`;
   } else {
-    heroEl.innerHTML = '';
+    heroEl.innerHTML = `
+      <div class="hero-match">
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+            <span class="badge b-accent">🏁 JEDA MUSIM / PRAMUSIM</span>
+            <span class="badge b-muted">Musim ${m.season} • ${esc(m.currentDate)}</span>
+          </div>
+          <div style="font-size:15px;font-weight:900">Tidak ada jadwal resmi tersisa — uji formasi &amp; buru target transfer!</div>
+        </div>
+        <button type="button" class="btn btn-green" onclick="openWarSimMode();goToView('t2')">🧪 Simulasi War Room →</button>
+      </div>`;
   }
 
   // 2. 4 KPI Utama (Hierarki bersih, bukan 8 kotak seragam)
