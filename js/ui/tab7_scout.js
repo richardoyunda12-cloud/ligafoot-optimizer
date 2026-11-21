@@ -56,8 +56,25 @@ function getCartMetrics() {
   return { cashIn, cashOut, salDelta, fDelta, curForeign, projForeign, projBudget, buyingPower, inList, outCount, inCount };
 }
 
+let _rosterCacheRef = null;
+let _rosterByPosCache = null;
+let _rosterByCatCache = null;
+
+function ensureRosterIndex() {
+  if (_rosterCacheRef === D.roster && _rosterByPosCache) return;
+  _rosterCacheRef = D.roster;
+  _rosterByPosCache = {};
+  _rosterByCatCache = {};
+  (D.roster || []).forEach(p => {
+    (_rosterByPosCache[p.pos] = _rosterByPosCache[p.pos] || []).push(p);
+    const c = EXACT_CAT[p.pos] ?? 3;
+    (_rosterByCatCache[c] = _rosterByCatCache[c] || []).push(p);
+  });
+}
+
 function findBestReplacement(r, cm) {
   if (!D.roster || !D.roster.length) return null;
+  ensureRosterIndex();
   const tPos = r[1], tFoot = r[3], tNat = r[4];
   const tCat = EXACT_CAT[tPos] ?? 3;
   const tEff = r[5] * (1 + (r[10] || 0) / 100);
@@ -66,10 +83,10 @@ function findBestReplacement(r, cm) {
   const foreignTight = cm.projForeign >= D.meta.foreignCap;
   const prefFoot = SLOT_FOOT_PREF[tPos];
 
-  let pool = D.roster.filter(p => p.pos === tPos);
+  let pool = _rosterByPosCache[tPos] || [];
   let matchKind = 'EXACT';
   if (!pool.length) {
-    pool = D.roster.filter(p => (EXACT_CAT[p.pos] ?? 3) === tCat);
+    pool = _rosterByCatCache[tCat] || [];
     matchKind = 'CAT';
   }
   if (!pool.length) return null;

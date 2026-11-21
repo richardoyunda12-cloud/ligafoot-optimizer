@@ -522,11 +522,6 @@
         }
 
         const localFlag = Boolean(userCountry && p.nationality === userCountry);
-        const sameLeague = Boolean(userCountry && ccountry === userCountry);
-
-        if (!localFlag && !sameLeague && !isUnh && !p.forSale && !p.loanable && !isBosman && !p.isGem) {
-          if (p.force < userAvgForce - 6 && p.potCap < userAvgForce + 2) continue;
-        }
 
         const sc = scoreTarget(p, false, isUnh, isScarce, cashCrisis, pol, persuadable, isBosman);
         const flags = [];
@@ -573,26 +568,17 @@
     for (const c of candidates) {
       const p = c.p;
       if (seenIds.has(p.id)) continue;
-      const fSet = c.flags;
-      const mustKeep = (c.reachable && fSet.includes('FREE') && p.force >= userAvgForce - 8)
-        || (c.reachable && fSet.includes('UNH'))
-        || (c.reachable && fSet.includes('BOSMAN') && p.force >= userAvgForce - 6)
-        || (c.reachable && fSet.includes('LOCAL') && p.force >= userAvgForce - 10);
-
-      if (mustKeep || selected.length < 2400) {
-        seenIds.add(p.id);
-        const stCode = p.top ? 2 : (p.star ? 1 : 0);
-        // Format kompak 23 elemen 100% kompatibel dengan UI Tab 7 & Python v8.3
-        selected.push([
-          p.name, p.pos, p.age, p.foot, p.nationality,
-          p.force, p.potential, p.potCap,
-          p.s1, p.s2, p.stackPct, p.nonStack ? 1 : 0,
-          p.salary, p.marketValue, c.estBuy, p.contractDays,
-          p.teamName, c.flip, fSet.join(','), p.id, stCode,
-          c.estResale, c.projGain,
-        ]);
-      }
-      if (selected.length >= 2800) break;
+      seenIds.add(p.id);
+      const stCode = p.top ? 2 : (p.star ? 1 : 0);
+      // Format kompak 23 elemen: sertakan SELURUH pemain aktif dari save (tanpa dipotong 2.800)
+      selected.push([
+        p.name, p.pos, p.age, p.foot, p.nationality,
+        p.force, p.potential, p.potCap,
+        p.s1, p.s2, p.stackPct, p.nonStack ? 1 : 0,
+        p.salary, p.marketValue, c.estBuy, p.contractDays,
+        p.teamName, c.flip, c.flags.join(','), p.id, stCode,
+        c.estResale, c.projGain,
+      ]);
     }
 
     youthScoutCandidates.sort((a, b) => {
