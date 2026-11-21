@@ -59,26 +59,50 @@
     const comps = (world.comps && typeof world.comps === 'object') ? world.comps : {};
     const todayNum = U.safeInt(world.today, 0);
 
-    function addMatchEntry(homeId, awayId, compId, compName, roundName = '', stageKind = '', day = null, roundsLeft = null, neutral = false, classic = false) {
+    const compKindMap = {};
+    for (const [cidK, compV] of Object.entries(comps)) {
+      if (compV && typeof compV === 'object') compKindMap[cidK] = String(compV.kind || '');
+    }
+    let userLeagueRank = null;
+    let userLeagueTeams = 0;
+    const uLeagueComp = comps[save.league || (compactTeams[userId] && compactTeams[userId].league) || ''];
+    if (uLeagueComp && Array.isArray(uLeagueComp.stages)) {
+      for (const st of uLeagueComp.stages) {
+        const tbl = (st && Array.isArray(st.table) && st.table) || (st && Array.isArray(st.standings) && st.standings);
+        if (tbl && tbl.length) {
+          userLeagueTeams = tbl.length;
+          const sortedTbl = [...tbl].sort((a, b) => (U.safeInt(b.pts, 0) - U.safeInt(a.pts, 0)) || (U.safeInt(b.gd, (b.gf || 0) - (b.ga || 0)) - U.safeInt(a.gd, (a.gf || 0) - (a.ga || 0))));
+          const idx = sortedTbl.findIndex(r => (r.teamId || r.id || r.t) === userId);
+          if (idx >= 0) userLeagueRank = idx + 1;
+          break;
+        }
+      }
+    }
+
+    function addMatchEntry(homeId, awayId, compId, compName, roundName = '', stageKind = '', day = null, roundsLeft = null, neutral = false, classic = false, compKind = '') {
       if (homeId !== userId && awayId !== userId) return;
       const oppId = homeId === userId ? awayId : homeId;
       if (!oppId) return;
       const k = `${compId}|${oppId}|${day ?? roundName}`;
       if (seenKeys.has(k)) return;
       seenKeys.add(k);
+      const classicMeta = (typeof C.getClassicInfo === 'function') ? C.getClassicInfo(homeId, awayId) : null;
+      const isClassic = Boolean(classic || classicMeta);
       matches.push({
         homeId,
         awayId,
         oppId,
         isHome: homeId === userId,
         compId: String(compId || ''),
+        compKind: String(compKind || compKindMap[compId] || stageKind || ''),
         compName: U.translateCompName(compName || compId || 'Liga', compId),
         roundName: U.translateRoundName(roundName),
         stageKind: String(stageKind || ''),
         day,
         roundsLeft,
         neutral: Boolean(neutral),
-        classic: Boolean(classic),
+        classic: isClassic,
+        classicLabel: classicMeta ? classicMeta.label : '',
       });
     }
 
@@ -140,7 +164,7 @@
               const rl = skind === 'table' ? Math.max(0, totalR - 1 - rIdx) : null;
               compFixtures.push({
                 sortKey: rDay >= todayNum ? rDay : (rDay + 10000),
-                h, a, cid, cname, rName, skind, rDay, rl,
+                h, a, cid, cname, rName, skind, ckind, rDay, rl,
                 neut: Boolean(fx.neutral),
                 classic: Boolean(fx.classic),
               });
@@ -153,16 +177,25 @@
     compFixtures.sort((a, b) => a.sortKey - b.sortKey);
     for (const f of compFixtures) {
       if (matches.length >= 5) break;
-      addMatchEntry(f.h, f.a, f.cid, f.cname, f.rName, f.skind, f.rDay, f.rl, f.neut, f.classic);
+      addMatchEntry(f.h, f.a, f.cid, f.cname, f.rName, f.skind, f.rDay, f.rl, f.neut, f.classic, f.ckind);
     }
 
     const enriched = [];
     const worldTeams = (world.teams && typeof world.teams === 'object') ? world.teams : {};
-    const basePrices = C.TICKETS_BASE[userDiv] || C.TICKETS_BASE[1];
     const curMuls = U.normalizeTicketMul(curTicketMul);
     const tmbMap = (ticketMulBy && typeof ticketMulBy === 'object') ? ticketMulBy : {};
     const sectorKeys = ['geral', 'arquibancada', 'cadeiras', 'camarotes'];
     const secNames = { geral: 'General', arquibancada: 'Stands', cadeiras: 'Seats', camarotes: 'Boxes' };
+    const KIND_LABELS = {
+      league: 'Liga',
+      cup: 'Piala / Copa',
+      continental2: 'Kontinental 2 (AFC2 / UEL)',
+      continental1: 'Kontinental 1 (AFC Elite / UCL)',
+      supercup: 'Piala Super',
+      state: 'Liga Regional',
+      friendly: 'Uji Coba',
+      other: 'Kompetisi Lain',
+    };
 
     for (const fx of matches.slice(0, 5)) {
       const oppId = fx.oppId;
@@ -184,8 +217,11 @@
       const aiInfo = T.predictAiTacticsDetail(oppXi.avgScore, userXi.avgScore, !fx.isHome, oppXiPlayers);
 
       const rnLow = fx.roundName.toLowerCase();
+      const ticketMeta = C.matchTicketMeta(fx.compId, fx.compKind || fx.stageKind, userCountry);
+      const isGroupStage = rnLow.includes('grup') || rnLow.includes('group');
       const koTokens = ['semi', 'quartas', 'quarter', 'perempat', 'oitavas', '16 besar', 'final'];
-      const isKo = (fx.stageKind === 'knockout') || koTokens.some(k => rnLow.includes(k));
+      const isKoToken = !isGroupStage && koTokens.some(k => rnLow.includes(k));
+      const isKo = (fx.stageKind === 'knockout') || isKoToken;
       let occasion = 'normal';
       let koStage = null;
       if (isKo) {
@@ -193,32 +229,57 @@
         else if (rnLow.includes('quartas') || rnLow.includes('quarter') || rnLow.includes('perempat')) { occasion = 'qf'; koStage = 'qf'; }
         else if (rnLow.includes('oitavas') || rnLow.includes('16')) { occasion = 'r16'; koStage = 'r16'; }
         else if (rnLow.includes('final') && !rnLow.includes('3º') && !rnLow.includes('terceiro') && !rnLow.includes('juara 3')) { occasion = 'final'; koStage = 'final'; }
-      } else if (fx.roundsLeft !== null && fx.roundsLeft <= 5) {
+      } else if (fx.roundsLeft !== null && fx.roundsLeft <= 5 && ticketMeta.kind === 'league') {
         occasion = 'runin';
       }
 
+      // Bytecode #24024 calculateMatchImportance & #24022 isBigMatch
+      let imp = 1.0;
+      if (ticketMeta.kind === 'league') {
+        if (fx.roundsLeft !== null) {
+          if (fx.roundsLeft <= 2) imp = 1.4;
+          else if (fx.roundsLeft <= 5) imp = 1.2;
+        }
+        if (userLeagueRank !== null) {
+          if (userLeagueRank <= 4) imp += 0.2;
+          else if (userLeagueTeams >= 8 && userLeagueRank >= userLeagueTeams - 2) {
+            imp += (fx.roundsLeft !== null && fx.roundsLeft <= 5) ? 0.5 : 0.3;
+          }
+        }
+      } else {
+        if (occasion === 'final') imp += 0.5;
+        else if (occasion === 'sf') imp += 0.3;
+        else if (occasion === 'qf') imp += 0.2;
+        else if (occasion === 'r16') imp += 0.1;
+        else if (isGroupStage) imp += 0.05;
+        if (ticketMeta.kind.startsWith('continental')) imp += 0.1;
+      }
+      if (fx.classic) imp += 0.3;
+      const lateKnockout = ticketMeta.kind !== 'league' && !isGroupStage && (isKoToken || occasion === 'r16' || occasion === 'qf' || occasion === 'sf' || occasion === 'final');
+
       const isBig = Boolean(
         fx.classic
-        || occasion === 'runin'
-        || occasion === 'sf'
         || occasion === 'final'
+        || lateKnockout
+        || imp >= 1.3
         || oppRep >= userRep + 10
-        || fx.compId.includes('cont:')
       );
       const repLvlDiff = oppRepLv - userRepLv;
 
       let ticketRec = null;
       if (fx.isHome && !fx.neutral) {
+        const fxBasePrices = E.getBaseTicketPrices(userDiv, ticketMeta.kind, userRepLv, userCountry, ticketMeta.region);
         const hasPhasePreset = Object.prototype.hasOwnProperty.call(tmbMap, occasion);
         const fxMuls = hasPhasePreset ? U.normalizeTicketMul(tmbMap[occasion]) : curMuls;
         const fxCurPrices = {};
         for (const s of sectorKeys) {
-          fxCurPrices[s] = Math.max(1, Math.round(basePrices[s] * fxMuls[s]));
+          fxCurPrices[s] = Math.max(1, Math.round(fxBasePrices[s] * fxMuls[s]));
         }
         const simOpts = {
           homeRepLvl: userRepLv,
           country: userCountry,
-          kind: 'league',
+          region: ticketMeta.region,
+          kind: ticketMeta.kind,
           koStage,
           isClassic: fx.classic,
         };
@@ -232,7 +293,13 @@
         }
         ticketRec = {
           occasion,
+          kind: ticketMeta.kind,
+          kindLabel: KIND_LABELS[ticketMeta.kind] || ticketMeta.kind,
+          region: ticketMeta.region,
+          basePrices: fxBasePrices,
           isBig,
+          isClassic: fx.classic,
+          classicLabel: fx.classicLabel || '',
           isKnockout: isKo,
           koStage,
           usingPhasePreset: hasPhasePreset,

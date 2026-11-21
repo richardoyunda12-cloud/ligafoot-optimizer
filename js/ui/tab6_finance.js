@@ -9,8 +9,10 @@ function fmtYmShort(ym) {
   return `${MONTH_ID_SHORT[moIdx]} '${m[1].slice(2)}`;
 }
 
-function getSaveTicketPrices() {
-  const bp = (D.stadium && D.stadium.basePrices) || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 };
+function getSaveTicketPrices(kind = simCompKind) {
+  const bp = (typeof getSimBasePrices === 'function')
+    ? getSimBasePrices(kind)
+    : ((D.stadium && D.stadium.basePrices) || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 });
   const cm = (D.stadium && D.stadium.curMul) || { geral: 1, arquibancada: 1, cadeiras: 1, camarotes: 1 };
   return {
     geral: Math.max(1, Math.round(bp.geral * (cm.geral ?? 1))),
@@ -141,6 +143,23 @@ function renderTab6() {
 }
 
 // ==================== SUB-TAB 5B: SIMULATOR TIKET & 6 FASE ====================
+const SIM_COMP_LABELS = {
+  league: 'Liga Utama',
+  continental2: 'Kontinental 2 (AFC2 / UEL)',
+  continental1: 'Kontinental 1 (AFC Elite / UCL)',
+  cup: 'Piala Domestik (Copa)',
+};
+
+function setSimCompKind(kind, keepPrices = false) {
+  simCompKind = kind || 'league';
+  const sel = document.getElementById('sim-comp-kind');
+  if (sel && sel.value !== simCompKind) sel.value = simCompKind;
+  if (!keepPrices) {
+    simPrices = optimalPricesJS(simMode === 'big', simCompKind);
+  }
+  renderTicketSim();
+}
+
 function setSimMode(mode) {
   simMode = mode;
   const bn = document.getElementById('sim-mode-normal');
@@ -151,40 +170,44 @@ function setSimMode(mode) {
 }
 
 function stepSimPrice(sec, delta) {
-  const bp = D.stadium.basePrices[sec];
+  const bp = getSimBasePrices(simCompKind)[sec];
   const lo = Math.max(1, Math.round(bp * 0.5)), hi = Math.round(bp * 2.0);
   simPrices[sec] = Math.max(lo, Math.min(hi, simPrices[sec] + delta));
   renderTicketSim();
 }
 
 function applyOptimalTicketJS() {
-  simPrices = optimalPricesJS(simMode === 'big');
+  simPrices = optimalPricesJS(simMode === 'big', simCompKind);
   renderTicketSim();
-  showToast('Harga tiket optimal (Fill ≥ 70.5%) diterapkan!');
+  showToast(`Harga tiket optimal (${SIM_COMP_LABELS[simCompKind] || 'Liga'}) diterapkan!`);
 }
 
 function resetSimToSavePrices() {
-  simPrices = getSaveTicketPrices();
+  simPrices = getSaveTicketPrices(simCompKind);
   renderTicketSim();
   showToast('Harga tiket dikembalikan ke setelan Save saat ini');
 }
 
 function applyPhaseToSim(phaseKey) {
-  const row = (D.stadium.phases || []).find(r => r.phase === phaseKey);
+  const byKind = (D.stadium && D.stadium.phasesByKind && D.stadium.phasesByKind[simCompKind]) || D.stadium.phases || [];
+  const row = byKind.find(r => r.phase === phaseKey);
   if (!row) return;
   simPrices = { ...row.optPrices };
-  simMode = (phaseKey === 'normal' || phaseKey === 'r16') ? 'normal' : 'big';
+  simMode = phaseKey === 'normal' ? 'normal' : 'big';
   setSimMode(simMode);
-  showToast(`Preset fase ${row.label} dimuat ke simulator!`);
+  showToast(`Preset fase ${row.label} (${SIM_COMP_LABELS[simCompKind] || 'Liga'}) dimuat!`);
 }
 
 function renderTicketSim() {
+  const sel = document.getElementById('sim-comp-kind');
+  if (sel && sel.value !== simCompKind) sel.value = simCompKind;
   const big = simMode === 'big';
-  const sim = simulateStadiumJS(simPrices, big);
-  const saveP = getSaveTicketPrices();
-  const saveSim = simulateStadiumJS(saveP, big);
+  const sim = simulateStadiumJS(simPrices, big, simCompKind);
+  const saveP = getSaveTicketPrices(simCompKind);
+  const saveSim = simulateStadiumJS(saveP, big, simCompKind);
   const deltaRev = Math.round(sim.totRev - saveSim.totRev);
   const labels = { geral: 'General', arquibancada: 'Stands', cadeiras: 'Seats', camarotes: 'Boxes (VIP)' };
+  const compLbl = SIM_COMP_LABELS[simCompKind] || 'Liga Utama';
 
   document.getElementById('t6-ticket-sim').innerHTML = ['geral', 'arquibancada', 'cadeiras', 'camarotes'].map(s => {
     const sd = sim.sectors[s];
@@ -212,34 +235,37 @@ function renderTicketSim() {
   document.getElementById('t6-ticket-res').innerHTML = `
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 11px">
       <div>
+        <span class="badge b-info" style="margin-right:6px">${esc(compLbl)}</span>
         Total Penonton: <b class="mono">${sim.totAtt.toLocaleString('id-ID')} / ${D.stadium.totalSeats.toLocaleString('id-ID')}</b>
         (<b class="${sim.crowdFull ? 'c-green' : 'c-red'} mono">${sim.fillPct}%</b> ${sim.crowdFull ? '✓ Bonus +2% Tengah AKTIF' : '⚠ <70% Bonus Tengah HILANG!'})
       </div>
       <div style="margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
         <span>Est. Gate: <b class="mono c-green" style="font-size:14px">${fmtM(sim.totRev)}</b></span>
         ${vsSaveHtml}
-        <span class="c-muted" style="font-size:11px">Label Unhappy UI murni kosmetik &amp; tdk mengurangi fanConfidence.</span>
+        <span class="c-muted" style="font-size:11px">Tarif kompetisi mengikuti bytecode #19815 (Kontinental/Copa punya harga dasar tersendiri!).</span>
       </div>
     </div>`;
 
-  // Tabel 6 Fase ticketMulBy dengan .tbl-sticky & harga salin langsung di kolom #1!
-  const phases = D.stadium.phases || [];
+  // Tabel 6 Fase ticketMulBy sesuai kompetisi aktif (#19815 + #24024 R16/QF = isBigMatch!)
+  const phases = (D.stadium && D.stadium.phasesByKind && D.stadium.phasesByKind[simCompKind]) || D.stadium.phases || [];
   if (phases.length) {
+    const bpShow = phases[0].basePrices || getSimBasePrices(simCompKind);
     document.getElementById('t6-tmb').innerHTML = `
-      <div class="mb-8"><b>📋 Preset Siap Salin — 6 Fase Resmi <code>ticketMulBy</code> (v1.2.0):</b></div>
+      <div class="mb-8"><b>📋 Preset Siap Salin — 6 Fase Resmi <code>ticketMulBy</code> (${esc(compLbl)} • Base ${bpShow.geral}·${bpShow.arquibancada}·${bpShow.cadeiras}·${bpShow.camarotes}):</b></div>
       <div class="tbl-wrap tbl-sticky"><table>
         <thead><tr>
-          <th>Fase &amp; Optimal Siap Salin</th><th>Status</th><th>Harga Kini</th><th>Fill</th><th>Est. Gate</th><th>Potensi +</th><th class="col-desk-only">Aksi</th>
+          <th>Fase &amp; Harga + Multiplier Optimal</th><th>Status</th><th>Harga Kini</th><th>Fill</th><th>Est. Gate</th><th>Potensi +</th><th class="col-desk-only">Aksi</th>
         </tr></thead>
         <tbody>${phases.map(r => {
-          const cp = r.curPrices, op = r.optPrices;
+          const cp = r.curPrices, op = r.optPrices, om = r.optMuls || {};
           const curStr = `${cp.geral}·${cp.arquibancada}·${cp.cadeiras}·${cp.camarotes}`;
           const optStr = `${op.geral} · ${op.arquibancada} · ${op.cadeiras} · ${op.camarotes}`;
           const optCompact = `${op.geral}·${op.arquibancada}·${op.cadeiras}·${op.camarotes}`;
+          const mulStr = `${Number(om.geral || 1).toFixed(2)}x · ${Number(om.arquibancada || 1).toFixed(2)}x · ${Number(om.cadeiras || 1).toFixed(2)}x · ${Number(om.camarotes || 1).toFixed(2)}x`;
           return `<tr>
             <td>
               <div><b>${esc(r.label)}</b></div>
-              <div class="mono c-green" style="font-size:11px;margin-top:2px"><b>${optCompact}</b></div>
+              <div class="mono c-green" style="font-size:11px;margin-top:2px"><b>${optCompact}</b> <span class="c-muted">(${mulStr})</span></div>
               <div class="sticky-inline-acts">
                 <button type="button" class="btn btn-sm" onclick="copyText('${optStr}','Preset ${escJs(r.label)}')">📋 Salin</button>
                 <button type="button" class="btn btn-sm" onclick="applyPhaseToSim('${r.phase}')">Muat</button>

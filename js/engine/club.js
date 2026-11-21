@@ -591,8 +591,14 @@
     const stadOpts = { homeRepLvl: repLevel, country: userCountry, kind: 'league' };
     const curSim = E.simulateStadiumV9(sections, ticketMul, fanConf, userDiv, false, false, 0, stadOpts);
     const optLiga = E.optimizeTicketPricesV9(sections, fanConf, userDiv, false, false, 0, 70.5, stadOpts);
-    const optBig = E.optimizeTicketPricesV9(sections, fanConf, userDiv, true, true, 1, 70.5, { ...stadOpts, koStage: 'final' });
+    const optBig = E.optimizeTicketPricesV9(sections, fanConf, userDiv, true, true, 1, 70.5, { ...stadOpts, koStage: 'final', isClassic: true });
     const ticketPhases = E.computeAllTicketPhases(sections, fanConf, userDiv, rawTmb, ticketMul, stadOpts);
+    const ticketPhasesByKind = {
+      league: ticketPhases,
+      cup: E.computeAllTicketPhases(sections, fanConf, userDiv, rawTmb, ticketMul, { homeRepLvl: repLevel, country: userCountry, kind: 'cup' }),
+      continental2: E.computeAllTicketPhases(sections, fanConf, userDiv, rawTmb, ticketMul, { homeRepLvl: repLevel, country: userCountry, region: (C.COUNTRY_GROUPS[0].includes(userCountry) ? 0 : 1), kind: 'continental2' }),
+      continental1: E.computeAllTicketPhases(sections, fanConf, userDiv, rawTmb, ticketMul, { homeRepLvl: repLevel, country: userCountry, region: (C.COUNTRY_GROUPS[0].includes(userCountry) ? 0 : 1), kind: 'continental1' }),
+    };
 
     const memberAudit = E.evalMemberPlan(uTeam.memberPlan, uTeam.members, fanConf, userCountry, userDiv, repLevel);
     const shopAudit = E.evalClubShop(uTeam.shopPrice, uTeam.shopLog, userRoster, currentDate, fanConf, payrollRef);
@@ -683,11 +689,15 @@
       else if ('isHome' in entry) isHm = Boolean(entry.isHome);
       else if (typeof entry.home === 'boolean') isHm = entry.home;
       else if (typeof entry.h === 'boolean') isHm = entry.h;
+      else if (typeof entry.h === 'string' && typeof entry.a === 'string') isHm = (entry.h === userId);
       else if ('hm' in entry) isHm = Boolean(entry.hm);
       else if ('casa' in entry) isHm = Boolean(entry.casa);
       else isHm = revV > 0;
 
       let rawOpp = entry.opp || entry.opponent || entry.oppName || entry.o || entry.oppId || entry.oid || entry.adv || entry.vs || entry.t || '';
+      if (!rawOpp && typeof entry.h === 'string' && typeof entry.a === 'string') {
+        rawOpp = isHm ? (entry.an || entry.a) : (entry.hn || entry.h);
+      }
       if (!rawOpp && typeof entry.home === 'string' && typeof entry.away === 'string') {
         rawOpp = entry.home === userId ? entry.away : entry.home;
       }
@@ -1070,6 +1080,7 @@
         curMul: ticketMul,
         ticketMulBy,
         phases: ticketPhases,
+        phasesByKind: ticketPhasesByKind,
         curSim,
         optLigaPrices: optLiga.prices,
         optLigaSim: optLiga.sim,

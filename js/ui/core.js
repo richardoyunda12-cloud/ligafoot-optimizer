@@ -4,6 +4,7 @@ let xiMode = 'best';
 let warRef = 'normal';     // strict | normal | lenient
 let warWeather = 'clear';  // clear | rain | heat
 let simMode = 'normal';
+let simCompKind = 'league';
 let simPrices = { ...((D && D.stadium && D.stadium.optLigaPrices) || { geral: 12, arquibancada: 19, cadeiras: 47, camarotes: 160 }) };
 let rosterSort = { col: 'force', dir: -1 };
 let scoutPreset = 'ALL';
@@ -107,19 +108,37 @@ function ticketDemandJS(m, big) {
   return cm < 1.0 ? 1.0 + 0.4 * (1.0 - cm) : Math.max(0.25, 1.0 - slope * (cm - 1.0));
 }
 
-function simulateStadiumJS(prices, big) {
-  const bp = (D.stadium && D.stadium.basePrices) || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 };
+function getSimBasePrices(kind = simCompKind) {
+  if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.getBaseTicketPrices === 'function') {
+    const country = (D.meta && D.meta.country) || 'OTHER';
+    const repLv = (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3;
+    const div = (D.meta && D.meta.division) || 1;
+    const euSet = (D.cfg && D.cfg.COUNTRY_GROUPS && D.cfg.COUNTRY_GROUPS[0]) || [];
+    const region = euSet.includes(String(country).toUpperCase()) ? 0 : 1;
+    return LFEngine.economy.getBaseTicketPrices(div, kind || 'league', repLv, country, region);
+  }
+  return (D.stadium && D.stadium.basePrices) || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 };
+}
+
+function simulateStadiumJS(prices, big, kind = simCompKind) {
+  const k = kind || simCompKind || 'league';
+  const bp = getSimBasePrices(k);
   const secs = (D.stadium && D.stadium.sections) || { geral: 6000, arquibancada: 13000, cadeiras: 900, camarotes: 100 };
   if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.simulateStadiumByPricesV9 === 'function') {
+    const country = (D.meta && D.meta.country) || 'OTHER';
+    const euSet = (D.cfg && D.cfg.COUNTRY_GROUPS && D.cfg.COUNTRY_GROUPS[0]) || [];
+    const region = euSet.includes(String(country).toUpperCase()) ? 0 : 1;
     const opts = {
       homeRepLvl: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
-      country: (D.meta && D.meta.country) || 'OTHER',
-      kind: 'league',
+      country,
+      region,
+      kind: k,
       koStage: big ? 'final' : null,
+      isClassic: Boolean(big && k === 'league'),
     };
     const res = LFEngine.economy.simulateStadiumByPricesV9(
       secs, prices, (D.meta && D.meta.fanConf) || 80, (D.meta && D.meta.division) || 1,
-      Boolean(big), Boolean(big), big ? 1 : 0, opts
+      Boolean(big && k !== 'league'), Boolean(big), big ? 1 : 0, opts
     );
     const out = {};
     ['geral', 'arquibancada', 'cadeiras', 'camarotes'].forEach(s => {
@@ -146,18 +165,24 @@ function simulateStadiumJS(prices, big) {
   return { totAtt: 0, totRev: 0, fillPct: 0, crowdFull: false, sectors: { geral: { cap: 0, bp: bp.geral, p: bp.geral, mul: 1, att: 0, fillPct: 0, rev: 0 }, arquibancada: { cap: 0, bp: bp.arquibancada, p: bp.arquibancada, mul: 1, att: 0, fillPct: 0, rev: 0 }, cadeiras: { cap: 0, bp: bp.cadeiras, p: bp.cadeiras, mul: 1, att: 0, fillPct: 0, rev: 0 }, camarotes: { cap: 0, bp: bp.camarotes, p: bp.camarotes, mul: 1, att: 0, fillPct: 0, rev: 0 } } };
 }
 
-function optimalPricesJS(big) {
+function optimalPricesJS(big, kind = simCompKind) {
+  const k = kind || simCompKind || 'league';
   if (window.LFEngine && LFEngine.economy && typeof LFEngine.economy.optimizeTicketPricesV9 === 'function') {
     const secs = (D.stadium && D.stadium.sections) || { geral: 6000, arquibancada: 13000, cadeiras: 900, camarotes: 100 };
+    const country = (D.meta && D.meta.country) || 'OTHER';
+    const euSet = (D.cfg && D.cfg.COUNTRY_GROUPS && D.cfg.COUNTRY_GROUPS[0]) || [];
+    const region = euSet.includes(String(country).toUpperCase()) ? 0 : 1;
     const opts = {
       homeRepLvl: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
-      country: (D.meta && D.meta.country) || 'OTHER',
-      kind: 'league',
+      country,
+      region,
+      kind: k,
       koStage: big ? 'final' : null,
+      isClassic: Boolean(big && k === 'league'),
     };
     const opt = LFEngine.economy.optimizeTicketPricesV9(
       secs, (D.meta && D.meta.fanConf) || 80, (D.meta && D.meta.division) || 1,
-      Boolean(big), Boolean(big), big ? 1 : 0, 70.5, opts
+      Boolean(big && k !== 'league'), Boolean(big), big ? 1 : 0, 70.5, opts
     );
     return { ...opt.prices };
   }
@@ -727,6 +752,7 @@ function renderStickyCartBar() {
 // ==================== WEB APP DYNAMIC STATE RESET (v8.0 PWA) ====================
 window.LFResetUIState = function () {
   simMode = 'normal';
+  simCompKind = 'league';
   xiMode = 'best';
   activeMatchIdx = 0;
   cartOut = {};

@@ -3,6 +3,7 @@ let warSimMode = false;
 let warSimOppId = '';
 let warSimIsHome = true;
 let warSimIsKo = false;
+let warSimCompKind = 'league';
 let warShoutUsed = {};
 
 function syncWarCondButtons() {
@@ -53,6 +54,12 @@ function setWarSimKo(isKo) {
   renderTab2();
 }
 
+function setWarSimComp(compKind) {
+  warSimCompKind = compKind || 'league';
+  warSimMode = true;
+  renderTab2();
+}
+
 function jumpWarSection(secId) {
   if (secId === 't2-live-drawer') {
     const det = document.getElementById('t2-live-drawer');
@@ -89,7 +96,12 @@ function openFormInTab3(formKey, useRot) {
   showToast(`Menampilkan ${useRot ? 'Rotation XI' : 'Best XI'} formasi ${fmtForm(formKey)}`);
 }
 
-function testWarTicketInSim(g, a, c, v, isBig) {
+function testWarTicketInSim(g, a, c, v, isBig, kind) {
+  if (kind && typeof simCompKind !== 'undefined') {
+    simCompKind = String(kind);
+    const sel = document.getElementById('sim-comp-kind');
+    if (sel) sel.value = simCompKind;
+  }
   if (typeof simPrices === 'object' && simPrices) {
     simPrices = { geral: Number(g), arquibancada: Number(a), cadeiras: Number(c), camarotes: Number(v) };
   }
@@ -214,13 +226,16 @@ function buildUnifiedSubPlan(benchPool) {
  * Hitung paket Matchup War Room penuh secara real-time untuk lawan simulasi!
  * v8.2.1: Pakai `opp.xiLite` (seluruh 11 starter lawan) + toggle Liga vs Gugur (`isKo`)!
  */
-function buildSimulatedFixture(opp, isHome, isKo) {
+function buildSimulatedFixture(opp, isHome, isKo, compKind = warSimCompKind) {
   const Eng = window.LFEngine;
   const userRoster = D.roster || [];
   const fkActive = (D.meta && D.meta.activeFormation) || '4-3-3';
   const fCap = (D.meta && D.meta.foreignCap) || 7;
   const uCountry = (D.meta && D.meta.country) || '';
   const repLv = (D.meta && D.meta.repLevel) || 3;
+  const k = compKind || 'league';
+  const classicMeta = (typeof CFG.getClassicInfo === 'function') ? CFG.getClassicInfo(D.meta && D.meta.userId, opp.id) : null;
+  const isClassic = Boolean(classicMeta);
 
   // Pakai seluruh 11 starter (`xiLite`) jika tersedia agar prediksi AI #23795 & duel udara HDG 100% akurat!
   const xiArr = (Array.isArray(opp.xiLite) && opp.xiLite.length)
@@ -236,7 +251,7 @@ function buildSimulatedFixture(opp, isHome, isKo) {
 
   const uAvg = Number((D.bestXi && D.bestXi.avgScore) || 40);
   const fullEdge = +(uAvg - oppXi.avgScore).toFixed(1);
-  const isBig = Boolean(isKo) || Number(opp.rep || 50) >= Number(D.meta.reputation || 50) + 10;
+  const isBig = Boolean(isKo || isClassic) || Number(opp.rep || 50) >= Number(D.meta.reputation || 50) + 10;
   const safeRotate = fullEdge >= 4.0 && !isKo && !isBig;
 
   let matchup = null;
@@ -249,7 +264,9 @@ function buildSimulatedFixture(opp, isHome, isKo) {
 
   let ticketRec = null;
   if (isHome && Eng && Eng.economy && D.stadium && D.stadium.sections) {
-    const bp = D.stadium.basePrices || { geral: 10, arquibancada: 15, cadeiras: 25, camarotes: 80 };
+    const euSet = (CFG && CFG.COUNTRY_GROUPS && CFG.COUNTRY_GROUPS[0]) || [];
+    const region = euSet.includes(String(uCountry).toUpperCase()) ? 0 : 1;
+    const bp = Eng.economy.getBaseTicketPrices(D.meta.division || 1, k, repLv, uCountry, region);
     const occ = isKo ? 'sf' : 'normal';
     const tmb = D.stadium.ticketMulBy || {};
     const usingPhase = Boolean(tmb[occ]);
@@ -261,16 +278,31 @@ function buildSimulatedFixture(opp, isHome, isKo) {
       camarotes: Math.max(1, Math.round(bp.camarotes * curM.camarotes)),
     };
     const repDiff = Number(opp.rep || 50) - Number(D.meta.reputation || 50);
-    const opt = Eng.economy.optimizeTicketPricesV9(D.stadium.sections, D.meta.fanConf || 80, D.meta.division || 1, Boolean(isKo), isBig, repDiff);
-    const curSim = Eng.economy.simulateStadiumV9(D.stadium.sections, curM, D.meta.fanConf || 80, D.meta.division || 1, Boolean(isKo), isBig, repDiff);
+    const simOpts = {
+      homeRepLvl: repLv,
+      country: uCountry,
+      region,
+      kind: k,
+      koStage: isKo ? 'sf' : null,
+      isClassic,
+    };
+    const opt = Eng.economy.optimizeTicketPricesV9(D.stadium.sections, D.meta.fanConf || 80, D.meta.division || 1, Boolean(isKo), isBig, repDiff, 70.5, simOpts);
+    const curSim = Eng.economy.simulateStadiumByPricesV9(D.stadium.sections, curP, D.meta.fanConf || 80, D.meta.division || 1, Boolean(isKo), isBig, repDiff, simOpts);
     const diffs = [];
     const secNames = { geral: 'General', arquibancada: 'Stands', cadeiras: 'Seats', camarotes: 'Boxes' };
     ['geral', 'arquibancada', 'cadeiras', 'camarotes'].forEach(s => {
       if (Math.abs(opt.prices[s] - curP[s]) >= 1) diffs.push(`${secNames[s]} ${curP[s]}→${opt.prices[s]}`);
     });
+    const kLbls = { league: 'Liga', cup: 'Piala / Copa', continental2: 'Kontinental 2 (AFC2 / UEL)', continental1: 'Kontinental 1 (AFC Elite / UCL)' };
     ticketRec = {
-      occasion: isKo ? 'gugur' : 'liga',
+      occasion: occ,
+      kind: k,
+      kindLabel: kLbls[k] || k,
+      region,
+      basePrices: bp,
       isBig,
+      isClassic,
+      classicLabel: classicMeta ? classicMeta.label : '',
       isKnockout: Boolean(isKo),
       usingPhasePreset: usingPhase,
       prices: opt.prices,
@@ -286,12 +318,13 @@ function buildSimulatedFixture(opp, isHome, isKo) {
   const benchPool = (matchup && matchup.recommended && matchup.recommended.bench) || (D.bestXi && D.bestXi.bench) || [];
   const subPlan = buildUnifiedSubPlan(benchPool);
 
+  const simCompNames = { league: 'Simulasi Liga', cup: 'Simulasi Piala (Copa)', continental2: 'Simulasi Kontinental 2 (AFC2/UEL)', continental1: 'Simulasi Kontinental 1 (AFC/UCL)' };
   return {
     isSim: true,
     oppId: opp.id,
     isHome,
-    compName: isKo ? 'Simulasi Gugur (Big Match)' : 'Simulasi Liga',
-    roundName: isKo ? 'Semifinal / Final' : 'Uji Formasi & Taktik',
+    compName: simCompNames[k] || 'Simulasi',
+    roundName: isKo ? 'Semifinal (Gugur)' : (isClassic ? (classicMeta.label || 'Derby Classic') : 'Laga Biasa / Grup'),
     oppName: opp.name,
     oppRep: Math.round(opp.rep || 50),
     oppFormation: oppXi.formation,
@@ -468,15 +501,17 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
 
   // Kartu 3: Harga Tiket Kandang (+ Badge Preset Fase + Highlight Sektor Berubah + Tombol Tes Simulator)
   const tktCopyStr = tkt ? `${tkt.prices.geral} · ${tkt.prices.arquibancada} · ${tkt.prices.cadeiras} · ${tkt.prices.camarotes}` : '';
-  const tktBox = (lbl, optV, curV) => {
+  const tktBox = (lbl, optV, curV, mulV) => {
     const chg = Math.abs(optV - curV) >= 1;
+    const mulTxt = mulV !== undefined ? ` (${Number(mulV).toFixed(2)}x)` : '';
     return `<div class="tkt-box ${chg ? 'changed' : ''}">
-      <div class="c-muted" style="font-size:10px">${lbl}</div>
+      <div class="c-muted" style="font-size:10px">${lbl}${mulTxt}</div>
       <div class="mono ${chg ? 'c-amber' : 'c-green'}" style="font-size:18px;font-weight:900">${optV}</div>
       <div class="mono c-muted" style="font-size:10px">${chg ? `kini ${curV} → ${optV}` : `✓ pas (${curV})`}</div>
     </div>`;
   };
 
+  const tktBpStr = (tkt && tkt.basePrices) ? `Base ${tkt.basePrices.geral}·${tkt.basePrices.arquibancada}·${tkt.basePrices.cadeiras}·${tkt.basePrices.camarotes}` : '';
   const ticketBlock = tkt ? `
     <div id="wr-sec-ticket" style="background:var(--bg2);border:1px solid rgba(16,185,129,.45);border-radius:11px;padding:11px;font-size:11px">
       <div class="flex-between mb-8">
@@ -484,19 +519,22 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
           <span class="kpi-lbl">3. Harga Tiket Kandang (${String(tkt.occasion || 'normal').toUpperCase()}${tkt.isBig ? ' • BIG MATCH' : ''}${tkt.isKnockout ? ' • GUGUR' : ''})</span>
           <div style="margin-top:3px;display:flex;gap:5px;flex-wrap:wrap">
             <span class="badge ${tkt.diffs && tkt.diffs.length ? 'b-warn' : 'b-good'}">${tkt.diffs && tkt.diffs.length ? 'UBAH HARGA!' : '✓ SUDAH PAS'}</span>
-            <span class="badge ${tkt.usingPhasePreset ? 'b-info' : 'b-muted'}">${tkt.usingPhasePreset ? 'Preset Fase Aktif' : 'Default Liga'}</span>
+            ${tkt.kindLabel ? `<span class="badge b-accent">${esc(tkt.kindLabel)}</span>` : ''}
+            ${tkt.isClassic ? `<span class="badge b-warn">🔥 ${esc(tkt.classicLabel || 'DERBY')}</span>` : ''}
+            <span class="badge ${tkt.usingPhasePreset ? 'b-info' : 'b-muted'}">${tkt.usingPhasePreset ? 'Preset Fase Aktif' : 'Tarif Dasar'}</span>
+            ${tktBpStr ? `<span class="c-muted mono" style="font-size:10px;align-self:center">${tktBpStr}</span>` : ''}
           </div>
         </div>
         <div style="display:flex;gap:5px">
           <button type="button" class="btn btn-sm" onclick="copyText('${tktCopyStr}','Harga Tiket')">📋 Salin</button>
-          <button type="button" class="btn btn-sm" onclick="testWarTicketInSim(${tkt.prices.geral},${tkt.prices.arquibancada},${tkt.prices.cadeiras},${tkt.prices.camarotes},${tkt.isBig || tkt.isKnockout ? 'true' : 'false'})">🎟️ Tes →</button>
+          <button type="button" class="btn btn-sm" onclick="testWarTicketInSim(${tkt.prices.geral},${tkt.prices.arquibancada},${tkt.prices.cadeiras},${tkt.prices.camarotes},${tkt.isBig || tkt.isKnockout ? 'true' : 'false'},'${escJs(tkt.kind || 'league')}')">🎟️ Tes →</button>
         </div>
       </div>
       <div class="grid g4 ticket-4grid" style="gap:6px;margin-bottom:8px;text-align:center">
-        ${tktBox('General', tkt.prices.geral, tkt.curPrices.geral)}
-        ${tktBox('Stands', tkt.prices.arquibancada, tkt.curPrices.arquibancada)}
-        ${tktBox('Seats', tkt.prices.cadeiras, tkt.curPrices.cadeiras)}
-        ${tktBox('Boxes (VIP)', tkt.prices.camarotes, tkt.curPrices.camarotes)}
+        ${tktBox('General', tkt.prices.geral, tkt.curPrices.geral, tkt.muls && tkt.muls.geral)}
+        ${tktBox('Stands', tkt.prices.arquibancada, tkt.curPrices.arquibancada, tkt.muls && tkt.muls.arquibancada)}
+        ${tktBox('Seats', tkt.prices.cadeiras, tkt.curPrices.cadeiras, tkt.muls && tkt.muls.cadeiras)}
+        ${tktBox('Boxes', tkt.prices.camarotes, tkt.curPrices.camarotes, tkt.muls && tkt.muls.camarotes)}
       </div>
       <div>Est. Fill: <b class="mono ${tkt.fillPct >= 70 ? 'c-green' : 'c-red'}">${tkt.fillPct}%</b> (bonus +2% MID ≥70%) • Est. Gate: <b class="mono c-green">${fmtM(tkt.estRev)}</b>
       ${tkt.diffs && tkt.diffs.length ? `<div class="c-amber" style="margin-top:3px"><b>Ubah di layar Tickets:</b> ${tkt.diffs.join(' · ')} ${tkt.revGain > 0 ? `(+${fmtM(tkt.revGain)}/laga)` : ''}</div>` : ''}</div>
@@ -641,7 +679,7 @@ function renderTab2() {
 
   if (warSimMode) {
     const chosenOpp = simOpps.find(o => o.id === warSimOppId) || simOpps[0];
-    activeFx = buildSimulatedFixture(chosenOpp, warSimIsHome, warSimIsKo);
+    activeFx = buildSimulatedFixture(chosenOpp, warSimIsHome, warSimIsKo, warSimCompKind);
     simControlsHtml = `
       <div class="wr-sim-bar">
         <div style="font-size:12px">
@@ -654,11 +692,17 @@ function renderTab2() {
             return `<option value="${esc(o.id)}" ${o.id === chosenOpp.id ? 'selected' : ''}>${ost ? '#' + ost.pos + ' ' : ''}${esc(o.name)} (Avg ${o.avgScore} • ${fmtForm(o.formation)})</option>`;
           }).join('')}
         </select>
-        <div class="wr-sim-toggles" style="display:flex;gap:5px;flex-wrap:wrap">
+        <div class="wr-sim-toggles" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn btn-sm ${warSimIsHome ? 'btn-green' : ''}" onclick="setWarSimHome(true)">🏠 Kandang</button>
           <button type="button" class="btn btn-sm ${!warSimIsHome ? 'btn-green' : ''}" onclick="setWarSimHome(false)">✈️ Tandang</button>
-          <button type="button" class="btn btn-sm ${!warSimIsKo ? 'btn-green' : ''}" onclick="setWarSimKo(false)">🏟️ Liga Biasa</button>
-          <button type="button" class="btn btn-sm ${warSimIsKo ? 'btn-amber' : ''}" onclick="setWarSimKo(true)">🏆 Gugur / Final</button>
+          <select id="wr-sim-comp" onchange="setWarSimComp(this.value)" style="width:auto;padding:4px 8px;font-size:12px">
+            <option value="league" ${warSimCompKind === 'league' ? 'selected' : ''}>🏟️ Liga</option>
+            <option value="continental2" ${warSimCompKind === 'continental2' ? 'selected' : ''}>🌏 AFC2 / UEL</option>
+            <option value="continental1" ${warSimCompKind === 'continental1' ? 'selected' : ''}>⭐ AFC Elite / UCL</option>
+            <option value="cup" ${warSimCompKind === 'cup' ? 'selected' : ''}>🏆 Piala (Copa)</option>
+          </select>
+          <button type="button" class="btn btn-sm ${!warSimIsKo ? 'btn-green' : ''}" onclick="setWarSimKo(false)">Grup / Biasa</button>
+          <button type="button" class="btn btn-sm ${warSimIsKo ? 'btn-amber' : ''}" onclick="setWarSimKo(true)">🏆 Gugur / SF</button>
         </div>
       </div>`;
   } else {

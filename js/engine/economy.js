@@ -303,18 +303,24 @@
     };
   }
 
-  // Bytecode #19903 baseTicketsFor
-  function getBaseTicketPrices(division = 1, kind = 'league', homeRepLvl = 3, country = 'OTHER') {
+  // Bytecode #19815 ticketPrices (match #19903 baseTicketsFor)
+  function getBaseTicketPrices(division = 1, kind = 'league', homeRepLvl = 3, country = 'OTHER', region = null) {
     const k = String(kind || 'league').toLowerCase();
-    const isEu = U.countryGroup(country) === 0;
+    const isEu = (region !== null && region !== undefined)
+      ? (Number(region) === 0)
+      : (U.countryGroup(country) === 0);
+    const rLv = U.clamp(U.safeInt(homeRepLvl, 3), 0, 5);
     let arr;
     if (k === 'continental1') {
       arr = isEu ? C.TICKETS_CONT1.eu : C.TICKETS_CONT1.other;
     } else if (k === 'continental2' || k === 'supercup') {
       arr = isEu ? C.TICKETS_CONT2.eu : C.TICKETS_CONT2.other;
     } else if (k === 'cup') {
-      const rLv = U.clamp(U.safeInt(homeRepLvl, 3), 0, 5);
       arr = rLv >= 4 ? C.TICKETS_CUP.high : (rLv === 3 ? C.TICKETS_CUP.mid : C.TICKETS_CUP.low);
+    } else if (k === 'state') {
+      arr = rLv >= 4 ? [10, 15, 25, 70] : (rLv === 3 ? [5, 12, 20, 50] : (rLv === 0 ? [3, 5, 12, 20] : [3, 12, 15, 30]));
+    } else if (k === 'friendly' || k === 'other' || k === 'continental3') {
+      arr = [10, 25, 35, 50];
     } else {
       const div = U.clamp(U.safeInt(division, 1), 0, 4);
       arr = (C.TICKETS_LEAGUE && C.TICKETS_LEAGUE[div]) || [10, 15, 25, 80];
@@ -352,18 +358,23 @@
     const koStage = o.koStage || null;
     const isClassic = Boolean(o.isClassic);
     const country = o.country || 'OTHER';
+    const region = (o.region !== undefined && o.region !== null) ? o.region : null;
 
-    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country);
+    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country, region);
     const baseAttArr = (C.BASE_ATTENDANCE && C.BASE_ATTENDANCE[homeRepLvl]) || [4000, 20000, 2500, 300];
     const extraArr = (C.EXTRA_DRAW && C.EXTRA_DRAW[div]) || [100, 500, 200, 10];
 
-    const kindScale = kind === 'continental1'
-      ? 1.35
-      : ((kind === 'continental2' || kind === 'supercup') ? 1.15 : (kind === 'cup' ? 1.10 : 1.0));
+    const kindScale = kind === 'state'
+      ? 0.70
+      : (kind === 'friendly'
+        ? 0.40
+        : (kind === 'continental1'
+          ? 1.35
+          : ((kind === 'continental2' || kind === 'supercup') ? 1.15 : (kind === 'cup' ? 1.10 : 1.0))));
 
     const fillBonus = (isKnockout ? 0.45 : 0.30)
       + (kind === 'continental1' ? 0.30 : ((kind === 'continental2' || kind === 'supercup') ? 0.15 : 0.0))
-      + (isBigMatch ? 0.20 : 0.0);
+      + ((isBigMatch || isClassic) ? 0.20 : 0.0);
 
     let rd = U.safeNum(repDiff, 0);
     if (Math.abs(rd) > 5) {
@@ -451,7 +462,8 @@
     const homeRepLvl = U.clamp(U.safeInt(o.homeRepLvl !== undefined ? o.homeRepLvl : 3, 3), 0, 5);
     const kind = String(o.kind || 'league').toLowerCase();
     const country = o.country || 'OTHER';
-    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country);
+    const region = (o.region !== undefined && o.region !== null) ? o.region : null;
+    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country, region);
     const muls = U.normalizeTicketMul(ticketMul);
     const prices = {};
     for (const s of SECTORS) {
@@ -475,7 +487,8 @@
     const homeRepLvl = U.clamp(U.safeInt(o.homeRepLvl !== undefined ? o.homeRepLvl : 3, 3), 0, 5);
     const kind = String(o.kind || 'league').toLowerCase();
     const country = o.country || 'OTHER';
-    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country);
+    const region = (o.region !== undefined && o.region !== null) ? o.region : null;
+    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country, region);
 
     // Evaluasi tiap sektor untuk setiap kandidat harga bulat di [0.5x .. 2.0x]
     const sectorCandidates = {};
@@ -563,35 +576,39 @@
   }
 
   /**
-   * Matriks Harga Tiket Optimal untuk 6 Fase Kompetisi (`ticketMulBy[occasion]` #19907 & #34244).
+   * Matriks Harga Tiket Optimal untuk 6 Fase Kompetisi (`ticketMulBy[occasion]` #19827 & #24024).
+   * Catatan bytecode #24024: R16 ('Oitavas') & QF ('Quartas') termasuk `lateKnockout` -> `isBigMatch = true`!
    */
   function computeAllTicketPhases(sections, fanConf, division, savedTicketMulBy = null, defaultTicketMul = null, opts = null) {
     const baseOpts = (opts && typeof opts === 'object') ? opts : {};
     const div = U.clamp(U.safeInt(division, 1), 0, 4);
     const homeRepLvl = U.clamp(U.safeInt(baseOpts.homeRepLvl !== undefined ? baseOpts.homeRepLvl : 3, 3), 0, 5);
     const country = baseOpts.country || 'OTHER';
-    const basePrices = getBaseTicketPrices(div, 'league', homeRepLvl, country);
+    const kind = String(baseOpts.kind || 'league').toLowerCase();
+    const region = (baseOpts.region !== undefined && baseOpts.region !== null) ? baseOpts.region : null;
+    const basePrices = getBaseTicketPrices(div, kind, homeRepLvl, country, region);
     const defMul = U.normalizeTicketMul(defaultTicketMul);
     const tmb = (savedTicketMulBy && typeof savedTicketMulBy === 'object') ? savedTicketMulBy : {};
 
     const phaseSpecs = [
-      { key: 'normal', label: 'Liga Normal',            isKo: false, isBig: false, repDiff: 0, koStage: null,    kind: 'league' },
-      { key: 'runin',  label: 'Liga Run-in (<=5 Laga)', isKo: false, isBig: true,  repDiff: 1, koStage: null,    kind: 'league' },
-      { key: 'r16',    label: '16 Besar (R16)',         isKo: true,  isBig: false, repDiff: 0, koStage: 'r16',   kind: 'cup'    },
-      { key: 'qf',     label: 'Perempat Final (QF)',    isKo: true,  isBig: false, repDiff: 1, koStage: 'qf',    kind: 'cup'    },
-      { key: 'sf',     label: 'Semifinal (SF)',         isKo: true,  isBig: true,  repDiff: 1, koStage: 'sf',    kind: 'cup'    },
-      { key: 'final',  label: 'Final / Derby Classic',  isKo: true,  isBig: true,  repDiff: 2, koStage: 'final', kind: 'cup'    },
+      { key: 'normal', label: 'Normal / Grup',          isKo: false, isBig: false, repDiff: 0, koStage: null },
+      { key: 'runin',  label: 'Run-in (<=5 Laga)',      isKo: false, isBig: true,  repDiff: 1, koStage: null },
+      { key: 'r16',    label: '16 Besar (R16)',         isKo: true,  isBig: true,  repDiff: 0, koStage: 'r16' },
+      { key: 'qf',     label: 'Perempat Final (QF)',    isKo: true,  isBig: true,  repDiff: 1, koStage: 'qf' },
+      { key: 'sf',     label: 'Semifinal (SF)',         isKo: true,  isBig: true,  repDiff: 1, koStage: 'sf' },
+      { key: 'final',  label: 'Final / Derby Classic',  isKo: true,  isBig: true,  repDiff: 2, koStage: 'final' },
     ];
 
     const results = [];
     for (const sp of phaseSpecs) {
-      // Catatan: di UI game LigaFoot, tabel preset ticketMulBy menampilkan harga bulat berbasis TICKETS_LEAGUE[div]
       const phaseOpts = {
         ...baseOpts,
         homeRepLvl,
         country,
-        kind: 'league',
+        region,
+        kind,
         koStage: sp.koStage,
+        isClassic: sp.key === 'final',
       };
       const hasSaved = Boolean(tmb[sp.key] && typeof tmb[sp.key] === 'object');
       const curMuls = hasSaved ? U.normalizeTicketMul(tmb[sp.key]) : defMul;
@@ -607,6 +624,8 @@
         key: sp.key,
         phase: sp.key,
         label: sp.label,
+        kind,
+        basePrices,
         isKnockout: sp.isKo,
         isBig: sp.isBig,
         koStage: sp.koStage,

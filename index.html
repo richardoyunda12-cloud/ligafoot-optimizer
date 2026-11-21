@@ -588,8 +588,14 @@
         <div class="flex-between mb-8">
           <h2 style="margin:0">🎟️ Simulator Tiket Bulat (Pareto Fill ≥ 70.5%)</h2>
           <div class="pill-row" style="margin:0">
-            <button type="button" class="btn btn-sm btn-green" id="sim-mode-normal" onclick="setSimMode('normal')">Laga Biasa</button>
-            <button type="button" class="btn btn-sm" id="sim-mode-big" onclick="setSimMode('big')">Big Match / Gugur</button>
+            <select id="sim-comp-kind" class="input" style="width:auto;min-width:170px;padding:4px 8px;font-size:12px" onchange="setSimCompKind(this.value)">
+              <option value="league">🏟️ Liga Utama</option>
+              <option value="continental2">🌏 Kontinental 2 (AFC2 / UEL)</option>
+              <option value="continental1">⭐ Kontinental 1 (AFC Elite / UCL)</option>
+              <option value="cup">🏆 Piala Domestik (Copa)</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-green" id="sim-mode-normal" onclick="setSimMode('normal')">Laga Biasa / Grup</button>
+            <button type="button" class="btn btn-sm" id="sim-mode-big" onclick="setSimMode('big')">Big / Derby / R16+</button>
             <button type="button" class="btn btn-sm btn-green" onclick="applyOptimalTicketJS()">✨ Optimal</button>
             <button type="button" class="btn btn-sm" onclick="resetSimToSavePrices()">↩️ Harga Save</button>
           </div>
