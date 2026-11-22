@@ -920,9 +920,18 @@
     const youthCost = youthCoachMonthly(country, userDiv, ycLv);
 
     const bankLoanParcel = computeMonthlyLoanDue(uTeam);
+    const transferDebtParcel = Array.isArray(uTeam && uTeam.transferDebt)
+      ? uTeam.transferDebt.reduce((s, d) => {
+          if (!d || typeof d !== 'object') return s;
+          if (U.safeInt(d.left, 0) <= 0) return s;
+          const parcel = U.safeNum(d.parcel, 0);
+          const rest = d.rest !== undefined ? U.safeNum(d.rest, parcel) : parcel;
+          return s + Math.min(parcel, rest);
+        }, 0)
+      : 0;
 
     const estMonthlyRev = Math.round(estTickets + estSponsors + estNaming + estShop + estMember);
-    const estMonthlyExp = Math.round(combinedPayroll + stadiumOps + ctCost + youthCost + bankLoanParcel);
+    const estMonthlyExp = Math.round(combinedPayroll + stadiumOps + ctCost + youthCost + bankLoanParcel + transferDebtParcel);
     const estProjectedNet = estMonthlyRev - estMonthlyExp;
 
     let avgNet = cashflowMeta ? cashflowMeta.avgOpNet3m : null;

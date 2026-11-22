@@ -810,6 +810,9 @@
     if (style.includes('off') || style.includes('serang')) {
       rawAtk *= 1.08;
       rawDef *= 0.92;
+    } else if (style.includes('def')) {
+      rawAtk *= 0.92;
+      rawDef *= 1.08;
     } else if (style.includes('counter') || style.includes('balik')) {
       rawMid *= 0.94;
       convBonusPct = 9.0;
@@ -1100,7 +1103,7 @@
         styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & punya ${velDefCount} pemain cepat VEL (≥2) → AI otomatis Counter-Attack (-6% MID, +7% konversi)`;
       } else {
         aiStyle = 'Balanced';
-        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) tapi hanya punya ${velDefCount} pemain VEL (<2) → AI tetap Balanced (#24016)`;
+        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & pemain VEL <2 → AI 60% Balanced / 40% Defensive (-8% ATK, +8% DEF di #24218)`;
       }
     } else if (velDefCount >= 3) {
       aiStyle = 'Balanced';
@@ -1116,7 +1119,9 @@
 
     let counterTip = 'Balanced';
     if (aiStyle === 'Offensive') {
-      counterTip = 'Counter-Attack (+7% konversi peluang vs DEF lawan yang terbuka -8%)';
+      counterTip = 'Counter-Attack (+6..12% konversi peluang vs DEF lawan yang terbuka -8%)';
+    } else if (aiStyle === 'Defensive') {
+      counterTip = 'Offensive (+8% ATK untuk menembus DEF lawan yang menumpuk +8%)';
     } else if (aiStyle === 'Counter-Attack') {
       counterTip = 'Dominasi MID + Offensive (+8% ATK untuk membongkar lawan yang melepas -6% MID)';
     } else {
@@ -1293,11 +1298,11 @@
     const recEdge = U.roundTo(best.avgScore - oppAvg, 1);
     const activeEdge = U.roundTo(activeComp.avgScore - oppAvg, 1);
 
-    // Uji 3 Play Style resmi pada formasi terbaik via Markov #48031
+    // Uji 4 Play Style resmi (#21959) pada formasi terbaik via Markov #48031
     const bestXiObj = solveBestXi(userRoster, best.formation, foreignCap, userCountry, excludeForRec, safeRotate, repLevel);
     const bestMark = (recEdge >= 4.0 && !isKnockout && !isBig) ? 'Light' : 'Heavy';
     const styleSims = {};
-    for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack']) {
+    for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
       const pTry = computeEngineSectorPower(bestXiObj, best.formation, {
         isHome, crowdOver70: true, style: stTry, marking: bestMark,
       });
@@ -1308,12 +1313,11 @@
 
     let recStyle = 'Balanced';
     let bestStylePts = styleSims.Balanced.xPts;
-    if (styleSims.Offensive.xPts >= bestStylePts + 0.012) {
-      recStyle = 'Offensive';
-      bestStylePts = styleSims.Offensive.xPts;
-    }
-    if (styleSims['Counter-Attack'].xPts >= bestStylePts + 0.012) {
-      recStyle = 'Counter-Attack';
+    for (const stOpt of ['Offensive', 'Counter-Attack', 'Defensive']) {
+      if (styleSims[stOpt].xPts >= bestStylePts + 0.012) {
+        recStyle = stOpt;
+        bestStylePts = styleSims[stOpt].xPts;
+      }
     }
 
     let recStyleWhy = '';
@@ -1321,13 +1325,15 @@
       recStyleWhy = `Uji simulasi memberi ekspektasi poin tertinggi (${styleSims['Counter-Attack'].winPct}% Win) vs AI ${finalAi.aiStyle}: +6..12% bonus konversi peluang sangat efektif saat transisi cepat.`;
     } else if (recStyle === 'Offensive') {
       recStyleWhy = `Uji simulasi unggul di Offensive (${styleSims.Offensive.winPct}% Win, xG ${styleSims.Offensive.xGF} vs Balanced ${styleSims.Balanced.xGF}): +8% ATK memaksimalkan volume gol tanpa mengorbankan dominasi MID.`;
+    } else if (recStyle === 'Defensive') {
+      recStyleWhy = `Uji simulasi unggul di Defensive (${styleSims.Defensive.winPct}% Win · ${styleSims.Defensive.drawPct}% Seri, xGA ${styleSims.Defensive.xGA}): +8% DEF meredam gempuran lawan.`;
     } else if (finalAi.aiStyle === 'Offensive') {
       recStyleWhy = `Lawan diprediksi Offensive (+8% ATK, -8% DEF). Balanced menjaga DEF tetap rapat; siapkan Counter-Attack jika tertekan.`;
     } else {
-      recStyleWhy = `Balanced paling stabil (${styleSims.Balanced.winPct}% Win · ${styleSims.Balanced.drawPct}% Seri · xPts ${styleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive) maupun -6% MID (Counter).`;
+      recStyleWhy = `Balanced paling stabil (${styleSims.Balanced.winPct}% Win · ${styleSims.Balanced.drawPct}% Seri · xPts ${styleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive), -8% ATK (Defensive), maupun -6% MID (Counter).`;
     }
 
-    const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack'].map(stName => {
+    const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'].map(stName => {
       const s = styleSims[stName];
       return {
         style: stName,
@@ -1870,7 +1876,7 @@
     let bestStyle = 'Balanced';
     let bestSim = best.sim;
     let bestPow = best.uPow;
-    for (const stTry of ['Offensive', 'Counter-Attack']) {
+    for (const stTry of ['Offensive', 'Counter-Attack', 'Defensive']) {
       const pTry = computeEngineSectorPower(best.xiRes, best.formation, {
         isHome, crowdOver70: true, style: stTry, marking: 'Heavy',
       });
