@@ -470,7 +470,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
             <span style="font-size:19px;font-weight:900" class="mono c-green">${esc(fmtForm(rec.formation))}</span>
             <span class="badge ${m.keepActive ? 'b-good' : 'b-info'}">${m.keepActive ? '✓ PERTAHANKAN' : `🔄 GANTI (+${m.scoreGain}% W)`}</span>
             ${rec.winPct !== undefined ? `<span class="badge b-good mono">${rec.winPct}% Win</span>` : ''}
-            ${rec.falseNine ? '<span class="badge b-accent">⚡ FALSE NINE</span>' : ''}
+            ${m.falseNine && m.falseNineTarget ? `<span class="badge b-accent">⚡ F9: ${esc(m.falseNineTarget.name)}</span>` : ''}
           </div>
         </div>
         <button type="button" class="btn btn-sm btn-green" onclick="openFormInTab3('${escJs(rec.formation)}', ${fx.safeRotate ? 'true' : 'false'})">⚽ Lihat XI</button>
@@ -507,6 +507,9 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
       <div class="mb-8"><b>Fokus Serang:</b> <span class="badge b-info">${esc(m.attackFocus)}</span>
         <div class="c-muted" style="margin-top:2px">${esc(m.focusReason)}</div>
+      </div>
+      <div class="mb-8"><b>False Nine (#21822):</b> <span class="badge ${m.falseNine ? 'b-accent' : 'b-muted'}">${m.falseNine && m.falseNineTarget ? `ON: ${esc(m.falseNineTarget.name)}` : 'OFF (Tidak Dipakai)'}</span>
+        <div class="c-muted" style="margin-top:2px">${esc(m.falseNineWhy || 'OFF — Mempertahankan 100% bobot lini depan.')}</div>
       </div>
       <div class="mb-8"><b>Marking (Wasit ${warRef.toUpperCase()}):</b> <span class="badge ${refObj.badge}">${esc(refObj.marking)}</span>
         <div class="c-muted" style="margin-top:2px">${esc(refObj.note)}</div>

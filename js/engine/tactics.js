@@ -743,16 +743,30 @@
     let cntG = 0, cntD = 0, cntM = 0, cntA = 0;
 
     const xiList = (xiObj && Array.isArray(xiObj.xi)) ? xiObj.xi : [];
+    const f9Id = opts.falseNineId ? String(opts.falseNineId) : null;
+    let f9Applied = false;
     if (xiList.length) {
       xiList.forEach((item, idx) => {
-        const sc = U.safeNum(item.score !== undefined ? item.score : (item.player && item.player.force), 0);
+        const p = item.player || item;
+        const sc = U.safeNum(item.score !== undefined ? item.score : p.force, 0);
         const rId = item.ruleId !== undefined ? item.ruleId : ruleSlots[idx];
         const ri = (C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[rId]) || null;
         const sec = item.sectorCode || (ri ? ri.sec : (idx === 0 ? 'G' : 'M'));
         if (sec === 'G') { sumG += sc; cntG++; }
         else if (sec === 'D') { sumD += sc; cntD++; }
         else if (sec === 'M') { sumM += sc; cntM++; }
-        else if (sec === 'A') { sumA += sc; cntA++; }
+        else if (sec === 'A') {
+          if (f9Id && p && String(p.id) === f9Id) {
+            // #21822: f9Atk = 0.6, f9MidPlaymaker (PAS/ARM) = 0.5, f9MidOther = 0.35
+            const isPm = (p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM');
+            sumA += sc * 0.6;
+            sumM += sc * (isPm ? 0.5 : 0.35);
+            f9Applied = true;
+          } else {
+            sumA += sc;
+          }
+          cntA++;
+        }
       });
     } else {
       const sec = (xiObj && xiObj.sectors) || {};
@@ -779,14 +793,6 @@
     let rawDef = baseDef * outfieldGlobalMul;
     let rawMid = baseMid * outfieldGlobalMul;
     let rawAtk = baseAtk * falseNineMul * outfieldGlobalMul;
-
-    // #21822: False Nine (f9Count >= 2) juga memberi +4% MID, atau jika 0 dedicated striker tapi ada gelandang serang memberi +3% MID
-    const f9Cnt = (xiObj && Array.isArray(xiObj.falseNinePlayers)) ? xiObj.falseNinePlayers.length : ((xiObj && xiObj.falseNine) ? 2 : 0);
-    if (f9Cnt >= 2) {
-      rawMid *= 1.04;
-    } else if (xiObj && xiObj.noDedicatedStriker) {
-      rawMid *= 1.03;
-    }
 
     // #21822: Kapten berusia >= 28 memberi +3% MID (+6% saat babak ke-2 & tertinggal)
     const hasVetCaptain = xiList.length
@@ -1321,6 +1327,51 @@
       recStyleWhy = `Balanced paling stabil (${styleSims.Balanced.winPct}% Win · ${styleSims.Balanced.drawPct}% Seri · xPts ${styleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive) maupun -6% MID (Counter).`;
     }
 
+    // Evaluasi opsi False Nine (#21822: f9Atk=0.6, f9MidPlaymaker=0.5, f9MidOther=0.35)
+    const baseStyleSim = styleSims[recStyle];
+    const atkItems = (bestXiObj.xi || []).filter(it => it.sectorCode === 'A' && it.player);
+    const pmAtkItems = atkItems.filter(it => {
+      const p = it.player;
+      return p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM';
+    });
+    let bestF9Pick = null;
+    if (atkItems.length >= 2) {
+      for (const it of atkItems) {
+        const p = it.player;
+        const isPm = (p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM');
+        const pF9 = computeEngineSectorPower(bestXiObj, best.formation, {
+          isHome, crowdOver70: true, style: recStyle, marking: bestMark, falseNineId: p.id,
+        });
+        const simF9 = simulateMatchExpectation(pF9, oppPow, {
+          isHome, neutral: false, focus: best.optFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle,
+        });
+        if (!bestF9Pick || simF9.xPts > bestF9Pick.sim.xPts) {
+          bestF9Pick = { player: p, isPlaymaker: isPm, sim: simF9 };
+        }
+      }
+    }
+
+    const useFalseNine = Boolean(bestF9Pick && bestF9Pick.sim.xPts >= baseStyleSim.xPts + 0.005);
+    const falseNineTarget = useFalseNine ? {
+      id: bestF9Pick.player.id,
+      name: bestF9Pick.player.name,
+      pos: U.posEn(bestF9Pick.player.pos),
+      isPlaymaker: bestF9Pick.isPlaymaker,
+      winPct: bestF9Pick.sim.winPct,
+      xPts: bestF9Pick.sim.xPts,
+    } : null;
+
+    let falseNineWhy = '';
+    if (useFalseNine) {
+      falseNineWhy = `Aktifkan False Nine pada ${falseNineTarget.name} (${falseNineTarget.pos}${falseNineTarget.isPlaymaker ? ' · PAS/PLY' : ''}): menukar -40% bobot ATK-nya menjadi +${falseNineTarget.isPlaymaker ? '50%' : '35%'} bobot ke MID (xPts ${bestF9Pick.sim.xPts} vs OFF ${baseStyleSim.xPts}, ${bestF9Pick.sim.winPct}% Win).`;
+    } else if (atkItems.length <= 1) {
+      falseNineWhy = 'OFF — Formasi hanya memakai 1 penyerang, mengaktifkan False Nine akan memangkas ATK -40%.';
+    } else if (!pmAtkItems.length) {
+      falseNineWhy = 'OFF — Tidak ada penyerang berskill PAS/PLY di XI (tanpa PAS/PLY hanya menyumbang 0.35× ke MID sementara ATK turun 0.40×).';
+    } else {
+      falseNineWhy = `OFF — Mempertahankan 100% bobot ATK lebih unggul (xPts ${baseStyleSim.xPts} vs False Nine ${bestF9Pick ? bestF9Pick.sim.xPts : '-'}).`;
+    }
+
     // Attack Focus (#21822 effectiveSectors): Center (20% MID -> ATK) vs Wings (+2%/crosser)
     const recFocus = best.optFocus;
     let recFocusWhy = '';
@@ -1485,6 +1536,9 @@
       attackFocus: recFocus,
       focusReason: recFocusWhy,
       attackFocusWhy: recFocusWhy,
+      falseNine: useFalseNine,
+      falseNineTarget,
+      falseNineWhy,
       marking: recMarking,
       markingWhy: recMarkingWhy,
       refereePlan,
