@@ -12,7 +12,7 @@ function setRosterQuickFilter(val) {
 }
 
 function matchRosterFilter(p, flt) {
-  if (flt === 'GOLDEN') return p.contractDays >= 11 && p.contractDays <= 59;
+  if (flt === 'GOLDEN') return p.contractDays >= 60 && p.contractDays <= 120;
   if (flt === 'DECLINE') return p.isDeclining || p.age >= p.sellWarnAge;
   if (flt === 'NONSTACK') return p.nonStack;
   if (flt === 'TRAP') return p.isTrap;
@@ -42,8 +42,8 @@ function renderContractTimeline() {
   if (!el) return;
   const roster = D.roster || [];
   const bTrap = roster.filter(p => p.contractDays <= 10).sort((a, b) => a.contractDays - b.contractDays);
-  const bGold = roster.filter(p => p.contractDays >= 11 && p.contractDays <= 59).sort((a, b) => a.contractDays - b.contractDays);
-  const bSoon = roster.filter(p => p.contractDays >= 60 && p.contractDays <= 120).sort((a, b) => a.contractDays - b.contractDays);
+  const bSoon = roster.filter(p => p.contractDays >= 11 && p.contractDays <= 59).sort((a, b) => a.contractDays - b.contractDays);
+  const bGold = roster.filter(p => p.contractDays >= 60 && p.contractDays <= 120).sort((a, b) => a.contractDays - b.contractDays);
   const bMid  = roster.filter(p => p.contractDays >= 121 && p.contractDays <= 180).sort((a, b) => a.contractDays - b.contractDays);
 
   const pills = (arr, extraFn) => arr.length
@@ -56,26 +56,26 @@ function renderContractTimeline() {
 
   el.innerHTML = `
     <details class="glossary-inline" ${openAttr} style="padding:8px 11px;margin-bottom:6px">
-      <summary>📅 Kontrak 6 Bln: 🚨 ${bTrap.length} Jebakan · ✅ ${bGold.length} Golden · ⏳ ${bSoon.length} Segera</summary>
+      <summary>📅 Kontrak 6 Bln: 🚨 ${bTrap.length} Jebakan · ⚠ ${bSoon.length} Naik +5–15% · ✅ ${bGold.length} Golden (-12%)</summary>
       <div class="timeline-grid mt-12">
         <div class="tl-bucket ${bTrap.length ? 'crit' : ''}">
           <div style="font-size:11px;font-weight:800" class="${bTrap.length ? 'c-red' : 'c-muted'}">🚨 Zona Jebakan ≤10d (${bTrap.length})</div>
           <div class="c-muted" style="font-size:10px;margin-bottom:4px">Pakai Loophole Auto-Renew 0% / Lepas Gratis</div>
           <div>${pills(bTrap)}</div>
         </div>
-        <div class="tl-bucket ${bGold.length ? 'good' : ''}">
-          <div style="font-size:11px;font-weight:800" class="${bGold.length ? 'c-green' : 'c-muted'}">✅ Golden Window SEKARANG 11–59d (${bGold.length})</div>
-          <div class="c-muted" style="font-size:10px;margin-bottom:4px">Renew 3 Tahun = Potong Gaji -12% Gratis!</div>
-          <div>${pills(bGold)}</div>
-        </div>
         <div class="tl-bucket ${bSoon.length ? 'warn' : ''}">
-          <div style="font-size:11px;font-weight:800" class="${bSoon.length ? 'c-amber' : 'c-muted'}">⏳ Segera Masuk Golden 60–120d (${bSoon.length})</div>
-          <div class="c-muted" style="font-size:10px;margin-bottom:4px">Tunggu sampai sisa ≤59 hari</div>
-          <div>${pills(bSoon, p => ` → GW ${p.contractDays - 59}d`)}</div>
+          <div style="font-size:11px;font-weight:800" class="${bSoon.length ? 'c-amber' : 'c-muted'}">⚠ Zona Minta Naik 11–59d (${bSoon.length})</div>
+          <div class="c-muted" style="font-size:10px;margin-bottom:4px">Jangan renew (+5–15%)! Tunggu ≤10d Loophole 0%</div>
+          <div>${pills(bSoon)}</div>
+        </div>
+        <div class="tl-bucket ${bGold.length ? 'good' : ''}">
+          <div style="font-size:11px;font-weight:800" class="${bGold.length ? 'c-green' : 'c-muted'}">✅ Golden Window 60–120d (${bGold.length})</div>
+          <div class="c-muted" style="font-size:10px;margin-bottom:4px">Renew 3 Tahun = Potong Gaji -12% Gratis (#24161)!</div>
+          <div>${pills(bGold, p => ` (${p.contractDays - 59}d lg)`)}</div>
         </div>
         <div class="tl-bucket">
-          <div style="font-size:11px;font-weight:800" class="c-sky">📆 Pantau 121–180d (${bMid.length})</div>
-          <div class="c-muted" style="font-size:10px;margin-bottom:4px">Siapkan rencana perpanjangan / jual</div>
+          <div style="font-size:11px;font-weight:800" class="c-sky">📆 Diskon Aktif 121–180d (${bMid.length})</div>
+          <div class="c-muted" style="font-size:10px;margin-bottom:4px">Sudah bisa renew 3Th (-12%) atau pantau</div>
           <div>${pills(bMid)}</div>
         </div>
       </div>
@@ -135,7 +135,7 @@ function renderRosterTable() {
     <th class="col-desk-only">Rekomendasi Aksi</th>
   </tr></thead><tbody>` + (rows.length ? rows.map(p => {
     const stB = p.nonStack ? 'b-crit' : (p.stackGrade === 'GOD' ? 'b-good' : 'b-muted');
-    const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays <= 59 ? 'b-good' : 'b-muted');
+    const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
     const actB = { crit: 'b-crit', warn: 'b-warn', good: 'b-good', accent: 'b-accent', info: 'b-info', muted: 'b-muted' }[p.actionCls] || 'b-muted';
     const slumpBadge = (p.fineSlump > 0) ? ` <span class="badge b-crit" title="${esc(tipFor('SLUMP'))}">SLUMP -${p.fineSlumpPct}%</span>` : '';
     const narTag = p.noAutoRenew ? '<div class="c-muted" style="font-size:10px">noAutoRenew ✓</div>' : '';

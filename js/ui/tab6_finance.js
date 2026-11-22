@@ -98,13 +98,13 @@ function renderTab6() {
   document.getElementById('t6-member').innerHTML = `
     <div class="mb-8">Basis Member: <b class="mono">${(mb.n || 0).toLocaleString('id-ID')}</b> (Cap <b class="mono">${(mb.cap || 60000).toLocaleString('id-ID')}</b> • Bayar <b class="mono c-sky">${(mb.cur_paying || mb.n || 0).toLocaleString('id-ID')}</b>)</div>
     <div class="mb-8">Setelan Kini: <b class="mono">${(mb.cur_m || 1).toFixed(2)}x</b> • Diskon <b class="mono">${mb.cur_d || 0}%</b> → <b class="mono c-green">${fmtM(mb.cur_parcel || 0)}/bln</b></div>
-    <div class="mb-8">Optimal v1.2.0 (#21325): <span class="badge b-good">${(mb.opt_m || 1.00).toFixed(2)}x + Diskon ${mb.opt_d ?? 6}%</span> ${mb.is_optimal ? '<span class="c-green">✓ Optimal</span>' : `<span class="c-amber">+${mb.gain_pct}% (${fmtM(mb.opt_parcel || 0)}/bln)</span>`}</div>
-    <div class="c-muted">Puncak <code>memberDemand × memberNet</code> di <b>${(mb.opt_m || 1.00).toFixed(2)}x / Diskon ${mb.opt_d ?? 6}%</b> (Indeks ${(mb.opt_yield || 101.06).toFixed(2)}%, ${(mb.opt_paying || 0).toLocaleString('id-ID')} anggota membayar).</div>`;
+    <div class="mb-8">Optimal v1.2.0 (#21255): <span class="badge b-good">${(mb.opt_m || 1.05).toFixed(2)}x + Diskon ${mb.opt_d ?? 6}%</span> ${mb.is_optimal ? '<span class="c-green">✓ Optimal</span>' : `<span class="c-amber">+${mb.gain_pct}% (${fmtM(mb.opt_parcel || 0)}/bln)</span>`}</div>
+    <div class="c-muted">Puncak <code>memberDemand × memberNet</code> di <b>${(mb.opt_m || 1.05).toFixed(2)}x / Diskon ${mb.opt_d ?? 6}%</b> (Indeks ${(mb.opt_yield || 101.14).toFixed(2)}%, ${(mb.opt_paying || 0).toLocaleString('id-ID')} anggota membayar).</div>`;
 
   const nm = D.naming;
-  const needSponsorCalc = (D.sponsors || []).length < 3 || !nm || (nm.monthsLeft <= 2);
+  const needSponsorCalc = (D.sponsors || []).length < 3 || !nm || (nm.monthsLeft <= 3);
   const nmHtml = nm
-    ? `<div><b>Naming Rights:</b> ${esc(nm.name)} (${fmtM(nm.yearly)}/thn, sisa <b class="${nm.monthsLeft <= 2 ? 'c-red' : 'c-green'}">${nm.monthsLeft} bln</b>) — <i>Wajib 1 Thn (1.15x)</i></div>`
+    ? `<div><b>Naming Rights:</b> ${esc(nm.name)} (${fmtM(nm.yearly)}/thn, sisa <b class="${nm.monthsLeft <= 3 ? 'c-red' : 'c-green'}">${nm.monthsLeft} bln</b>) — <i>Wajib 1 Thn (1.15x)</i></div>`
     : `<div class="c-red"><b>Naming Rights:</b> KOSONG — segera kontrak 1 Tahun (1.15x)!</div>`;
   const slotMap = { master: 'Utama', material: 'Apparel', secundario: 'Sekunder', secondary: 'Sekunder' };
   const spHtml = (D.sponsors && D.sponsors.length)
@@ -367,7 +367,8 @@ function onRoiSectorPreset() {
   if (seatsEl) seatsEl.value = defSeats;
   if (costEl && window.LFEngine && LFEngine.economy && typeof LFEngine.economy.calcExpansionCost === 'function') {
     const secs = (D.stadium && D.stadium.sections) || {};
-    const tc = LFEngine.economy.calcExpansionCost(sec, secs[sec] || 0, defSeats);
+    const div = (D.meta && D.meta.division) || 1;
+    const tc = LFEngine.economy.calcExpansionCost(sec, secs[sec] || 0, defSeats, div, true);
     costEl.value = Math.max(0.2, +(tc / 1_000_000).toFixed(2));
   }
   calcStadiumRoiSim();

@@ -23,10 +23,10 @@ function fillPfOptimal() {
   const mEl = document.getElementById('c-pf-mem');
   const dEl = document.getElementById('c-pf-disc');
   if (sEl) sEl.value = '1.00';
-  if (mEl) mEl.value = '1.00';
+  if (mEl) mEl.value = '1.05';
   if (dEl) dEl.value = '6';
   calcAll();
-  showToast('Diisi ke puncak optimal v1.2.0 (#21325: Shop 1.00x / Member 1.00x · Diskon 6%)');
+  showToast('Diisi ke puncak optimal v1.2.0 (#21255: Shop 1.00x / Member 1.05x · Diskon 6%)');
 }
 
 function fillCalcFromPlayer(kind, pid) {
@@ -87,50 +87,65 @@ function calcAll() {
     <div class="c-muted">Jurang batal AI (1.43x): ${fmtU(raw * 1.43)} — jangan lewati 1.40x!</div>
     <div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--border);font-size:11px">${arabNote}</div>`;
 
-  // 2. Golden Window Renew + Loophole Auto-Renew 0% + Trik Bangku Cadangan (-12% Ekstra!)
+  // 2. Golden Window Renew (#24161 >=60d = -12%) + Loophole Auto-Renew 0% + Trik Bangku Cadangan (#24160)
   const days = parseInt((document.getElementById('c-days') || {}).value, 10);
   const sal = parseFloat((document.getElementById('c-sal') || {}).value) || 0;
   let muls, msg, cls, extraNote = '';
-  if (!isNaN(days) && days >= 11 && days <= 59) {
-    muls = [0.99, 0.97, 0.95, 0.88]; msg = '✅ GOLDEN WINDOW — RENEW 3 TAHUN (-12% GAJI GRATIS!)'; cls = 'c-green';
+  if (!isNaN(days) && days >= 60) {
+    muls = [0.99, 0.97, 0.95, 0.88]; msg = '✅ DISKON KONTRAK AKTIF (>=60 hari, #24161) — RENEW 3 TAHUN (-12% GAJI GRATIS!)'; cls = 'c-green';
   } else if (!isNaN(days) && days <= 10) {
     muls = [1.25, 1.30, 1.35, 1.20]; msg = '🚨 ZONA JEBAKAN (<=10 hari) — Manual naik +20% s.d. +35%!'; cls = 'c-red';
     extraNote = `<div class="c-sky" style="margin-top:4px">💎 <b>Loophole Auto-Renew 0% (#37498):</b> Nyalakan Auto-Renew sementara (tandai <code>noAutoRenew</code> di cadangan) → saat 0 hari otomatis diperpanjang <b>+180 hari dengan gaji lama (${sal.toFixed(1)}K, 0% naik)</b>!</div>`;
   } else {
-    muls = [1.10, 1.12, 1.15, 1.05]; msg = '⏳ TUNGGU DULU (>=60 hari) — Renew sekarang menaikkan gaji.'; cls = 'c-amber';
+    muls = [1.10, 1.12, 1.15, 1.05]; msg = '⚠ ZONA MINTA NAIK (11–59 hari, #24161) — Renew manual sekarang menaikkan gaji +5% s.d. +15%! Tunggu <=10 hari (Loophole 0%).'; cls = 'c-amber';
   }
-  const benchSal3y = sal * muls[3] * 0.88;
+  const pAge = calcSelectedRenewPlayer ? calcSelectedRenewPlayer.age : 25;
+  const pCuts = calcSelectedRenewPlayer ? calcSelectedRenewPlayer.salaryCuts : 0;
+  const pRefs = calcSelectedRenewPlayer ? calcSelectedRenewPlayer.renewRefusals : 0;
+  const stFloor = (window.LFEngine && LFEngine.utils && LFEngine.utils.salaryCutFloorMul)
+    ? LFEngine.utils.salaryCutFloorMul(false, pAge, pCuts, pRefs) : 0.90;
+  const resFloor = (window.LFEngine && LFEngine.utils && LFEngine.utils.salaryCutFloorMul)
+    ? LFEngine.utils.salaryCutFloorMul(true, pAge, pCuts, pRefs) : 0.792;
+  const benchSalCut = sal * resFloor;
   const isStarterSel = !calcSelectedRenewPlayer || calcSelectedRenewPlayer.squadRank <= 11;
   const benchNote = isStarterSel
-    ? `<div class="c-sky" style="margin-top:4px;font-size:11px">🪑 <b>Trik Bangku Cadangan (#20882):</b> Geser starter ke indeks ≥11 sebelum renew 3th → ekstra <b>-12%</b> (estimasi <b class="mono c-green">${benchSal3y.toFixed(1)}K/bln</b>)!</div>`
-    : `<div class="c-muted" style="margin-top:4px;font-size:11px">Pemain ini sudah di luar Top-11 (floor bangku sudah aktif).</div>`;
+    ? `<div class="c-sky" style="margin-top:4px;font-size:11px">🪑 <b>Trik Potong Gaji Cadangan (#24160):</b> Geser starter ke cadangan sebelum negosiasi potong gaji → lantai turun dari <b>${Math.round(stFloor * 100)}%</b> ke <b>${(resFloor * 100).toFixed(1)}%</b> (estimasi <b class="mono c-green">${benchSalCut.toFixed(1)}K/bln</b>, maks 1x potong)!</div>`
+    : `<div class="c-muted" style="margin-top:4px;font-size:11px">Pemain ini sudah di luar Top-11 (lantai potong gaji cadangan ${(resFloor * 100).toFixed(1)}% aktif).</div>`;
 
   document.getElementById('c-renew-out').innerHTML = `
     <div class="${cls}" style="font-weight:800;margin-bottom:4px">${msg}</div>
     <div class="mono">6B: ${(sal * muls[0]).toFixed(1)}K · 1Th: ${(sal * muls[1]).toFixed(1)}K · 2Th: ${(sal * muls[2]).toFixed(1)}K · <b class="c-green">3Th: ${(sal * muls[3]).toFixed(1)}K</b></div>
     ${extraNote}${benchNote}`;
 
-  // 3. Sponsor Negotiation (0% Annoyed) + Naming Rights 1th vs 3th vs 5th Comparison
+  // 3. Sponsor Negotiation (#20720, #20730, #20732: maxAsk = 0.02 + rng*0.06 + 0.07*perf + (tier===3?0.02:0), annoyed > maxAsk*1.3 + 0.03)
   const spBase = parseFloat((document.getElementById('c-sp-base') || {}).value) || 0;
   const tier = parseInt((document.getElementById('c-sp-tier') || {}).value, 10) || 3;
-  const maxLo = tier === 3 ? 0.07 : (tier === 2 ? 0.06 : 0.05);
-  const safeAsk = maxLo * 1.3 + 0.03;
-  const safePct = Math.floor(safeAsk * 100);
+  const fanConf = (D.meta && D.meta.fanConf) !== undefined ? Number(D.meta.fanConf) : 70;
+  const stRows = D.standings || [];
+  const uSt = stRows.find(s => s.isUser);
+  const posScore = (uSt && stRows.length > 1) ? Math.max(0, Math.min(1, 1 - (uSt.pos - 1) / (stRows.length - 1))) : 0.5;
+  const fanScore = Math.max(0, Math.min(1, fanConf / 100));
+  const perfScore = 0.6 * posScore + 0.4 * fanScore;
+  const minMaxAsk = 0.02 + 0.07 * perfScore + (tier === 3 ? 0.02 : 0);
+  const avgMaxAsk = minMaxAsk + 0.03;
+  const safeAnnoyFloor = minMaxAsk * 1.3 + 0.03;
+  const safePct = Math.floor(safeAnnoyFloor * 100);
+  const avgGrantPct = Math.round(avgMaxAsk * 100);
   const nmYearly = (D.naming && D.naming.yearly) ? Number(D.naming.yearly) : 750000;
   const nmBase = nmYearly / 1.15;
   const loss5y = Math.round((nmBase * 1.15 - nmBase * 0.88));
   document.getElementById('c-sp-out').innerHTML = `
-    <div>Percobaan ke-1 — Minta Maks Aman: <b class="mono c-green">+${safePct}% (${Math.round(spBase * (1 + safePct / 100))}K)</b> <span class="badge b-good">0% Annoyed</span></div>
-    <div class="c-muted" style="margin-top:3px">Jika sponsor membalas angka baru (<i>counter</i>), langsung <b>TERIMA</b> di percobaan ke-2.</div>
+    <div>Percobaan ke-1 — Minta Maks 0% Batal (#20732): <b class="mono c-green">+${safePct}% (${Math.round(spBase * (1 + safePct / 100))}K)</b> <span class="badge b-good">0% Annoyed</span></div>
+    <div class="c-muted" style="margin-top:3px">Rata-rata plafon sponsor di performa klubmu (Perf ${(perfScore * 100).toFixed(0)}%): <b>+${avgGrantPct}%</b> (${Math.round(spBase * (1 + avgGrantPct / 100))}K). Jika sponsor membalas angka baru (<i>counter</i>), langsung <b>TERIMA</b> di percobaan ke-2.</div>
     <div class="calc-naming-grid mono">
       <div class="calc-naming-box best"><b class="c-green">1 Thn ★</b><div>1.15x</div><div class="c-green" style="font-size:10px">+30.7% vs 5th</div></div>
       <div class="calc-naming-box"><b>3 Thn</b><div>1.00x</div><div class="c-muted" style="font-size:10px">Standar</div></div>
       <div class="calc-naming-box"><b class="c-red">5 Thn</b><div>0.88x</div><div class="c-red" style="font-size:10px">Rugi ~${fmtM(loss5y)}/thn</div></div>
     </div>`;
 
-  // 4. priceFactor Tester (v1.2.0 #21317 & #21322–#21330)
+  // 4. priceFactor Tester (v1.2.0 #21255 Math.exp & #21260–#21277)
   const mSh = parseFloat((document.getElementById('c-pf-shop') || {}).value) || 1.0;
-  const mMb = parseFloat((document.getElementById('c-pf-mem') || {}).value) || 1.00;
+  const mMb = parseFloat((document.getElementById('c-pf-mem') || {}).value) || 1.05;
   const dMb = Math.max(0, Math.min(30, parseInt((document.getElementById('c-pf-disc') || {}).value, 10) || 0));
   const pfSh = priceFactorJS(mSh, 1.0, 1.3, 0.8);
   const idxSh = mSh * pfSh;
@@ -140,7 +155,7 @@ function calcAll() {
   const idxMb = mMb * (1 - shAnnual * (dMb / 100)) * demMb;
   document.getElementById('c-pf-out').innerHTML = `
     <div><b>Club Shop (${mSh.toFixed(2)}x):</b> Demand <b class="mono">${(pfSh * 100).toFixed(2)}%</b> → Indeks <b class="mono ${Math.abs(mSh - 1.0) < 0.01 ? 'c-green' : 'c-amber'}">${(idxSh * 100).toFixed(2)}%</b> (Puncak = 100.00% di 1.00x)</div>
-    <div style="margin-top:4px"><b>Member Plan (${mMb.toFixed(2)}x / ${dMb}%):</b> Eff Demand <b class="mono">${(demMb * 100).toFixed(2)}%</b> (Tahunan ${Math.round(shAnnual * 100)}%) → Indeks <b class="mono ${idxMb >= 1.010 ? 'c-green' : 'c-sky'}">${(idxMb * 100).toFixed(2)}%</b> (Puncak = 101.06% di 1.00x / 6% · 101.02% di 1.05x / 6%)</div>`;
+    <div style="margin-top:4px"><b>Member Plan (${mMb.toFixed(2)}x / ${dMb}%):</b> Eff Demand <b class="mono">${(demMb * 100).toFixed(2)}%</b> (Tahunan ${Math.round(shAnnual * 100)}%) → Indeks <b class="mono ${idxMb >= 1.011 ? 'c-green' : 'c-sky'}">${(idxMb * 100).toFixed(2)}%</b> (Puncak = 101.14% di 1.05x / 6% · 101.06% di 1.00x / 6%)</div>`;
 
   // 5. Denda Kartu Merah (#3753 & #24491)
   const fineOut = document.getElementById('c-fine-out');

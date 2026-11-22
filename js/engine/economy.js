@@ -16,15 +16,11 @@
 
   const SECTORS = ['geral', 'arquibancada', 'cadeiras', 'camarotes'];
 
-  // Bytecode #21317 priceFactor(m, e) -> clamp(raw, 0.1, 1.35)
+  // Bytecode #21255 priceFactor(m, e) -> clamp(Math.exp(-lin*d - quad*d*d), 0.1, 1.35)
   function priceFactorV9(m, elast) {
     const d = U.safeNum(m, 1.0) - 1.0;
-    let raw;
-    if (d >= 0) {
-      raw = 1.0 - elast.lin * d - elast.up * (d * d);
-    } else {
-      raw = 1.0 - elast.lin * d - elast.down * (d * d);
-    }
+    const quad = d >= 0 ? elast.up : elast.down;
+    const raw = Math.exp(-elast.lin * d - quad * (d * d));
     const pMin = C.PRICE_FACTOR_MIN !== undefined ? C.PRICE_FACTOR_MIN : 0.1;
     const pMax = C.PRICE_FACTOR_MAX !== undefined ? C.PRICE_FACTOR_MAX : 1.35;
     return U.clamp(raw, pMin, pMax);
@@ -177,44 +173,47 @@
 
     const gainPct = curYield > 0 ? ((bestYield - curYield) / curYield) * 100.0 : 0.0;
 
-    // Launch Hype Boost (#21320): hanya pemain dengan boughtDate <= 60 hari & fee vs PAYROLL_REF tahunan
+    // Launch Hype Boost (#21265–#21268): Mega Signing (365d, +30%: top || fee >= 30% PayrollRef, non-loan),
+    // Big/Star Signing (90d, +8%: isPlayerStar || fee >= 8% PayrollRef, non-loan; only applies if no active Mega)
     const annualRef = Math.max(5900000, U.safeNum(payrollRef, 28500000));
     const megaThreshold = annualRef * 0.30;
     const bigThreshold = annualRef * 0.08;
+    const megaDaysLim = C.SHOP_MEGA_DAYS || 365;
+    const signDaysLim = C.SHOP_SIGNING_DAYS || 90;
     const hypeEvents = [];
-    let activeBoostPct = 0.0;
+    let hasMegaActive = false;
+    let hasBigActive = false;
 
     for (const p of (roster || [])) {
+      if (p.loanedFrom) continue;
       const bdate = p.boughtDate;
       if (!bdate) continue;
       const days = U.daysBetweenDates(bdate, currentDate);
-      if (days <= 60) {
-        const fee = U.safeNum(p.boughtPrice, 0);
-        let kind = null;
-        let boost = 0.0;
-        if (fee >= megaThreshold) {
-          kind = 'Mega Signing (>=30% PayrollRef)';
-          boost = 20.0;
-        } else if (fee >= bigThreshold) {
-          kind = 'Big Signing (>=8% PayrollRef)';
-          boost = 8.0;
-        } else if (p.star || p.top || p.starAwarded) {
-          kind = 'Star Signing';
-          boost = 15.0;
-        }
-        if (kind) {
-          const daysLeft = Math.max(0, 60 - days);
-          hypeEvents.push({
-            name: p.name,
-            kind,
-            boostPct: boost,
-            daysLeft,
-            fee,
-          });
-          activeBoostPct = Math.max(activeBoostPct, boost);
-        }
+      const fee = U.safeNum(p.boughtPrice, 0);
+      const isStar = Boolean(p.star || p.top || p.starAwarded);
+      if (days <= megaDaysLim && (p.top || fee >= megaThreshold)) {
+        const daysLeft = Math.max(0, megaDaysLim - days);
+        hypeEvents.push({
+          name: p.name,
+          kind: 'Mega Signing (👑 Top / >=30% PayrollRef, 365d)',
+          boostPct: 30.0,
+          daysLeft,
+          fee,
+        });
+        hasMegaActive = true;
+      } else if (days <= signDaysLim && (isStar || fee >= bigThreshold)) {
+        const daysLeft = Math.max(0, signDaysLim - days);
+        hypeEvents.push({
+          name: p.name,
+          kind: isStar ? 'Star Signing (⭐ Star, 90d)' : 'Big Signing (>=8% PayrollRef, 90d)',
+          boostPct: 8.0,
+          daysLeft,
+          fee,
+        });
+        hasBigActive = true;
       }
     }
+    const activeBoostPct = hasMegaActive ? 30.0 : (hasBigActive ? 8.0 : 0.0);
 
     const recentLog = [];
     let topJerseys = [];
@@ -267,11 +266,12 @@
 
     const lastRev = recentLog.length ? recentLog[recentLog.length - 1].rev : 0;
     const lastUnits = recentLog.length ? recentLog[recentLog.length - 1].units : 0;
-    const starCnt = (roster || []).filter(p => p.star || p.starAwarded).length;
     const topCnt = (roster || []).filter(p => p.top).length;
-    const starBonusPct = Math.min(25, starCnt * 3 + topCnt * 5);
-    const megaSignings = hypeEvents.filter(e => e.boostPct >= 20);
-    const bigSignings = hypeEvents.filter(e => e.boostPct < 20);
+    const starCnt = (roster || []).filter(p => !p.top && (p.star || p.starAwarded)).length;
+    // #21265: +8% per p.top, else +4% per isPlayerStar(p), capped at 30% (SHOP_STAR_MAX = 0.30)
+    const starBonusPct = Math.min(30, topCnt * 8 + starCnt * 4);
+    const megaSignings = hypeEvents.filter(e => e.boostPct >= 25);
+    const bigSignings = hypeEvents.filter(e => e.boostPct < 25);
     const curWord = Math.abs(curM - 1.0) <= 0.01 ? 'optimal' : (curM > 1.0 ? 'mahal' : 'diskon');
 
     return {
@@ -648,20 +648,28 @@
     return results;
   }
 
-  function calcExpansionCost(sector, currentSeats, addSeats) {
+  // Bytecode #19797 seatPrice & #19798 expansionCost & #19807 startConstruction
+  function calcExpansionCost(sector, currentSeats, addSeats, division = 1, includeFixedWorkCost = false) {
     if (addSeats <= 0) return 0;
     const tiers = C.STADIUM_SEAT_TIERS[sector] || [[999999, 500]];
+    const seatMul = C.SEAT_COST_MUL || 3;
+    const divMulMap = C.STADIUM_COST_DIV_MUL || { 0: 0.25, 1: 1.0, 2: 0.6, 3: 0.3, 4: 0.25 };
+    const divMul = divMulMap[U.clamp(U.safeInt(division, 1), 0, 4)] || 1.0;
     let cost = 0;
     let cur = Math.max(0, U.safeInt(currentSeats, 0));
     const target = cur + U.safeInt(addSeats, 0);
 
-    for (const [capLimit, unitCost] of tiers) {
+    for (const [capLimit, unitBaseCost] of tiers) {
       if (cur >= target) break;
       if (cur < capLimit) {
         const chunk = Math.min(target, capLimit) - cur;
-        cost += chunk * unitCost;
+        const unitPrice = Math.round(unitBaseCost * seatMul * divMul);
+        cost += chunk * unitPrice;
         cur += chunk;
       }
+    }
+    if (includeFixedWorkCost && cost > 0) {
+      cost += Math.round((C.STADIUM_WORK_FIXED_COST || 300000) * divMul);
     }
     return cost;
   }
@@ -670,12 +678,19 @@
     const curTotal = SECTORS.reduce((acc, s) => acc + U.safeInt(sections[s], 0), 0);
     const newSections = {};
     let totalBuildCost = 0;
+    let hasAdded = false;
 
     for (const s of SECTORS) {
       const cSeats = U.safeInt(sections[s], 0);
       const aSeats = Math.max(0, U.safeInt(addBySector && addBySector[s], 0));
       newSections[s] = cSeats + aSeats;
-      totalBuildCost += calcExpansionCost(s, cSeats, aSeats);
+      if (aSeats > 0) hasAdded = true;
+      totalBuildCost += calcExpansionCost(s, cSeats, aSeats, division, false);
+    }
+    if (hasAdded) {
+      const divMulMap = C.STADIUM_COST_DIV_MUL || { 0: 0.25, 1: 1.0, 2: 0.6, 3: 0.3, 4: 0.25 };
+      const divMul = divMulMap[U.clamp(U.safeInt(division, 1), 0, 4)] || 1.0;
+      totalBuildCost += Math.round((C.STADIUM_WORK_FIXED_COST || 300000) * divMul);
     }
 
     const newTotal = SECTORS.reduce((acc, s) => acc + newSections[s], 0);
@@ -708,7 +723,7 @@
     };
   }
 
-  // Bytecode #19879 & #34226 tvQuotaMonthly(country, div, repLvl, monthlyTotalPayroll, reputation)
+  // Bytecode #19761 & #34226 tvQuotaMonthly(country, div, repLvl, monthlyTotalPayroll, reputation)
   function tvQuotaMonthly(country = 'OTHER', division = 1, repLvl = 3, monthlyTotalPayroll = 0, reputation = null) {
     const div = U.clamp(U.safeInt(division, 1), 0, 5);
     const rIdx = (reputation !== null && reputation !== undefined)
@@ -719,26 +734,59 @@
       : ((C.TV_SHARE_OTHER && C.TV_SHARE_OTHER[div]) !== undefined ? C.TV_SHARE_OTHER[div] : 0.144);
     const idleArr = C.TV_IDLE_BY_REP || [0.5, 0.167, 0.167, 0.5, 0.417, 0.417];
     const idle = idleArr[div] !== undefined ? idleArr[div] : 0.167;
-    const ref = U.payrollRef(country, div, 0);
+    const ref = U.payrollRef(country, div, rIdx);
     const annualPayroll = Math.max(0, U.safeNum(monthlyTotalPayroll, 0)) * 12.0;
     return Math.round(((ref * share + idle * Math.min(annualPayroll, ref)) / 12.0) / 1000.0) * 1000;
   }
 
-  // Bytecode #21495 ctUpkeepMonthly
-  function ctUpkeepMonthly(country = 'OTHER', division = 1, ctLevel = 1, ctMaintOff = false) {
-    if (ctMaintOff) return 0;
+  // Bytecode #21418 ctUpkeepMonthly (0 jika ctMaintOff || budget < 0)
+  function ctUpkeepMonthly(country = 'OTHER', division = 1, ctLevel = 1, ctMaintOff = false, budget = 0) {
+    if (ctMaintOff || U.safeNum(budget, 0) < 0) return 0;
     const ref = U.payrollRef(country, division, 0);
     const lv = U.clamp(U.safeInt(ctLevel, 1), 1, 10);
     const share = (C.CT_UPKEEP_SHARE && C.CT_UPKEEP_SHARE[lv]) || 0;
     return Math.round(((ref * share) / 12.0) / 100.0) * 100;
   }
 
-  // Pelatih Akademi bulanan berbasis YOUTH_COACH_SALARY_SHARE
-  function youthCoachMonthly(country = 'OTHER', division = 1, youthCoachLevel = 1) {
+  // Pelatih Akademi bulanan (#21707: level 0..3, default 0)
+  function youthCoachMonthly(country = 'OTHER', division = 1, youthCoachLevel = 0) {
+    const lv = U.clamp(U.safeInt(youthCoachLevel, 0), 0, 3);
+    if (lv <= 0) return 0;
     const ref = U.payrollRef(country, division, 0);
-    const lv = U.clamp(U.safeInt(youthCoachLevel, 1), 1, 5);
     const share = (C.YOUTH_COACH_SALARY_SHARE && C.YOUTH_COACH_SALARY_SHARE[lv]) || 0;
     return Math.round(((ref * share) / 12.0) / 100.0) * 100;
+  }
+
+  // Bytecode #21733 & #21734 monthlyLoanPayment(uTeam) & #19773 loanLimit
+  function computeMonthlyLoanDue(uTeam) {
+    if (!uTeam || typeof uTeam !== 'object') return 0;
+    if (Array.isArray(uTeam.loans) && uTeam.loans.length > 0) {
+      let totalDue = 0;
+      for (const ln of uTeam.loans) {
+        if (!ln || typeof ln !== 'object') continue;
+        const bal = U.safeNum(ln.balance, 0);
+        if (bal <= 0) continue;
+        const rate = U.safeNum(ln.rate, 0.03);
+        const interest = Math.floor(bal * rate);
+        const inst = U.safeNum(ln.installment, 0);
+        const mLeft = U.safeInt(ln.monthsLeft, 0);
+        if (inst > 0 && mLeft > 0) {
+          totalDue += (mLeft <= 1) ? (bal + interest) : Math.min(inst, bal + interest);
+        } else {
+          totalDue += interest;
+        }
+      }
+      return Math.round(totalDue);
+    }
+    const legacyParcel = U.safeNum(uTeam.bankLoanParcel, 0);
+    if (legacyParcel > 0) return Math.round(legacyParcel);
+    const legacyBal = U.safeNum(uTeam.bankLoan, 0);
+    return legacyBal > 0 ? Math.floor(legacyBal * 0.03) : 0;
+  }
+
+  function computeLoanLimit(country = 'OTHER', division = 1, repLvl = 3) {
+    const ref = U.payrollRef(country, division, repLvl);
+    return Math.max(250000, Math.floor((ref * 0.25) / 250000) * 250000);
   }
 
   /**
@@ -824,13 +872,14 @@
     const country = ex.country || uTeam.country || 'OTHER';
     const repLvl = ex.repLvl !== undefined ? ex.repLvl : U.reputationLevel(uTeam.reputation);
     const youthPayroll = U.safeNum(ex.youthPayroll, 0);
-    const combinedPayroll = totalPayroll + youthPayroll;
+    const loanOutPay = U.safeNum(uTeam && uTeam.loanOutPay, 0);
+    const combinedPayroll = totalPayroll + youthPayroll + loanOutPay;
 
     const estTickets = (cashflowMeta && cashflowMeta.avgTickets3m)
       ? cashflowMeta.avgTickets3m
       : Math.round(U.safeNum(curSim && curSim.totalRev, 0) * 1.7);
 
-    const estTvQuota = tvQuotaMonthly(country, userDiv, repLvl, combinedPayroll);
+    const estTvQuota = tvQuotaMonthly(country, userDiv, repLvl, combinedPayroll, uTeam && uTeam.reputation);
     const estFixedSponsor = U.fixedSponsorParcel(uTeam && uTeam.fixedSponsor);
 
     // Sponsor variabel: hanya kontrak yang BUKAN upfront (luvas sudah dibayar di awal musim)
@@ -864,12 +913,13 @@
 
     const ctLv = Math.max(1, U.safeInt(uTeam && uTeam.ctLevel, 1));
     const ctMaintOff = Boolean(uTeam && uTeam.ctMaintOff);
-    const ctCost = ctUpkeepMonthly(country, userDiv, ctLv, ctMaintOff);
+    const curBudget = U.safeNum(uTeam && uTeam.budget, 0);
+    const ctCost = ctUpkeepMonthly(country, userDiv, ctLv, ctMaintOff, curBudget);
 
-    const ycLv = Math.max(1, U.safeInt(uTeam && uTeam.youthCoach, 1));
+    const ycLv = U.clamp(U.safeInt(uTeam && uTeam.youthCoach, 0), 0, 3);
     const youthCost = youthCoachMonthly(country, userDiv, ycLv);
 
-    const bankLoanParcel = Math.round(U.safeNum(uTeam && uTeam.bankLoanParcel, 0));
+    const bankLoanParcel = computeMonthlyLoanDue(uTeam);
 
     const estMonthlyRev = Math.round(estTickets + estSponsors + estNaming + estShop + estMember);
     const estMonthlyExp = Math.round(combinedPayroll + stadiumOps + ctCost + youthCost + bankLoanParcel);
@@ -943,6 +993,8 @@
     tvQuotaMonthly,
     ctUpkeepMonthly,
     youthCoachMonthly,
+    computeMonthlyLoanDue,
+    computeLoanLimit,
     computeCashflow3m,
     buildCashflowPayload,
   };

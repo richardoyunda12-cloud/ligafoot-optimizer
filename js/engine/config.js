@@ -109,14 +109,14 @@
     '4-3-3 def.':   [0, 1, 2, 3, 5, 6, 7, 12, 15, 15, 16],
     '4-3-3 ofe.':   [0, 1, 2, 3, 5, 6, 8, 12, 15, 15, 16],
     '4-2-3-1':      [0, 1, 2, 3, 5, 6, 7, 12, 13, 12, 16],
-    '4-2-3-1 Alas': [0, 1, 2, 3, 5, 6, 7, 14, 12, 11, 16],
-    '4-5-1':        [0, 1, 2, 3, 5, 14, 6, 7, 11, 12, 16],
-    '4-1-4-1':      [0, 1, 2, 3, 5, 6, 8, 9,  11, 14, 16],
-    '4-4-1-1':      [0, 1, 2, 3, 5, 8, 9, 11, 14, 15, 16],
+    '4-2-3-1 Alas': [0, 1, 2, 3, 5, 6, 7, 17, 12, 10, 16],
+    '4-5-1':        [0, 1, 2, 3, 5, 17, 6, 7, 10, 12, 16],
+    '4-1-4-1':      [0, 1, 2, 3, 5, 6, 8, 9,  17, 10, 16],
+    '4-4-1-1':      [0, 1, 2, 3, 5, 6, 7, 12, 13, 15, 16],
     '5-4-1':        [0, 1, 2, 4, 3, 5, 6, 7,  12, 13, 16],
     '5-3-2':        [0, 1, 2, 4, 3, 5, 6, 12, 13, 15, 16],
-    '3-5-2':        [0, 2, 4, 3, 17, 6, 7, 10, 12, 15, 16],
-    '3-4-3':        [0, 2, 4, 3, 14, 6, 7, 11, 15, 16, 18],
+    '3-5-2':        [0, 2, 4, 3, 10, 6, 7, 17, 12, 15, 16],
+    '3-4-3':        [0, 2, 4, 3, 10, 6, 7, 17, 15, 16, 18],
   };
 
   // Bug engine asli di #34992 slotSector: slot ke-11 pada 3-4-3 memakai rule 18 -> sec 'X' (ATK -33%)
@@ -130,7 +130,7 @@
     },
   };
 
-  // 15 Formasi RESMI LigaFoot v1.2.0 (terverifikasi 100% dari bytecode #3492)
+  // 15 Formasi RESMI LigaFoot v1.2.0 (terverifikasi 100% dari bytecode #3556)
   const FORMATIONS = {
     '4-4-2':        ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'MA', 'MA', 'ATA', 'ATA'],
     '4-4-2 def.':   ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'VOL', 'MA', 'ATA', 'ATA'],
@@ -141,12 +141,12 @@
     '4-2-3-1':      ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'MA', 'MA', 'MA', 'ATA'],
     '4-2-3-1 Alas': ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'PE', 'MA', 'PD', 'ATA'],
     '4-5-1':        ['G', 'LD', 'ZD', 'ZE', 'LE', 'PE', 'VOL', 'VOL', 'PD', 'MA', 'ATA'],
-    '4-1-4-1':      ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'MC', 'MC', 'PD', 'PE', 'ATA'],
-    '4-4-1-1':      ['G', 'LD', 'ZD', 'ZE', 'LE', 'MC', 'MC', 'PD', 'PE', 'SA', 'ATA'],
+    '4-1-4-1':      ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'MC', 'MC', 'MA', 'MA', 'ATA'],
+    '4-4-1-1':      ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'MA', 'MA', 'SA', 'ATA'],
     '5-4-1':        ['G', 'LD', 'ZD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'MA', 'MA', 'ATA'],
     '5-3-2':        ['G', 'LD', 'ZD', 'ZD', 'ZE', 'LE', 'VOL', 'MA', 'MA', 'ATA', 'ATA'],
-    '3-5-2':        ['G', 'ZD', 'ZD', 'ZE', 'PE', 'VOL', 'VOL', 'PD', 'MA', 'ATA', 'ATA'],
-    '3-4-3':        ['G', 'ZD', 'ZD', 'ZE', 'PE', 'VOL', 'VOL', 'PD', 'ATA', 'ATA', 'ATA'],
+    '3-5-2':        ['G', 'ZD', 'ZD', 'ZE', 'PD', 'VOL', 'VOL', 'PE', 'MA', 'ATA', 'ATA'],
+    '3-4-3':        ['G', 'ZD', 'ZD', 'ZE', 'PD', 'VOL', 'VOL', 'PE', 'ATA', 'ATA', 'ATA'],
   };
 
   // Modifier resmi atkMod & defMod dari bytecode #3492
@@ -189,9 +189,10 @@
 
   // Usia mulai regresi spesifik per posisi (v1.2.0 #21447 declineStartAge)
   const DECLINE_START_AGE = {
-    ATA: 31, A: 31, SA: 31, PD: 31, PE: 31, MA: 31, MO: 31,
-    LD: 32, LE: 32, LAT: 32, VOL: 32, V: 32, MC: 32, MD: 32, ME: 32, MEI: 32,
-    ZD: 33, ZE: 33, ZAG: 33, Z: 33,
+    // #21370 declineStartAge: ATA/SA/PD/PE/MA=31, ZD/ZE=33, G=34, SISANYA=32 (termasuk MO, ZAG, Z)
+    ATA: 31, A: 31, SA: 31, PD: 31, PE: 31, MA: 31,
+    LD: 32, LE: 32, LAT: 32, VOL: 32, V: 32, MC: 32, MD: 32, ME: 32, MEI: 32, MO: 32,
+    ZD: 33, ZE: 33, ZAG: 32, Z: 32,
     G: 34,
   };
 
@@ -316,44 +317,57 @@
   const STADIUM_FREE_SEATS = 20000;
   const STADIUM_OPS_PER_SEAT = 35;
 
+  // Bytecode #3452 L705456: SEAT_COST_TIERS, SEAT_COST_MUL = 3, STADIUM_COST_DIV_MUL, fixed work cost 300000 * costMul (#19807)
+  const SEAT_COST_MUL = 3;
+  const STADIUM_WORK_FIXED_COST = 300000;
+  const STADIUM_COST_DIV_MUL = {
+    0: 0.25,
+    1: 1.00,
+    2: 0.60,
+    3: 0.30,
+    4: 0.25,
+  };
+
   const STADIUM_SEAT_TIERS = {
     geral: [
-      [1000, 80],
-      [2500, 160],
-      [3500, 240],
-      [5000, 400],
-      [10000, 800],
-      [999999, 1600],
+      [10000, 300],
+      [25000, 400],
+      [50000, 550],
+      [999999, 800],
     ],
     arquibancada: [
-      [5000, 120],
-      [10000, 240],
-      [20000, 480],
-      [40000, 960],
-      [999999, 1920],
+      [15000, 500],
+      [35000, 700],
+      [65000, 950],
+      [999999, 1400],
     ],
     cadeiras: [
-      [1000, 250],
-      [2500, 500],
-      [5000, 1000],
-      [10000, 2000],
-      [999999, 4000],
+      [10000, 450],
+      [25000, 600],
+      [45000, 850],
+      [999999, 1200],
     ],
     camarotes: [
-      [100, 1000],
-      [250, 2000],
-      [500, 4000],
-      [1000, 8000],
-      [999999, 16000],
+      [100, 1500],
+      [250, 2200],
+      [500, 3200],
+      [750, 4800],
+      [1000, 7300],
+      [999999, 7300],
     ],
   };
 
-  // Bytecode #21317, #21322–#21339, #3525 (slots 187 & 190): Club Shop & Member Plan v9
+  // Bytecode #21255 priceFactor(m, e), #21260–#21277, #3525: Club Shop & Member Plan v9
   const PRICE_FACTOR_MIN = 0.1;
   const PRICE_FACTOR_MAX = 1.35;
 
   const SHOP_ELAST = { lin: 1.0, up: 1.3, down: 0.8 };
   const SHOP_OPTIMAL_MUL = 1.00;
+  const SHOP_MEGA_DAYS = 365;
+  const SHOP_MEGA_BONUS = 0.30;
+  const SHOP_SIGNING_DAYS = 90;
+  const SHOP_SIGNING_BONUS = 0.08;
+  const SHOP_STAR_MAX = 0.30;
 
   const MEMBER_ELAST = { lin: 0.9, up: 1.2, down: 0.8 };
   const MEMBER_PRICE_MIN = 0.5;
@@ -363,60 +377,72 @@
   const MEMBER_ANNUAL_SHARE_MAX = 0.80;
   const MEMBER_LOYAL = 0.12;             // memberDemand = priceFactor * (1 + 0.12 * annualShare)
   const MEMBER_RETAIN = 1.0;             // Legacy alias kept at 1.0 (no separate retain factor in v9)
-  const MEMBER_OPTIMAL_MUL = 1.00;
+  const MEMBER_OPTIMAL_MUL = 1.05;       // #21255 Math.exp -> peak at 1.05x + 6% discount (1.0114)
   const MEMBER_OPTIMAL_DISC = 6;
 
-  // Naming Rights multiplier per durasi (#2719)
+  // Naming Rights multiplier per durasi (#3525 L716176: NAMING_YEARS=[1,3,5], NAMING_WARN_MONTHS=3)
+  const NAMING_WARN_MONTHS = 3;
   const NAMING_DURATION_MULT = {
     1: 1.15,
-    2: 1.08,
     3: 1.00,
-    4: 0.94,
     5: 0.88,
   };
 
-  // CT Upgrade & Milestones (#21495, #21507)
-  const CT_UPGRADE_COSTS = {
-    2: 400000,
-    3: 900000,
-    4: 1800000,
-    5: 3200000,
-    6: 5500000,
-    7: 9000000,
-    8: 14000000,
-    9: 21000000,
-    10: 30000000,
+  // CT Upgrade & Milestones (#21411, #21418, #21426, #3459 L705815)
+  const CT_COST_SHARE = {
+    1: 0.00,
+    2: 0.05,
+    3: 0.07,
+    4: 0.10,
+    5: 0.13,
+    6: 0.17,
+    7: 0.22,
+    8: 0.28,
+    9: 0.35,
+    10: 0.45,
   };
 
-  const CT_UPGRADE_WEEKS = {
-    2: 4, 3: 6, 4: 8, 5: 10, 6: 12, 7: 14, 8: 16, 9: 18, 10: 20,
+  const CT_BUILD_DAYS = {
+    1: 0, 2: 30, 3: 40, 4: 50, 5: 60, 6: 75, 7: 90, 8: 110, 9: 130, 10: 160,
   };
 
-  // Share dari PAYROLL_REF tahunan dibagi 12, dibulatkan ke kelipatan 100 (#21495)
+  // Legacy aliases kept for backwards compatibility
+  const CT_UPGRADE_COSTS = CT_COST_SHARE;
+  const CT_UPGRADE_WEEKS = CT_BUILD_DAYS;
+
+  // Share dari PAYROLL_REF tahunan dibagi 12, dibulatkan ke kelipatan 100 (#21418, #3459 L705819)
   const CT_UPKEEP_SHARE = {
     1: 0.000,
-    2: 0.004,
-    3: 0.008,
+    2: 0.005,
+    3: 0.010,
     4: 0.015,
-    5: 0.025,
-    6: 0.038,
-    7: 0.055,
-    8: 0.078,
-    9: 0.105,
-    10: 0.140,
+    5: 0.020,
+    6: 0.025,
+    7: 0.030,
+    8: 0.035,
+    9: 0.040,
+    10: 0.050,
   };
 
+  // #21426 ctEffectsOf & #3459 L705819 CT_MILESTONES
   const CT_MILESTONES = [
-    { level: 1, slots: 3, perk: 'Dasar (3 slot latihan, pemulihan standar)' },
-    { level: 3, slots: 4, perk: '+1 Slot Latihan (total 4), pemulihan stamina lebih cepat' },
-    { level: 5, slots: 5, perk: '+1 Slot Latihan (total 5), pertumbuhan akademi +15%' },
-    { level: 7, slots: 6, perk: '+1 Slot Latihan (total 6), risiko cedera otot -20%' },
-    { level: 9, slots: 7, perk: 'Maksimum 7 Slot Latihan & akselerasi potCap elit' },
-    { level: 10, slots: 7, perk: 'Fasilitas Kelas Dunia (+reputasi & daya tarik transfer)' },
+    { level: 1, slots: 3, perk: 'Dasar (3 slot latihan khusus)' },
+    { level: 2, slots: 3, perk: 'Pertumbuhan Pemain Muda +1.5% (usia ≤23 thn)' },
+    { level: 3, slots: 4, perk: '+1 Slot Latihan (total 4) & Diskon Biaya Olheiro da Base 0.75x (-25%)' },
+    { level: 4, slots: 4, perk: 'Pertumbuhan Seluruh Skuad +1.0%' },
+    { level: 5, slots: 5, perk: '+1 Slot Latihan (total 5) & Regresi Veteran melambat 0.80x (-20%)' },
+    { level: 6, slots: 5, perk: 'Junior Boost Akademi (+1 kualitas batch tahunan)' },
+    { level: 7, slots: 6, perk: '+1 Slot Latihan (total 6) & Durasi Cedera 0.80x (-20%)' },
+    { level: 8, slots: 6, perk: 'Exact Potential Akademi (bintang & potensi asli terbuka 100% tanpa kabut)' },
+    { level: 9, slots: 7, perk: '+1 Slot Latihan (maks 7) & Pemulihan Energi 1.10x (+10%)' },
+    { level: 10, slots: 7, perk: 'Ceiling Bonus Transfer +3 Force (plafon rekrutmen klub naik +3)' },
   ];
 
-  const YOUTH_COACH_COSTS = { 1: 0, 2: 250000, 3: 750000, 4: 2000000, 5: 5000000 };
-  const YOUTH_COACH_SALARY_SHARE = { 1: 0.003, 2: 0.008, 3: 0.015, 4: 0.028, 5: 0.045 };
+  // #21707–#21709 & #3459 L705865: Youth Coach 0..3, no hire cost, dev bonus +15%/lv
+  const YOUTH_COACH_MAX_LEVEL = 3;
+  const YOUTH_COACH_DEV_BONUS_PER_LV = 0.15;
+  const YOUTH_COACH_COSTS = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  const YOUTH_COACH_SALARY_SHARE = { 0: 0.000, 1: 0.004, 2: 0.008, 3: 0.015 };
 
   // Kuota Pemain Asing (#3454 FOREIGN_LIMITS: max di skuad & field di lapangan)
   const FOREIGN_LIMITS = {
@@ -452,26 +478,20 @@
     4: ['EG', 'MA', 'TN', 'NG', 'GH', 'SN', 'CI', 'CM', 'DZ', 'ZA', 'ML'],
   };
 
-  const UK_CODES = ['EN', 'GB', 'EN-EL', 'EN-SL', 'EN-WL', 'EN-NL', 'SC'];
+  const UK_CODES = ['EN', 'GB', 'WL', 'SC', 'NIR', 'EN-EL', 'EN-SL', 'EN-WL', 'EN-NL'];
 
+  // Bytecode #3454 L705658: 5 AFFINITY_CLUSTERS resmi
   const AFFINITY_CLUSTERS = [
-    ['BR', 'PT'],
-    ['ES', 'AR', 'CO', 'UY', 'CL', 'PY', 'PE', 'EC', 'BO', 'VE', 'MX', 'CR', 'HN', 'PA'],
-    ['EN', 'GB', 'EN-EL', 'EN-SL', 'EN-WL', 'EN-NL', 'SC', 'US', 'CA', 'AU', 'JM'],
-    ['FR', 'BE', 'CH', 'SN', 'CI', 'CM', 'MA', 'TN', 'DZ', 'ML'],
-    ['NL', 'BE', 'DE', 'AT', 'CH'],
-    ['DE', 'AT', 'CH'],
-    ['DK', 'SE', 'NO'],
-    ['RU', 'UA'],
-    ['HR', 'RS'],
-    ['SA', 'QA', 'AE', 'EG', 'MA', 'TN', 'DZ'],
-    ['JP', 'KR'],
-    ['TH', 'VN', 'ID', 'MY'],
+    ['BR', 'PT', 'AO', 'MZ', 'CV'],
+    ['AR', 'UY', 'PY', 'CL', 'CO', 'PE', 'EC', 'BO', 'VE', 'MX', 'CR', 'HN', 'PA', 'SV', 'GT', 'ES'],
+    ['EN', 'GB', 'WL', 'SC', 'NIR', 'IE', 'US', 'CA', 'AU', 'NZ'],
+    ['FR', 'BE', 'SN', 'CI', 'CM', 'ML', 'BF', 'GN', 'CD', 'CG', 'GA', 'MA', 'DZ', 'TN'],
+    ['DE', 'AT', 'CH', 'NL'],
   ];
 
-  // Bytecode #23839 buyerForceCeiling
-  const REP_CEILING = { 0: 44, 1: 58, 2: 72, 3: 100, 4: 100, 5: 100 };
-  const DIV_CEILING = { 1: 100, 2: 68, 3: 54, 4: 44, 0: 36 };
+  // Bytecode #24059 buyerForceCeiling (#3696 L793961)
+  const REP_CEILING = { 0: 20, 1: 30, 2: 45, 3: 85, 4: 100, 5: 100 };
+  const DIV_CEILING = { 0: 0, 1: 100, 2: 60, 3: 40, 4: 30, 5: 30 };
 
   // Bytecode #3454 FX currency rates
   const FX = {
@@ -487,67 +507,96 @@
   };
 
   // Kontrak, Ruang Ganti, & Arbitrase Transfer
-  const RENEW_GOLDEN_MIN = 11;
-  const RENEW_GOLDEN_MAX = 59;
+  // #24161 renewalMinimumSalary (diverifikasi langsung di bytecode):
+  //   sisa kontrak <= 10 hari  -> minta NAIK  [+25%, +30%, +35%, +20%]  (6bln, 1th, 2th, 3th)
+  //   11..59 hari              -> minta NAIK  [+10%, +12%, +15%, +5%]
+  //   >= 60 hari               -> DISKON      [-1%, -3%, -5%, -12%]
+  // Jadi diskon -12% (3 tahun) hanya didapat jika sisa kontrak >= 60 hari.
+  const RENEWAL_TERMS_DAYS = [180, 365, 730, 1095];
+  const RENEWAL_RAISE_LAST = [0.25, 0.30, 0.35, 0.20];
+  const RENEWAL_RAISE_MID = [0.10, 0.12, 0.15, 0.05];
+  const RENEWAL_DISCOUNT = [-0.01, -0.03, -0.05, -0.12];
+  const RENEWAL_DISCOUNT_FROM_DAYS = 60;
+  // Jendela saran aplikasi (heuristik): perpanjang 3 th selagi sisa 60..120 hari sebelum turun < 60.
+  const RENEW_GOLDEN_MIN = 60;
+  const RENEW_GOLDEN_MAX = 120;
   const RENEW_DISCOUNT_3YR = 0.12;
   const PRECONTRACT_DAYS = 180;
 
-  const LOCKER_UNHAPPY_MIN = 3;
-  const LOCKER_HIT_PER_PLAYER = 0.015;
-  const LOCKER_HIT_CAP = 0.08;
+  // #21831 lockerRoomHit & #3726 MOOD_CFG: unhappyPenaltyMin = 4 (4+ unhappy), step = 0.01 (1%), cap = 0.04 (4%)
+  const LOCKER_UNHAPPY_MIN = 4;
+  const LOCKER_HIT_PER_PLAYER = 0.01;
+  const LOCKER_HIT_CAP = 0.04;
 
   const COUNTER_MAX_NORMAL = 1.40;
   const COUNTER_AVG_REALIZED = 1.39;
-  const COUNTER_ARAB_BONUS = 1.40;
+  const COUNTER_ARAB_BONUS = 2.50;
+  const ARAB_OFFER_MIN_MUL = 2.50;
+  const ARAB_OFFER_MAX_MUL = 3.00;
 
   const SELL_TAX_THRESHOLD = 1500000;
   const SELL_TAX_LOW = 0.10;
   const SELL_TAX_HIGH = 0.15;
 
   // Bytecode #3541: Salary Cut & Termination Tiers
+  // SALARY_FLOOR (#3723) + #24159 salaryCutLocked + #24160 salaryFloorFactor + #24162 salaryCutMinimum
+  //   terkunci jika salaryCuts >= maxCuts (1) — renewRefusals TIDAK mengunci.
+  //   factor = max(0.5, 1 + (idx>=11 ? reserve : 0) + (age>=32 ? veteran : 0) + cuts*perCut + refusals*perRefusal)
+  //   gaji minimum = min(gaji, round(gaji * cutBase * factor))
   const SALARY_CUT = {
     maxPct: 0.30,
     moodSteps: [0.10, 0.20],
-    refuseAt: 2,
-    floorStarter: 0.85,
-    floorReserve: 0.72,
+    reserve: -0.12,
+    veteran: -0.10,
+    veteranAge: 32,
+    perCut: 0.05,
+    perRefusal: 0.03,
+    cutBase: 0.9,
+    maxCuts: 1,
   };
 
+  // #19789 terminationFeeRate (sisa hari <= 0 -> 0)
   const TERMINATION_FEE_TIERS = [
-    { maxDays: 90,   rate: 0.20 },
-    { maxDays: 180,  rate: 0.35 },
-    { maxDays: 365,  rate: 0.50 },
-    { maxDays: 9999, rate: 0.70 },
+    { maxDays: 30,   rate: 0.12 },
+    { maxDays: 60,   rate: 0.20 },
+    { maxDays: 90,   rate: 0.22 },
+    { maxDays: 180,  rate: 0.25 },
+    { maxDays: 99999, rate: 0.30 },
   ];
 
-  // Bytecode #3542: Injured Sale Discount
+  // Bytecode #3724 & #20972: Injured Sale Discount (L806140)
+  // <=10d: 0.70, <=30d: 0.55, <=60d: 0.40, >60d: 0.25 (severeDays=30, severeBlockChance=0.55)
   const INJURED_SALE = {
-    minorMaxDays: 14,
-    moderateMaxDays: 45,
-    minorFactor: 0.90,
-    moderateFactor: 0.72,
-    severeFactor: 0.50,
+    minorMaxDays: 10,
+    moderateMaxDays: 30,
+    majorMaxDays: 60,
+    minorFactor: 0.70,
+    moderateFactor: 0.55,
+    majorFactor: 0.40,
+    severeFactor: 0.25,
+    severeDays: 30,
     severeBlockChance: 0.55,
   };
 
-  // Bytecode #3543 & #23984: Youth Scout (Olheiro da Base)
+  // Bytecode #3725 & #24197: Youth Scout (Olheiro da Base — L806154)
+  // maxAge=21, minGrowthMargin=10 (raw potential - force >= 10), minFairMul=2.0x MV, maxPerSeason=2
   const YOUTH_SCOUT = {
     maxAge: 21,
     minGrowthMargin: 10,
-    priceFactor: 1.5,
+    priceFactor: 2.0,
     maxPerSeason: 2,
   };
 
-  // Bytecode #3544 & #21546: Squad Moods
+  // Bytecode #3726 & #21465: Squad Moods
   const MOOD_CFG = {
     minGames: 6,
     starterQuota: 0.40,
     midQuota: 0.25,
     youngQuota: 0.08,
     injuryDaysPerGame: 4,
-    unhappyPenaltyMin: 3,
-    unhappyPenaltyStep: 0.015,
-    unhappyPenaltyMax: 0.08,
+    unhappyPenaltyMin: 4,
+    unhappyPenaltyStep: 0.01,
+    unhappyPenaltyMax: 0.04,
   };
 
   // Bytecode #3545: Red Card Fine
@@ -559,72 +608,98 @@
     slumpChanceHigh: 0.50,
   };
 
-  // Bytecode #3548 & #20496: Loan Buy-Option AI Decision
+  // Bytecode #3730 & #20408: Loan Buy-Option AI Decision (L806200)
   const LOAN_OPTION = {
-    baseChance: 0.35,
-    playedBonus: 0.25,
-    goalsBonus: 0.20,
-    ratingBonus: 0.15,
-    highFeePenalty: 0.25,
+    baseChance: 0.15,
+    minGames: 5,
+    gamesTarget: 20,
+    gamesBonus: 0.35,
+    goalsBonusPerGoal: 0.02,
+    goalsBonusMax: 0.25,
+    youngAge: 23,
+    youngBonus: 0.15,
+    fitBonus: 0.15,
+    maxChance: 0.85,
   };
 
-  // Bytecode #35020: Shout Decay per kuota dalam 1 pertandingan
-  const SHOUT_DECAY = [1.0, 0.7, 0.4];
+  // Bytecode #3640 & #35210: Shout Decay per pengulangan shout yang sama dalam 25 menit [1, 0.5, 0]
+  const SHOUT_DECAY = [1.0, 0.5, 0.0];
 
   const LIVE_COACH_GUIDE = {
     shouts: [
       {
-        name: 'Praise (Elogiar) — +4% ATK & +4% MID',
-        when: 'Butuh Gol / Imbang (Menit 15–75)',
-        situation: 'Butuh Gol / Tertinggal (Menit 1–75)',
-        shout: 'Praise (Elogiar)',
-        effect: '+4% ATK & +4% MID selama 12 menit (tanpa penalti DEF, decay kuota 1.0x → 0.7x → 0.4x)',
-        avoid: 'JANGAN pakai Push Forward sebelum menit 75 karena DEF bocor -4%!',
+        name: 'Encourage (Incentivar) — +1.2% MID',
+        when: 'Duel Lini Tengah Ketat (Menit 15–75)',
+        situation: 'Kalah / Imbang Penguasaan Bola di Tengah',
+        shout: 'Encourage (Incentivar)',
+        effect: '+1.2% MID selama 15 menit (tanpa penalti sektor lain; pengulangan shout sama dalam 25m: 1.0x → 0.5x → 0x)',
+        avoid: 'Jangan ulangi shout yang sama dalam 25 menit karena efek ke-3 menjadi 0%!',
       },
       {
-        name: 'Focus (Concentrar) — +6% DEF & +4% MID',
-        when: 'Unggul Tipis & Lawan Menekan (Menit 65+)',
-        situation: 'Unggul Tipis & Lawan Menekan (Menit 65+)',
-        shout: 'Focus (Concentrar)',
-        effect: '+6% DEF & +4% MID selama 15 menit (pengunci kemenangan paling aman)',
-        avoid: 'Jangan biarkan stamina bek/DM di bawah 65% (penalti energyFactor kontinu s.d. -8%).',
+        name: 'Attack More (Atacar Mais) — +1.2% ATK',
+        when: 'Butuh Gol / Menekan Lawan',
+        situation: 'Butuh Gol Pembuka atau Mengejar Ketertinggalan',
+        shout: 'Attack More (Atacar Mais)',
+        effect: '+1.2% ATK selama 15 menit (bisa dikombinasikan dengan Order Attacking +4% ATK)',
+        avoid: 'Jika terlalu sering mengulang dalam <25 menit, ganti ke Demand More atau Encourage.',
       },
       {
-        name: 'Push Forward (Avançar) — +8% ATK, -4% DEF',
-        when: 'All-Out Attack (Menit 75+ Tertinggal)',
-        situation: 'All-Out Attack (Menit 78+ Tertinggal 1 Gol)',
-        shout: 'Push Forward (Avançar)',
-        effect: '+8% ATK selama 10 menit, tapi -4% DEF (kombinasikan dengan Play Style Offensive +8% ATK)',
-        avoid: 'Jangan dipakai di babak pertama — kuota shout cuma 3x per laga (efek ke-2 70%, ke-3 40%)!',
+        name: 'Tighten Up (Fechar Atrás) — +1.2% DEF',
+        when: 'Mengamankan Keunggulan (Menit 65+)',
+        situation: 'Unggul Tipis & Lawan Menekan',
+        shout: 'Tighten Up (Fechar Atrás)',
+        effect: '+1.2% DEF selama 15 menit (kombinasikan dengan Order Defend Lead +4% DEF)',
+        avoid: 'Jangan biarkan pemain energi <60% tetap di lapangan (kuota ganti 5 pemain di #21779!).',
       },
       {
-        name: 'Calm Down (Acalmar) — -35% Risiko Kartu',
+        name: 'Calm Down (Acalmar) — -1.2% ATK, +1.2% DEF & -30% Kartu',
         when: 'Wasit Ketat / Banyak Kartu Kuning',
-        situation: 'Lawan Bermain Kasar / Banyak Pelanggaran',
+        situation: 'Tim Terlalu Agresif / Rawannya Kartu Merah',
         shout: 'Calm Down (Acalmar)',
-        effect: 'Menurunkan risiko kartu kuning ke-2 / kartu merah sekitar -35% selama 15 menit',
-        avoid: 'Segera tarik keluar pemain yang sudah mengantongi 1 kartu kuning jika marking Heavy/Very Heavy.',
+        effect: '+1.2% DEF, -1.2% ATK, dan menurunkan risiko kartu (foulMul 0.70x / -30%) selama 15 menit',
+        avoid: 'Segera tarik keluar pemain berkartu kuning atau ganti Order ke Stay Calm (-25% kartu).',
+      },
+      {
+        name: 'Demand More (Cobrar Mais) — +1.2% MID & +15% Risiko Kartu',
+        when: 'Tim Lesu / Tertinggal',
+        situation: 'Butuh Intensitas Ekstra di Lini Tengah',
+        shout: 'Demand More (Cobrar Mais)',
+        effect: '+1.2% MID selama 15 menit dengan kompensasi foulMul 1.15x (+15% risiko kartu)',
+        avoid: 'Hindari saat wasit Strict (+20% kartu) dan banyak pemain sudah mengantongi kartu kuning.',
+      },
+      {
+        name: 'Focus (Concentrar) — +1.2% DEF',
+        when: 'Menjaga Konsentrasi Lini Belakang',
+        situation: 'Menjelang Akhir Babak / Bola Mati Lawan',
+        shout: 'Focus (Concentrar)',
+        effect: '+1.2% DEF selama 15 menit (alternatif bebas cooldown dari Tighten Up)',
+        avoid: 'Rotasikan dengan Tighten Up setiap 15 menit agar tidak terkena decay pengulangan 25 menit!',
       },
     ],
     orders: [
       {
         cond: 'Unggul 1–2 Gol (Menit 65+)',
-        order: 'Balanced + Marking Heavy (+4% DEF) + Shout Focus',
-        note: 'Kunci kemenangan dengan +6% DEF & +4% MID. Masukkan 1–2 pemain muda/cadangan yang butuh kuota menit.',
+        order: 'Defend Lead (+4% DEF, -3% ATK) + Shout Tighten Up / Focus',
+        note: 'Kunci kemenangan dengan +4% DEF (atau Hold Ball +3% MID, +2% DEF, -4% ATK) dan manfaatkan 5 pergantian pemain (#21779).',
       },
       {
-        cond: 'Imbang / Tertinggal 1 Gol (Menit 70+)',
-        order: 'Offensive (+8% ATK) + Shout Praise / Push Forward',
-        note: 'Masukkan Supersub VEL/FIN segar (energi 100% vs bek lawan yang terkena penalti energyFactor).',
+        cond: 'Imbang / Tertinggal 1 Gol (Menit 60–75)',
+        order: 'Attacking (+4% ATK, -3% DEF) atau High Press (+3% MID, +2% ATK, -3% DEF)',
+        note: 'High Press menguras stamina 1.25x — masukkan Supersub VEL/FIN segar untuk menggantikan pemain <60% energi.',
       },
       {
-        cond: 'Terkena Kartu Merah (10 Pemain)',
-        order: 'Counter-Attack + Marking Heavy + Denda Manual 20%',
-        note: 'Tarik 1 penyerang untuk mengisi slot bek/DM yang kosong. Usai laga, beri denda manual tepat 20% gaji (0% risiko fineSlump!).',
+        cond: 'Tertinggal di Menit 78+ / Butuh Gol Cepat',
+        order: 'All-Out Attack (+8% ATK, -7% DEF, +15% kartu) + Direct Play (+4% ATK, -3% MID)',
+        note: 'All-Out Attack menguras stamina 1.30x dan membuka pertahanan -7%, gunakan hanya di 12 menit terakhir!',
+      },
+      {
+        cond: 'Rawan Kartu Merah / Wasit Strict (+20% Kartu)',
+        order: 'Stay Calm (-2% ATK, +1% DEF, -25% risiko kartu) + Denda Manual 20% jika Merah',
+        note: 'Stay Calm menurunkan foulMul 0.75x (-25% kartu). Jika tetap kena Kartu Merah, beri denda manual 20% usai laga (0% slump!).',
       },
     ],
-    subsRule: 'Di v1.2.0, energyFactor turun kontinu 0.1% per poin energi hilang (RES memotong penalti 40%, lantai 0.92x). Masukkan 1–2 pemain moodTier=1 yang minPct < 12% pada menit 60–70 bila sudah unggul >=2 gol, atau masukkan Supersub VEL/FIN untuk mencetak gol penentu.',
-    redCardRule: 'Jika pemainmu kena Kartu Merah: (1) Setelah laga beri denda manual tepat 20% gaji (0% peluang fineSlump + dapat kas gratis!), (2) Di lapangan langsung ganti 1 penyerang/AM ke posisi bek/DM yang kosong dan ubah gaya ke Counter-Attack + Marking Heavy.',
+    subsRule: 'Di v1.2.0 (#21779 & #35197), kuota pergantian adalah 5 pemain (6 jika Extra Time). AI otomatis mengganti pemain energi <60% (<90% setelah menit 85). Masukkan 1–2 pemain moodTier=1 (target 8% menit) saat unggul, dan gunakan sisa kuota untuk Supersub VEL/FIN segar.',
+    redCardRule: 'Jika pemainmu kena Kartu Merah: (1) Setelah laga beri denda manual tepat 20% gaji (0% peluang fineSlump + dapat kas gratis!), (2) Di lapangan langsung ganti 1 penyerang/AM ke posisi bek/DM yang kosong dan aktifkan Order Defend Lead / Stay Calm.',
   };
 
   // Bytecode #19825 matchTicketKind & Env[15] continental map
@@ -729,11 +804,19 @@
       matchTicketMeta,
       STADIUM_FREE_SEATS,
       STADIUM_OPS_PER_SEAT,
+      SEAT_COST_MUL,
+      STADIUM_WORK_FIXED_COST,
+      STADIUM_COST_DIV_MUL,
       STADIUM_SEAT_TIERS,
       PRICE_FACTOR_MIN,
       PRICE_FACTOR_MAX,
       SHOP_ELAST,
       SHOP_OPTIMAL_MUL,
+      SHOP_MEGA_DAYS,
+      SHOP_MEGA_BONUS,
+      SHOP_SIGNING_DAYS,
+      SHOP_SIGNING_BONUS,
+      SHOP_STAR_MAX,
       MEMBER_ELAST,
       MEMBER_PRICE_MIN,
       MEMBER_PRICE_MAX,
@@ -744,11 +827,16 @@
       MEMBER_RETAIN,
       MEMBER_OPTIMAL_MUL,
       MEMBER_OPTIMAL_DISC,
+      NAMING_WARN_MONTHS,
       NAMING_DURATION_MULT,
+      CT_COST_SHARE,
+      CT_BUILD_DAYS,
       CT_UPGRADE_COSTS,
       CT_UPGRADE_WEEKS,
       CT_UPKEEP_SHARE,
       CT_MILESTONES,
+      YOUTH_COACH_MAX_LEVEL,
+      YOUTH_COACH_DEV_BONUS_PER_LV,
       YOUTH_COACH_COSTS,
       YOUTH_COACH_SALARY_SHARE,
       FOREIGN_LIMITS,
@@ -759,6 +847,11 @@
       REP_CEILING,
       DIV_CEILING,
       FX,
+      RENEWAL_TERMS_DAYS,
+      RENEWAL_RAISE_LAST,
+      RENEWAL_RAISE_MID,
+      RENEWAL_DISCOUNT,
+      RENEWAL_DISCOUNT_FROM_DAYS,
       RENEW_GOLDEN_MIN,
       RENEW_GOLDEN_MAX,
       RENEW_DISCOUNT_3YR,

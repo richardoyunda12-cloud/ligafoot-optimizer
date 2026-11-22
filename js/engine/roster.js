@@ -67,7 +67,7 @@
 
     const salaryCuts = U.safeInt(dyn.salaryCuts, 0);
     const renewRefusals = U.safeInt(dyn.renewRefusals, 0);
-    const salaryCutLocked = Boolean(salaryCuts >= 2 || renewRefusals >= 2);
+    const salaryCutLocked = Boolean(salaryCuts >= C.SALARY_CUT.maxCuts); // #24159: hanya salaryCuts, bukan renewRefusals
 
     const ent = Array.isArray(dyn.ent) ? dyn.ent : null;
     const integration = T.integrationOf(dyn);
@@ -102,41 +102,46 @@
     const isTrap = (potential - potCap) >= 4;
     const isGem = (potCap - potential) >= 4 || (age <= 22 && potGap >= 8) || (age <= 23 && potGap >= 6 && !stackInfo.nonStack);
 
-    // Arbitrase Jual Counter +39% & +40% & Arab 1.4x + Jual Langsung v9 (INJURED_SALE + Pajak)
+    // Arbitrase Jual Counter +39% & +40% & Arab (2.5x–3.0x MV × 1.39x) + Jual Langsung v9 (INJURED_SALE + Pajak)
     const gross39 = Math.round(marketValue * C.COUNTER_AVG_REALIZED * injurySaleMul);
     const gross40 = Math.round(marketValue * C.COUNTER_MAX_NORMAL * injurySaleMul);
-    const grossArab = Math.round(marketValue * C.COUNTER_ARAB_BONUS * C.COUNTER_AVG_REALIZED * injurySaleMul);
+    const arabLowGross = Math.round(marketValue * (C.ARAB_OFFER_MIN_MUL || 2.50) * C.COUNTER_AVG_REALIZED * injurySaleMul);
+    const arabHighGross = Math.round(marketValue * (C.ARAB_OFFER_MAX_MUL || 3.00) * C.COUNTER_AVG_REALIZED * injurySaleMul);
     const estCounter39 = calcNetSaleProceeds(gross39);
     const estCounter40 = calcNetSaleProceeds(gross40);
-    const estArabNet = calcNetSaleProceeds(grossArab);
+    const estArabLow = calcNetSaleProceeds(arabLowGross);
+    const estArabHigh = calcNetSaleProceeds(arabHighGross);
+    const estArabNet = estArabLow;
 
     const directSaleTaxRate = marketValue >= C.SELL_TAX_THRESHOLD ? C.SELL_TAX_HIGH : C.SELL_TAX_LOW;
     const estDirectSaleNet = Math.round(marketValue * injurySaleMul * (1.0 - directSaleTaxRate));
 
-    // Pesangon Pemutusan Kontrak (#21000 terminationFeeRate)
+    // Pesangon Pemutusan Kontrak (#19789 terminationFeeRate)
     const termFeeRate = U.terminationFeeRate(contractDays);
     const estTerminationCost = Math.round(salary * (Math.max(0, contractDays) / 30.0) * termFeeRate);
 
-    // Golden Window (11-59 hari): Renew 3 Tahun = -12% gaji
-    const renew3yrSaveMonth = Math.round(salary * C.RENEW_DISCOUNT_3YR);
+    // Perpanjang 3 th (#24161): sisa >= 60 hari = -12% gaji; < 60 hari justru minta NAIK (+5% s.d. +20%)
+    const renew3yrDelta = U.renewalSalaryDelta(contractDays, 3);
+    const renew3yrSaveMonth = Math.round(salary * -renew3yrDelta); // negatif = tambahan biaya
     const doubleDipSaveYear = Math.round(salary * (1.0 - 0.88 * 0.88) * 12);
 
-    // Youth Scout (Olheiro da Base #23984): age <= 21, (potential - force) + max(0, hash - 6)*2 >= 10
-    const youthScoutGap = (potential - force) + Math.max(0, hashVal - 6) * 2;
+    // Youth Scout (Olheiro da Base #24197): age <= 21, raw (potential - force) >= 10, harga 2.0x MV
+    const youthScoutGap = potential - force;
     const youthScoutEligible = Boolean(!isUserTeam && age <= C.YOUTH_SCOUT.maxAge && youthScoutGap >= C.YOUTH_SCOUT.minGrowthMargin && !forSale);
     const youthScoutPrice = Math.round(Math.max(10000, marketValue) * C.YOUTH_SCOUT.priceFactor);
 
-    const retChance = U.retirementChance(age, pos, force);
+    const retChance = U.retirementChance(age, pos, force, { top: Boolean(dyn.top), star: Boolean(dyn.star || stat.star || starAwarded) });
+    const gamesPlayed = U.safeInt(dyn.gamesPlayed, Math.max(0, Math.round(seasonMinutes / 90.0)));
     const loanBuyChance = U.loanBuyDecisionChance({
       loanedFrom,
       loanBuyFee,
       seasonMinutes,
+      seasonGames: gamesPlayed,
       seasonGoals,
-      matchRatings,
+      age,
+      injured,
       marketValue,
     });
-
-    const gamesPlayed = U.safeInt(dyn.gamesPlayed, Math.max(0, Math.round(seasonMinutes / 90.0)));
     const rawAvgR = U.safeNum(dyn.avgRating, 0.0);
     const avgRating = rawAvgR > 0
       ? U.roundTo(rawAvgR, 2)
@@ -232,8 +237,8 @@
       estCounter39,
       estCounter40,
       estArabNet,
-      estArabLow: estArabNet,
-      estArabHigh: Math.round(estArabNet * 1.15),
+      estArabLow,
+      estArabHigh,
       directSaleTaxRate,
       estDirectSaleNet,
       termFeeRate,
@@ -260,9 +265,16 @@
 
     if (p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX) {
       if (rankIdx < 16 || p.isGem || p.force >= 38) {
-        return { action: 'RENEW 3TH (-12% GAJI)', cls: 'b-gold' };
+        return { action: 'RENEW 3TH SEKARANG (-12% GAJI, sisa ≥60h)', cls: 'b-gold' };
       }
       return { action: 'LEPAS GRATIS (HEMAT GAJI)', cls: 'b-muted' };
+    }
+
+    if (p.contractDays > 10 && p.contractDays < C.RENEWAL_DISCOUNT_FROM_DAYS) {
+      if ((rankIdx < 14 || p.isGem || p.force >= 40) && !p.loanedFrom) {
+        return { action: 'JANGAN RENEW (minta +5–15%) — tunggu ≤10h loophole', cls: 'b-amber' };
+      }
+      return { action: 'BIARKAN HABIS (JANGAN RENEW)', cls: 'b-muted' };
     }
 
     if (p.contractDays <= 10) {
@@ -304,25 +316,43 @@
     const seenIds = new Set();
     const roster = [];
 
+    // Buat peta dynamic override dari playerDynamic (baik array maupun object)
+    const dynMap = new Map();
     const rawDyn = tobj.playerDynamic;
     if (Array.isArray(rawDyn)) {
       for (const row of rawDyn) {
         const [pid, d] = U.parseDynamicRow(row);
-        if (pid && !seenIds.has(pid)) {
-          seenIds.add(pid);
-          roster.push(buildPlayerRecord(d, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
-        }
+        if (pid && d) dynMap.set(pid, d);
       }
     } else if (rawDyn && typeof rawDyn === 'object') {
       for (const [pid, dObj] of Object.entries(rawDyn)) {
-        if (!dObj || typeof dObj !== 'object') continue;
-        const merged = { ...dObj, id: dObj.id || pid };
-        const rec = buildPlayerRecord(merged, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
-        seenIds.add(rec.id);
-        roster.push(rec);
+        if (dObj && typeof dObj === 'object') {
+          dynMap.set(pid, { ...dObj, id: dObj.id || pid });
+        }
       }
     }
 
+    // #22553 & #22557: Iterasi tobj.playerIds terlebih dahulu (menggabungkan staticPlayers[pid] + dynMap.get(pid))
+    // Penting untuk klub AI di compactTeams yang pemainnya tidak mengalami perubahan dinamis!
+    if (Array.isArray(tobj.playerIds)) {
+      for (const rawPid of tobj.playerIds) {
+        const pid = String(rawPid || '').trim();
+        if (!pid || seenIds.has(pid)) continue;
+        const dObj = dynMap.get(pid) || { id: pid };
+        seenIds.add(pid);
+        roster.push(buildPlayerRecord(dObj, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
+      }
+    }
+
+    // Tambahkan entri playerDynamic yang mungkin belum ada di playerIds
+    for (const [pid, dObj] of dynMap.entries()) {
+      if (!seenIds.has(pid)) {
+        seenIds.add(pid);
+        roster.push(buildPlayerRecord(dObj, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
+      }
+    }
+
+    // Tambahkan extraRows (pemain regens / promosi akademi / transfer tambahan)
     for (const row of (Array.isArray(tobj.extraRows) ? tobj.extraRows : [])) {
       const [pid, d] = U.parseExtraRow(row);
       if (pid && !seenIds.has(pid)) {

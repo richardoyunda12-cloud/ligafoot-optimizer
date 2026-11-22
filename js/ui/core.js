@@ -95,7 +95,8 @@ function priceFactorJS(m, lin, up, down) {
     return LFEngine.economy.priceFactorV9(m, { lin, up, down });
   }
   const d = Number(m || 1) - 1.0;
-  const raw = d >= 0 ? (1.0 - lin * d - up * d * d) : (1.0 - lin * d - down * d * d);
+  const quad = d >= 0 ? up : down;
+  const raw = Math.exp(-lin * d - quad * d * d);
   return Math.max(0.10, Math.min(1.35, raw));
 }
 
@@ -262,17 +263,17 @@ const BADGE_TIPS = {
   SLUMP: 'Fine Slump: penurunan performa (-3% per denda, maks -20%) selama 30 hari karena denda kartu merah >20%.',
   NONSTACK: 'Skill tidak menumpuk (TCK+MRK di bek cuma +5% sekali; PAS+PLY di gelandang cuma +3% sekali).',
   ARAB: 'Arab Watch: pemain Top-5 skuad usia ≥26 thn punya peluang 10% ditawar klub Arab 2.5x–3.0x Market Value!',
-  GOLDEN: 'Golden Window (11–59 hari): perpanjang kontrak 3 tahun di jendela ini untuk potong gaji -12% GRATIS!',
+  GOLDEN: 'Golden Window (60–120 hari, syarat >=60 hari di #24161): perpanjang kontrak 3 tahun di jendela ini untuk potong gaji -12% GRATIS! Di 11–59 hari mereka justru minta naik +5–15%.',
   LOOPHOLE: 'Loophole Auto-Renew 0%: nyalakan Auto-Renew sementara untuk pemain inti ≤10 hari agar diperpanjang +180 hari dengan gaji lama (0% naik).',
   SWAP: 'Rekomendasi tukar beli target + jual pemain skuad lama (hitung net kas, selisih gaji & upgrade performa Eff).',
   FLIP: 'Strategi beli pemain muda (17–21 thn) murah, latih 1–2 musim, lalu jual mahal (+40% counter) untuk cetak kas!',
-  REFUSEDIST: 'Menolak Pindah (#23840 refusesDistance): pemain dari liga Eropa / benua lain tanpa afiliasi menolak pindah ke level liga klubmu.',
-  REFUSELVL: 'Menolak Turun Kasta (#23847 clubLevelLow): selisih level klub terlalu jauh (>2 level untuk usia <29 thn).',
-  PERSUADE: 'Bisa Dibujuk (#23850 buyPersuadable): awalnya menolak, tapi mau pindah jika ditawar >=1.5x Market Value (+2 slack level).',
-  CEIL2X: 'Di Atas Plafon Force (#23839 buyerForceCeiling): membutuhkan tawaran 2.0x Market Value.',
-  KEYLOCK: 'Dikunci Klub AI (#23919): bintang utama / wonderkid klub AI yang sehat finansial — otomatis diperpanjang sebelum Bosman.',
-  YSCOUT: 'Olheiro da Base (#23984): U-21 berpotensi besar (gap >=10) yang bisa dibajak instan seharga 1.5x MV (kuota 2/musim).',
-  INJDISC: 'Diskon Cedera (#3542 INJURED_SALE): harga pasar sedang terpotong -10% s.d. -50% karena cedera.',
+  REFUSEDIST: 'Menolak Pindah (#24060 refusesDistance): pemain dari liga Eropa / benua lain tanpa afiliasi menolak pindah ke level liga klubmu.',
+  REFUSELVL: 'Menolak Turun Kasta (#24062 clubLevelLow): selisih level klub terlalu jauh (≥3 level untuk usia <29 thn, atau ≥2 level untuk bintang <28 thn).',
+  PERSUADE: 'Bisa Dibujuk (#24064 buyPersuadable): awalnya menolak, tapi mau pindah jika ditawar >=1.5x Market Value (+2 slack level & +4 plafon Force).',
+  CEIL2X: 'Di Atas Plafon Force (#24059 buyerForceCeiling): membutuhkan tawaran 2.0x Market Value (maks +5 di atas plafon).',
+  KEYLOCK: 'Dikunci Klub AI (#24136/#24715): pemain Top/Star atau Top-3 Force klub AI yang tidak unhappy — otomatis diperpanjang sebelum Bosman.',
+  YSCOUT: 'Olheiro da Base (#24197): U-21 berpotensi besar (potential - force >=10) yang bisa dibajak instan seharga 2.0x MV (kuota 2/musim; diskon 0.75x di CT Lv 3+).',
+  INJDISC: 'Diskon Cedera (#3724 INJURED_SALE): harga pasar sedang terpotong -30% (≤10d), -45% (≤30d), -60% (≤60d), atau -75% (>60d) karena cedera.',
   BUG343: 'Bug Engine v1.2.0 (#34992): slot ke-11 pada formasi 3-4-3 memakai rule 18 yang jatuh ke sektor X (ATK hilang -33%)!'
 };
 function tipFor(code) {
@@ -500,7 +501,7 @@ function openPlayerDrawer(kind, id) {
     const gap = Math.max(0, p.potCap - p.force);
     const inSell = !!cartOut[p.id];
     const inXi = (D.bestXi && D.bestXi.xi || []).some(a => a.id === p.id);
-    const toGolden = p.contractDays > 59 ? (p.contractDays - 59) : 0;
+    const toGolden = p.contractDays > 120 ? (p.contractDays - 120) : 0;
     const actB = { crit: 'b-crit', warn: 'b-warn', good: 'b-good', accent: 'b-accent', info: 'b-info', muted: 'b-muted' }[p.actionCls] || 'b-muted';
     const cardsList = Object.entries(p.cardsByComp || {})
       .filter(([, v]) => v && ((v.y || 0) > 0 || (v.s || 0) > 0))
@@ -566,16 +567,16 @@ function openPlayerDrawer(kind, id) {
       </div>
 
       <div class="drawer-sec">
-        <h3>💰 Kontrak, Salary Cut &amp; Nilai Jual (#3541 / #21000)</h3>
-        <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${p.contractDays <= 10 ? 'c-red' : (p.contractDays <= 59 ? 'c-green' : '')}">${p.contractDays} hari</b></div>
-        <div class="drawer-kv"><span>Status Golden Window (11–59d)</span><span class="mono">${p.contractDays <= 10 ? '<b class="c-red">Zona Jebakan — pakai Loophole 0%!</b>' : (p.contractDays <= 59 ? '<b class="c-green">AKTIF SEKARANG (-12% gaji!)</b>' : `Masuk dalam ~${toGolden} hari`)}</span></div>
-        <div class="drawer-kv"><span>Gaji Bulanan (Lantai ${Math.round((p.salaryFloorFactor || 0.85) * 100)}%)</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
-        <div class="drawer-kv"><span>Kuota Potong Gaji (salaryCuts)</span><span class="mono ${p.salaryCutLocked ? 'c-red' : 'c-green'}"><b>${p.salaryCuts || 0}/2</b> dipakai ${p.salaryCutLocked ? '(TERKUNCI — menolak potong lagi!)' : '(Masih bisa negosiasi potong)'}</span></div>
-        ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan (#3541)</span><b class="mono c-sky">Lantai 0.72x → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
+        <h3>💰 Kontrak, Salary Cut &amp; Nilai Jual (#3723 / #24161)</h3>
+        <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${p.contractDays <= 10 ? 'c-red' : (p.contractDays < 60 ? 'c-amber' : (p.contractDays <= 120 ? 'c-green' : ''))}">${p.contractDays} hari</b></div>
+        <div class="drawer-kv"><span>Status Diskon 3Th (-12%, ≥60d)</span><span class="mono">${p.contractDays <= 10 ? '<b class="c-red">Zona Jebakan — pakai Loophole 0%!</b>' : (p.contractDays < 60 ? '<b class="c-amber">Minta Naik +5–15% (Tunggu ≤10d Loophole)</b>' : (p.contractDays <= 120 ? '<b class="c-green">GOLDEN WINDOW AKTIF (-12% gaji!)</b>' : `Bisa diskon -12% (Golden dalam ~${toGolden}d)`))}</span></div>
+        <div class="drawer-kv"><span>Gaji Bulanan (Lantai ${Math.round((p.salaryFloorFactor || 0.90) * 100)}%)</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
+        <div class="drawer-kv"><span>Kuota Potong Gaji (salaryCuts)</span><span class="mono ${p.salaryCutLocked ? 'c-red' : 'c-green'}"><b>${p.salaryCuts || 0}/1</b> dipakai ${p.salaryCutLocked ? '(TERKUNCI — maks 1x potong di #24159!)' : '(Masih bisa negosiasi potong 1x)'}</span></div>
+        ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan (#24160)</span><b class="mono c-sky">Cadangan -12% floor → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)} ${p.injured ? `<b class="c-red">(Diskon cedera ${Math.round((p.injurySaleMul || 1) * 100)}%)</b>` : ''}</span></div>
         <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +39%: ${fmtM(p.estCounter39)} · +40%: ${fmtM(p.estCounter40)}</span></b></div>
         <div class="drawer-kv"><span>Biaya Putus Kontrak (${Math.round((p.termFeeRate || 0.5) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
-        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (1.4x × 1.39x)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
+        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (2.5x–3.0x × 1.39x)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
       </div>
 
       <div class="pill-row mt-12">

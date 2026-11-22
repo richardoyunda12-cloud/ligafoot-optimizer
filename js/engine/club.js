@@ -32,11 +32,23 @@
     }
 
     const trainMode = String(pickFlag(['trainMode'], 'auto')).toLowerCase();
-    const fineAuto = Boolean(pickFlag(['fineAuto', 'autoFine'], false));
-    const autoRenew = Boolean(pickFlag(['autoRenew', 'renewAuto'], false));
-    let autoBy = String(pickFlag(['autoBy', 'autoLineupMode'], 'manual')).toLowerCase();
-    if (pickFlag(['autoLineup'], false) === true && autoBy === 'manual') {
-      autoBy = 'force';
+    const rawFine = pickFlag(['fineAuto', 'autoFine'], 'off');
+    const fineAuto = (rawFine !== false && rawFine !== 'off' && rawFine !== '' && rawFine !== 0 && rawFine !== '0');
+    const autoRenew = Boolean(pickFlag(['autoRenewContracts', 'autoRenew', 'renewAuto'], false));
+    let autoBy = 'manual';
+    if (uTeam.lastLineup && typeof uTeam.lastLineup === 'object') {
+      if (uTeam.lastLineup.auto === false) {
+        autoBy = 'manual';
+      } else if (uTeam.lastLineup.autoBy) {
+        autoBy = String(uTeam.lastLineup.autoBy).toLowerCase();
+      } else if (uTeam.lastLineup.auto === true) {
+        autoBy = String(pickFlag(['autoBy', 'autoLineupMode'], 'force')).toLowerCase();
+      }
+    } else {
+      autoBy = String(pickFlag(['autoBy', 'autoLineupMode'], 'manual')).toLowerCase();
+      if (pickFlag(['autoLineup'], false) === true && autoBy === 'manual') {
+        autoBy = 'force';
+      }
     }
     const ctMaintOff = Boolean(pickFlag(['ctMaintOff'], false));
     const xiHoldRaw = uTeam.xiHold;
@@ -85,10 +97,10 @@
         advice: (autoRenew && hasTrapCore)
           ? 'Aktif taktis ✓ — Siap menangkap Loophole 0% (+180d) untuk pemain inti <=10 hari (pastikan !noAutoRenew pada inti & noAutoRenew pada cadangan!).'
           : (autoRenew
-            ? 'MATIKAN saat normal! Auto-Renew bikin kamu kehilangan diskon -12% Golden Window (11–59 hari).'
+            ? 'MATIKAN saat normal! Auto-Renew bikin kamu kehilangan diskon -12% (sisa >=60 hari, ideal 60–120 hari).'
             : (hasTrapCore
               ? 'OFF — Ada pemain inti <=10 hari! Pertimbangkan nyalakan sementara untuk Loophole 0% (+180d).'
-              : 'OFF ✓ — Renew manual 3 tahun di 11–59 hari untuk potong gaji -12% gratis.')),
+              : 'OFF ✓ — Renew manual 3 tahun saat sisa >=60 hari (60–120h) untuk potong gaji -12% gratis.')),
       },
       {
         key: 'ctMaint',
@@ -210,7 +222,7 @@
       }
       if (autoGuard.autoRenew && !autoGuard.hasTrapCore) {
         add('MEDIUM', 'Auto-Guard', 'Auto-Renew Kontrak sedang ON!',
-          'Matikan saat normal agar kamu bisa mengincar diskon gaji -12% di Golden Window (11–59 hari).');
+          'Matikan saat normal agar kamu bisa mengincar diskon gaji -12% saat sisa kontrak >=60 hari (ideal 60–120 hari).');
       }
     }
 
@@ -241,7 +253,8 @@
         `Pemain: ${names}. Pastikan Auto-Renew OFF / noAutoRenew ON agar pergi gratis menghemat gaji.`);
     }
 
-    if (namingObj && typeof namingObj === 'object' && U.safeInt(namingObj.monthsLeft, 99) <= 2) {
+    const namingWarnMonths = C.NAMING_WARN_MONTHS || 3;
+    if (namingObj && typeof namingObj === 'object' && U.safeInt(namingObj.monthsLeft, 99) <= namingWarnMonths) {
       const ml = U.safeInt(namingObj.monthsLeft, 0);
       add('CRITICAL', 'Naming Rights', `Naming Rights tinggal ${ml} bulan (${namingObj.name || '-'})!`,
         'Saat habis, WAJIB pilih kontrak 1 TAHUN (pengali 1.15x/thn, +30.7% lebih besar dari 5 tahun) di kapasitas stadion terbaru.');
@@ -262,11 +275,11 @@
         `${sTxt}. Performa mereka terpotong di lapangan sampai durasi habis. Ke depan gunakan denda maksimal 20% (0% risiko).`);
     }
 
-    const goldC = userRoster.filter(p => p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX);
+    const goldC = userRoster.filter(p => p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX && !p.loanedFrom);
     if (goldC.length) {
       const names = goldC.slice(0, 5).map(p => `${p.name} (${p.contractDays}d)`).join(', ');
-      add('HIGH', 'Kontrak -12%', `${goldC.length} pemain di GOLDEN WINDOW (11–59 hari)!`,
-        `${names}. Perpanjang 3 Tahun (1095d) untuk potong gaji -12% GRATIS (+ gunakan trik bangku cadangan indeks >=11 untuk lantai gaji 0.72x!).`);
+      add('HIGH', 'Kontrak -12%', `${goldC.length} pemain di GOLDEN WINDOW (60–120 hari)!`,
+        `${names}. Di bytecode #24161, diskon 3 Tahun (-12% gaji) hanya berlaku saat sisa >=60 hari (di 11–59 hari mereka minta naik +5–15%!). Perpanjang sekarang sebelum turun ke <60 hari!`);
     }
 
     const bpDiv = C.TICKETS_BASE[userDiv] || C.TICKETS_BASE[1];
@@ -317,7 +330,7 @@
     }
     if (sContracts.length < 3) {
       add('HIGH', 'Sponsor', `Baru ${sContracts.length}/3 slot Sponsor Jersey terisi!`,
-        'Negosiasikan slot kosong dengan perusahaan Tier 3 (minta +8% s.d. +10% di percobaan 1, lalu terima counter di percobaan 2).');
+        'Negosiasikan slot kosong dengan perusahaan Tier 3 (minta +7% s.d. +12% sesuai performa klasemen & fanConfidence di percobaan 1, lalu terima counter di percobaan 2).');
     } else {
       // #19870: save v9 memakai `paymentsLeft` (atau fallback `monthsLeft`)
       const expSp = sContracts.filter(c => {
@@ -353,7 +366,7 @@
     if (readyY.length) {
       const ynames = readyY.slice(0, 3).map(y => `${y.name} (${U.posEn(y.pos)} ${y.age}th, ★${y.hash})`).join(', ');
       add('MEDIUM', 'Akademi', `${readyY.length} pemain akademi siap promosi!`,
-        `${ynames}. Pemain akademi berhenti tumbuh di usia 20 — promosikan untuk tambal skuad atau flip.`);
+        `${ynames}. Pemain akademi tumbuh tercepat di usia 20 (rate 0.35, berhenti di >20 / usia 21+) dan dipromosikan otomatis saat pergantian tahun di usia >=20.`);
     }
 
     if (upcomingMatches.length && upcomingMatches[0].yellowRisks && upcomingMatches[0].yellowRisks.length) {
@@ -405,15 +418,16 @@
     const reputation = U.safeNum(uTeam.reputation, uMeta.rep || 50);
     const repLevel = T.repToLevel(reputation);
     const userTeamLevel = U.teamLevelOf(uTeam, userDiv, uMeta.level);
-    const buyerCeiling = T.buyerForceCeiling(reputation, userDiv);
 
     const boardConf = U.safeNum(uTeam.boardConfidence, 70);
     const fanConf = U.safeNum(uTeam.fanConfidence, 70);
     const ctLevel = Math.max(1, U.safeInt(uTeam.ctLevel, 1));
     const ctCond = U.safeInt(uTeam.ctCond, 100);
     const ctMaintOff = Boolean(uTeam.ctMaintOff);
-    const youthCoach = U.safeInt(uTeam.youthCoach, 1);
-    const bankLoan = U.safeNum(uTeam.bankLoan, 0);
+    const youthCoach = U.clamp(U.safeInt(uTeam.youthCoach, 0), 0, 3);
+    const bankLoan = Array.isArray(uTeam.loans) && uTeam.loans.length
+      ? uTeam.loans.reduce((s, ln) => s + U.safeNum(ln && ln.balance, 0), 0)
+      : U.safeNum(uTeam.bankLoan, 0);
     let activeFormation = uTeam.formation || (save.lastLineup && save.lastLineup.formation) || '4-3-3';
     if (!(activeFormation in C.FORMATIONS)) activeFormation = '4-3-3';
 
@@ -426,7 +440,7 @@
       uTeam, staticPlayers, true, userId, userName, userCountry, userDiv
     );
 
-    const totalPayroll = userRoster.reduce((s, p) => s + p.salary, 0);
+    const totalPayroll = userRoster.reduce((s, p) => s + p.salary, 0) + U.safeNum(uTeam.loanOutPay, 0);
     const youthPayroll = userYouth.reduce((s, y) => s + y.salary, 0);
     const totalSquadVal = userRoster.reduce((s, p) => s + p.marketValue, 0);
     // #19856: PAYROLL_REF tahunan eksak (28,500,000 untuk ID div 1 repLvl 3)
@@ -451,6 +465,11 @@
     }
 
     const sortedByForce = [...userRoster].sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
+    const top11Slice = sortedByForce.slice(0, 11);
+    const avgTop11Force = top11Slice.length
+      ? top11Slice.reduce((s, p) => s + p.force, 0) / top11Slice.length
+      : 0;
+    const buyerCeiling = T.buyerForceCeiling(reputation, userDiv, avgTop11Force, ctLevel);
     const rankOf = {};
     sortedByForce.forEach((p, idx) => { rankOf[p.id] = idx; });
     const top5Ids = new Set(sortedByForce.slice(0, 5).map(p => p.id));
@@ -459,8 +478,10 @@
       const rIdx = rankOf[p.id];
       p.squadRank = rIdx + 1;
       p.isTop5Arab = top5Ids.has(p.id) && p.age >= 26;
-      p.salaryFloorFactor = rIdx < 11 ? C.SALARY_CUT.floorStarter : C.SALARY_CUT.floorReserve;
-      p.benchCutSave = (!p.salaryCutLocked && rIdx < 11 && p.contractDays <= 120) ? Math.round(p.salary * 0.12) : 0;
+      const starterFloor = U.salaryCutFloorMul(false, p.age, p.salaryCuts, p.renewRefusals);
+      const reserveFloor = U.salaryCutFloorMul(true, p.age, p.salaryCuts, p.renewRefusals);
+      p.salaryFloorFactor = rIdx < 11 ? starterFloor : reserveFloor;
+      p.benchCutSave = (!p.salaryCutLocked && rIdx < 11) ? Math.round(p.salary * (starterFloor - reserveFloor)) : 0;
       p.autoRenewLoophole = Boolean(
         p.contractDays <= 10 && !p.noAutoRenew && (p.force >= 40 || p.isGem || rIdx < 14) && !p.loanedFrom
       );
@@ -499,10 +520,9 @@
     const { holes, holePositions } = T.detectSquadHoles(userRoster, activeFormation);
     const holePosSet = new Set(holePositions);
 
-    // Special Training Audit (#21507 TRAIN_SLOTS_BASE=3)
+    // Special Training Audit (#21430 trainSlots = 3 + floor((ctLevel - 1) / 2))
     const rawTrainIds = Array.isArray(uTeam.trainIds) ? uTeam.trainIds : [];
-    const formulaSlots = 3 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2);
-    const trainSlots = Math.max(formulaSlots, rawTrainIds.length);
+    const trainSlots = 3 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2);
     const trainMode = String(uTeam.trainMode || 'auto');
     const pById = {};
     for (const p of userRoster) pById[p.id] = p;
@@ -553,7 +573,7 @@
         1
       );
       let yAct = 'LEPAS / CADANGAN';
-      if ((y.age >= 20 || y.development >= 90) && y.hash >= 5) yAct = 'PROMOSIKAN SEKARANG';
+      if ((y.age > 20 || y.development >= 90 || (y.age === 20 && y.development >= 75)) && y.hash >= 5) yAct = 'PROMOSIKAN SEKARANG';
       else if (y.hash >= 6 || (fillsHole && y.hash >= 5)) yAct = 'TAHAN & LATIH';
       const ceilBonus = y.development >= 60 ? (ceilMap[y.hash] || 0) : 0;
       const isMegaProspect = Boolean(y.hash >= 9 || y.potCap >= 75);

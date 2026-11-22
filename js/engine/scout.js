@@ -355,13 +355,13 @@
       for (const p of needMinSubs) {
         subPlan.push(`${p.name} (${U.posEn(p.pos)} ${p.force}) — kuota menit ${p.minPct || 0}%/8%`);
       }
-      const needMore = Math.max(1, 3 - subPlan.length);
+      const needMore = Math.max(1, 5 - subPlan.length);
       for (const p of supersubs.slice(0, needMore)) {
         const isAttMid = (p.cat ?? 3) >= 3;
         const hasPaceFin = (p.s1 === 'VEL' || p.s2 === 'VEL' || p.s1 === 'FIN' || p.s2 === 'FIN');
-        let tag = 'Gelandang/Penyerang Segar';
+        let tag = 'Gelandang/Penyerang Segar (<60% en)';
         if (isAttMid && hasPaceFin) tag = 'Supersub PAC/FIN';
-        else if (!isAttMid) tag = (p.s1 === 'VEL' || p.s2 === 'VEL') ? 'Bek Segar (PAC)' : 'Bek Segar';
+        else if (!isAttMid) tag = (p.s1 === 'VEL' || p.s2 === 'VEL') ? 'Bek Segar (PAC)' : 'Bek Segar (<60% en)';
         subPlan.push(`${p.name} (${U.posEn(p.pos)} ${p.force}) — ${tag}`);
       }
 
@@ -394,7 +394,7 @@
         oppStars: oppStars.map(p => ({ name: p.name, pos: p.pos, force: p.force, star: p.star })),
         oppInjured: oppInjured.slice(0, 3).map(p => ({ name: p.name, pos: p.pos, force: p.force, days: p.injuryDays })),
         yellowRisks,
-        subPlan: subPlan.slice(0, 3),
+        subPlan: subPlan.slice(0, 5),
       });
     }
 
@@ -413,6 +413,13 @@
     const userRep = U.safeNum(uTeam.reputation, uMeta.rep || 50);
     const userDiv = U.estimateDivisionFromLeague(save.league || uTeam.league || '', worldComps);
     const userLevel = U.teamLevelOf(uTeam, userDiv, uMeta.level);
+    const userCtLv = Math.max(1, U.safeInt(uTeam.ctLevel, 1));
+    const userExtra = {
+      buyerRep: userRep,
+      buyerDiv: userDiv,
+      avgTop11: U.safeNum(userAvgForce, 0),
+      ctLevel: userCtLv,
+    };
 
     const holesSet = new Set(holePositions || []);
     const candidates = [];
@@ -496,9 +503,9 @@
       const p = R.buildPlayerRecord(fp, staticPlayers, false, 'FREE', 'Free Agent', '');
       if (p.force < Math.max(20, userAvgForce - 16)) continue;
 
-      const pol = T.userBuyPolicy(p, p.nationality, userCountry, 0, userLevel, userRep, userDiv, null, 3, true);
+      const pol = T.userBuyPolicy(p, p.nationality, userCountry, 0, userLevel, userRep, userDiv, null, 3, true, userExtra);
       const persuadable = (pol.status === 'REFUSE')
-        ? T.buyPersuadable(p, p.nationality, userCountry, U.clamp(Math.round((p.force - 18) / 3), 1, 20), userLevel, pol)
+        ? T.buyPersuadable(p, p.nationality, userCountry, U.clamp(Math.round((p.force - 18) / 7), 1, 10), userLevel, pol, userExtra)
         : false;
 
       const sc = scoreTarget(p, true, false, false, false, pol, persuadable, false);
@@ -533,30 +540,33 @@
       for (const p of cRoster) {
         if (!p.injured) posStock[p.pos] = (posStock[p.pos] || 0) + 1;
       }
+      const cSortedByForce = [...cRoster].sort((a, b) => (b.force - a.force) || String(a.id).localeCompare(String(b.id)));
+      const cRankMap = new Map();
+      cSortedByForce.forEach((p, idx) => cRankMap.set(p.id, idx + 1));
       const { moods: cMoods } = T.computeSquadMoodsV9(cRoster, true);
 
       for (const p of cRoster) {
         const isUnh = Boolean(cMoods[p.id] && cMoods[p.id].mood === 'unhappy');
         const isScarce = (posStock[p.pos] || 0) <= 2;
+        const pRankInClub = cRankMap.get(p.id) || 99;
         if (isUnh) aiUnhappyTotal++;
 
+        const pExtra = { ...userExtra, rankInClub: pRankInClub, isUnhappy: isUnh };
         const pol = T.userBuyPolicy(
           p, ccountry, userCountry, sellerLevel, userLevel,
-          userRep, userDiv, null, posStock[p.pos] || 1, false
+          userRep, userDiv, null, posStock[p.pos] || 1, false, pExtra
         );
         const persuadable = (pol.status === 'REFUSE')
-          ? T.buyPersuadable(p, ccountry, userCountry, sellerLevel, userLevel, pol)
+          ? T.buyPersuadable(p, ccountry, userCountry, sellerLevel, userLevel, pol, pExtra)
           : false;
         const isReachable = (pol.status === 'OK') || persuadable;
 
-        // Bosman Pre-Contract (#23919 & #24474): wajib <=180d, tidak sedang dipinjam, tidak KEY_LOCK, & tidak menolak pindah
+        // Bosman Pre-Contract (#24136 & #24715): AI selalu memperpanjang otomatis pemain (top || star || rank<=3) yang mood !== 'unhappy'!
         const inBosmanWindow = (p.contractDays > 0 && p.contractDays <= C.PRECONTRACT_DAYS && !p.loanedFrom);
         const isKeyLocked = Boolean(
           inBosmanWindow
-          && (pol.isKeyTop || pol.isYoungStar)
-          && !cashCrisis
           && !isUnh
-          && !p.forSale
+          && (p.top || p.star || p.starAwarded || pRankInClub <= 3)
         );
         const isBosman = Boolean(inBosmanWindow && !isKeyLocked && isReachable);
         if (isBosman) aiBosmanTotal++;

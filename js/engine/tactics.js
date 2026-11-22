@@ -42,19 +42,17 @@
         bonus *= 1.04;
         notes.push(`${U.skillEn(s1)}(s1)+4%`);
       } else if (s1 === 'SAI') {
-        bonus *= 1.03; // #35011: s1 SAI = +3%
-        notes.push('RUS(s1)+3%');
+        notes.push('RUS(s1)+2%Save'); // #21834 keeperSaveMul: s1 SAI = +2% save
       }
       if (s2 === 'REF' || s2 === 'COL') {
         bonus *= 1.02;
         notes.push(`${U.skillEn(s2)}(s2)+2%`);
       } else if (s2 === 'SAI') {
-        bonus *= 1.01; // #35011: s2 SAI = +1%
-        notes.push('RUS(s2)+1%');
+        notes.push('RUS(s2)+1%Save'); // #21834 keeperSaveMul: s2 SAI = +1% save
       }
       if (skills.has('DPE') || skills.has('PEN')) notes.push('PEN(+8% penalti)');
       const pct = U.roundTo((bonus - 1.0) * 100, 2);
-      const grade = pct >= 5.0 ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD');
+      const grade = (pct >= 5.0 || (pct >= 4.0 && skills.has('SAI'))) ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD');
       return { stackPct: pct, pct, grade, nonStack: false, note: notes.join(' ') || 'Standar' };
     }
 
@@ -108,17 +106,18 @@
     }
 
     // cat === 4: Penyerang / Sayap (PD, PE, SA, ATA, A)
+    // #35201: DRI+3%, CAB+3%, VEL+2% pada ATK; FIN memberi 0% sector bonus (+5% konversi di #21833 & +4 bobot shooter di #21835)
     const nonStack = Boolean(s1 && s2 && s1 === s2);
     let bonus = 1.0;
     const notes = [];
     if (skills.has('DRI')) { bonus *= 1.03; notes.push('DRI+3%'); }
     if (skills.has('CAB')) { bonus *= 1.03; notes.push('HDG+3%'); }
     if (skills.has('VEL')) { bonus *= 1.02; notes.push('PAC+2%'); }
-    if (skills.has('FIN')) { bonus *= 1.035; notes.push('FIN(+5% konv)'); }
+    if (skills.has('FIN')) { notes.push('FIN(+5% konv & +4 tembak)'); }
     if (skills.has('RES')) notes.push('STA(-40% lelah)');
     if (skills.has('CRU')) notes.push('CRS(Corner)');
     const pct = U.roundTo((bonus - 1.0) * 100, 2);
-    const grade = nonStack ? 'NON-STACK' : (pct >= 5.5 ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD'));
+    const grade = nonStack ? 'NON-STACK' : ((pct >= 5.0 || (pct >= 3.0 && skills.has('FIN'))) ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD'));
     return { stackPct: pct, pct, grade, nonStack, note: notes.join(' ') || 'Standar' };
   }
 
@@ -164,26 +163,34 @@
   }
 
   /**
-   * Bytecode #21546 & #3544: Simulasi `squadMoods` v1.2.0:
-   * - Peringkat natural hanya dari pemain yang TIDAK cedera/skorsing, tie-break String(id)
-   * - Kuota menit: Starter / roleSore = 40% (0.40), Mid #12-#18 = 25% (0.25), U-19 = 8% (0.08)
-   * - role === 'starter' atau roleSore menimpa pemain U-19 menjadi 40%!
-   * - injGames = Math.floor(seasonInjuryDays / 4), syarat minimum: teamGames >= 6 && effGames >= 6
+   * Bytecode #21465 & #3726: Simulasi `squadMoods` v1.2.0:
+   * - Tier natural (hanya pemain fit !injured && !suspended):
+   *   - Tier 2 (natural starter, 40%): Top 1 GK + Top 10 Outfield
+   *   - Tier 1 (natural sub, 8%): Outfield indeks 10..16 (7 pemain berikutnya) dengan age > 19
+   *   - Tier 0 (0%, kebal di mode auto): sisanya, termasuk pemain dengan age <= 19!
+   * - Role eksplisit: 'starter' || roleSore -> 40%; 'rotation' -> 25%; 'youth' -> 8% (jika age<=19); 'reserve' && !roleSore -> 0%
+   * - lockerRoomHit (#21831): min(0.04, max(0, unhappyCount - 3) * 0.01) -> baru aktif di >= 4 unhappy!
    */
   function computeSquadMoodsV9(roster, isAiTeam = false, explicitTeamGames = null) {
     if (!roster || !roster.length) {
       return { moods: {}, unhappyCount: 0, lockerHit: 0.0, teamGames: 0 };
     }
 
-    const availSorted = roster
-      .filter(p => !p.injured && !p.suspended)
+    const availGks = roster
+      .filter(p => !p.injured && !p.suspended && p.pos === 'G')
       .sort((a, b) => (b.force - a.force) || String(a.id).localeCompare(String(b.id)));
-    const availRankMap = new Map();
-    availSorted.forEach((p, idx) => availRankMap.set(p.id, idx));
+    const availOutfield = roster
+      .filter(p => !p.injured && !p.suspended && p.pos !== 'G')
+      .sort((a, b) => (b.force - a.force) || String(a.id).localeCompare(String(b.id)));
 
-    const allSorted = [...roster].sort((a, b) => (b.force - a.force) || String(a.id).localeCompare(String(b.id)));
-    const allRankMap = new Map();
-    allSorted.forEach((p, idx) => allRankMap.set(p.id, idx));
+    const tier2Ids = new Set();
+    if (availGks.length > 0) tier2Ids.add(availGks[0].id);
+    availOutfield.slice(0, 10).forEach(p => tier2Ids.add(p.id));
+
+    const tier1Ids = new Set();
+    availOutfield.slice(10, 17).forEach(p => {
+      if ((p.age || 20) > 19) tier1Ids.add(p.id);
+    });
 
     const maxMins = Math.max(...roster.map(p => U.safeNum(p.seasonMinutes, 0)), 0);
     const teamGames = explicitTeamGames !== null && explicitTeamGames !== undefined
@@ -195,19 +202,17 @@
 
     for (const p of roster) {
       const pid = p.id;
-      const availIdx = availRankMap.has(pid) ? availRankMap.get(pid) : allRankMap.get(pid);
-      const naturalStarter = availRankMap.has(pid) && availIdx < 11;
-      const naturalMid = availRankMap.has(pid) && availIdx >= 11 && availIdx < 18;
+      const naturalStarter = tier2Ids.has(pid);
+      const naturalSub = tier1Ids.has(pid);
 
       let tier = 0;
-      if (naturalStarter) tier = 3;
-      else if (naturalMid) tier = 2;
-      else if (p.age <= 19) tier = 1;
+      if (naturalStarter) tier = 2;
+      else if (naturalSub) tier = 1;
 
       const role = String(p.squadRole || 'auto').toLowerCase();
       const minsNow = Math.round(U.safeNum(p.seasonMinutes, 0));
       const injDays = U.safeInt(p.seasonInjuryDays, 0);
-      const injGames = Math.floor(injDays / 4); // #3544 injuryDaysPerGame = 4
+      const injGames = Math.floor(injDays / 4); // #3726 injuryDaysPerGame = 4
       const effGames = Math.max(0, teamGames - injGames);
       const minRatio = effGames > 0 ? (minsNow / (effGames * 90.0)) : 1.0;
 
@@ -224,14 +229,15 @@
         reqRatio = 0.0;
         reason = 'Role Reserve (Kebal Unhappy)';
       } else if (roleSore || role === 'starter') {
-        reqRatio = 0.40; // #21546: 40%, menimpa U-19!
+        reqRatio = 0.40;
         if (roleSore) reason = 'Natural Top-11 diset Reserve (tetap wajib 40%!)';
+      } else if (role === 'rotation') {
+        reqRatio = 0.25;
       } else if (role === 'youth') {
         reqRatio = p.age <= 19 ? 0.08 : 0.0;
         if (reqRatio === 0.0) immune = true;
       } else {
-        if (tier === 3) reqRatio = 0.40;
-        else if (tier === 2) reqRatio = 0.25;
+        if (tier === 2) reqRatio = 0.40;
         else if (tier === 1) reqRatio = 0.08;
         else {
           reqRatio = 0.0;
@@ -269,9 +275,10 @@
       };
     }
 
+    // #21831 lockerRoomHit: min(0.04, max(0, unhappyCount - 3) * 0.01)
     let lockerHit = 0.0;
     if (unhappyCount >= C.LOCKER_UNHAPPY_MIN) {
-      lockerHit = Math.min(C.LOCKER_HIT_CAP, unhappyCount * C.LOCKER_HIT_PER_PLAYER);
+      lockerHit = Math.min(C.LOCKER_HIT_CAP, Math.max(0, unhappyCount - (C.LOCKER_UNHAPPY_MIN - 1)) * C.LOCKER_HIT_PER_PLAYER);
     }
 
     return {
@@ -282,25 +289,39 @@
     };
   }
 
-  // Bytecode #3575: slotCompatFactor dengan dukungan RULE_SLOT_INFO & Wildcard slots 10/17
+  // Bytecode #21826: slotCompatFactor dengan dukungan RULE_SLOT_INFO & Wildcard slots 10/17
+  // Di engine #21826, pemain dengan kategori yang sama dengan slot mendapat 1.00 (tidak ada penalti 0.99/0.995),
+  // GK di slot outfield = 0.70 (kecuali wildcard 10/17 = 1.00), outfield di slot GK = 0.20, dan OOP = 0.70.
   function slotCompatFactor(playerPos, targetSlot, ruleId = null) {
-    if (targetSlot === 'G' || playerPos === 'G') {
-      return playerPos === targetSlot ? 1.00 : 0.25;
+    if (ruleId !== null && ruleId !== undefined && C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[ruleId]) {
+      const ri = C.RULE_SLOT_INFO[ruleId];
+      if (ri.wildcard) {
+        return 1.00; // #3639: Slot 10 & 17 wildcard (category: null) menerima pemain tanpa penalti OOP
+      }
+      if (ri.cat === 0 || targetSlot === 'G') {
+        return playerPos === 'G' ? 1.00 : 0.20;
+      }
+      if (playerPos === 'G') {
+        return 0.70;
+      }
+      const pCat4 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
+      const pRuleCat = pCat4 === 0 ? 0 : (pCat4 <= 2 ? 1 : (pCat4 === 3 ? 2 : 3));
+      return pRuleCat === ri.cat ? 1.00 : 0.70;
+    }
+    if (targetSlot === 'G') {
+      return playerPos === 'G' ? 1.00 : 0.20;
+    }
+    if (playerPos === 'G') {
+      return 0.70;
     }
     if (playerPos === targetSlot) {
       return 1.00;
     }
-    if (ruleId !== null && ruleId !== undefined && C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[ruleId]) {
-      const ri = C.RULE_SLOT_INFO[ruleId];
-      if (ri.wildcard) {
-        return 1.00; // #3575: Slot 10 & 17 wildcard menerima semua non-GK tanpa penalti outOfPosition
-      }
-      if (Array.isArray(ri.exact) && ri.exact.includes(playerPos)) {
-        return 0.995; // Sedikit di bawah exact match 1.00 agar VOL->VOL dan MC->MC terpasang di kursinya masing-masing
-      }
-    }
-    const row = C.POS_COMPAT_MATRIX[playerPos] || {};
-    return row[targetSlot] !== undefined ? row[targetSlot] : 0.70;
+    const pCat4 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
+    const tCat4 = (C.EXACT_CAT && (targetSlot in C.EXACT_CAT)) ? C.EXACT_CAT[targetSlot] : U.posCategory(targetSlot);
+    const pRuleCat = pCat4 === 0 ? 0 : (pCat4 <= 2 ? 1 : (pCat4 === 3 ? 2 : 3));
+    const tRuleCat = tCat4 === 0 ? 0 : (tCat4 <= 2 ? 1 : (tCat4 === 3 ? 2 : 3));
+    return pRuleCat === tRuleCat ? 1.00 : 0.70;
   }
 
   function isPlayerStar(p) {
@@ -308,13 +329,12 @@
   }
 
   /**
-   * Bytecode #21876, #21882, #35011, #3575: Evaluasi kontribusi efektif pemain pada slot formasi.
+   * Bytecode #21807, #21813, #21826, #35201: Evaluasi kontribusi efektif pemain pada slot formasi.
    */
   function evalPlayerForSlot(p, targetSlot, includeEnergy = true, repLevel = 3, ruleId = null) {
     const compat = slotCompatFactor(p.pos, targetSlot, ruleId);
 
-    // #21882: wrongFoot (-5%) dicek pada slot dengan category===1 & side 'D' atau 'E'
-    // Mencakup LD (rule 1), LE (rule 5), serta Wildcard Wingback MD (rule 10, side D) & ME (rule 17, side E)!
+    // #21826: wrongFoot (-5%) dicek pada slot dengan category===1 & side 'D' atau 'E'
     let wrongFoot = false;
     const foot = (p.foot || 'D').toUpperCase();
     let checkSide = null;
@@ -330,20 +350,29 @@
     else if (checkSide === 'E' && foot !== 'E' && foot !== 'A') wrongFoot = true;
     const footMul = wrongFoot ? 0.95 : 1.00;
 
-    let stackBonus = 0.0;
-    if (compat >= 0.95) {
-      stackBonus = p.stackPct || 0.0;
-    } else if (compat >= 0.90) {
-      stackBonus = (p.stackPct || 0.0) * 0.6;
+    // #35201: skill bonus tetap dihitung pada sektor tempat pemain dipasang (tidak dinolkan saat OOP)
+    const stackBonus = p.stackPct || 0.0;
+
+    // #21826 L1656530: p.top mendapat bonus lebih besar (1.10 / 1.05) dibanding star biasa (1.05 / 1.02)
+    let starMul = 1.00;
+    if (p && p.top) {
+      starMul = repLevel > 3 ? 1.10 : 1.05;
+    } else if (isPlayerStar(p)) {
+      starMul = repLevel > 3 ? 1.05 : 1.02;
     }
 
-    // #21882 & #20906: isPlayerStar(p) (star || top || starAwarded) -> repLvl > 3 ? 1.05 : 1.02
-    const starMul = isPlayerStar(p) ? (repLevel > 3 ? 1.05 : 1.02) : 1.00;
+    // #21826: pemain yang bermain di posisi valid (!oop -> compat >= 1.0) mendapat same-club bonus * 1.05
+    const clubSyncMul = compat >= 1.0 ? 1.05 : 1.00;
 
+    // #21826: pemain unhappy terkena * 0.97 (-3%)
+    const moodMul = (p && p.mood === 'unhappy') ? 0.97 : 1.00;
+
+    // #21826: fineSlump dibatasi maksimal 0.20 (lantai 0.80)
     const slumpVal = U.safeNum(p.fineSlump, 0.0);
-    const slumpMul = slumpVal > 0 ? Math.max(0.75, 1.0 - (slumpVal <= 1.0 ? slumpVal : slumpVal / 100.0)) : 1.00;
+    const slumpFrac = slumpVal <= 1.0 ? slumpVal : (slumpVal / 100.0);
+    const slumpMul = slumpVal > 0 ? (1.0 - Math.min(0.20, slumpFrac)) : 1.00;
 
-    // #21876 & #35011: Continuous energyFactor = max(0.92, 1 - 0.001 * deficit), RES memotong deficit 40%
+    // #21807 & #35201: Continuous energyFactor = max(0.92, 1 - 0.001 * deficit), RES memotong deficit 40%
     let energyMul = 1.00;
     if (includeEnergy) {
       const en = U.clamp(U.safeNum(p.energy, 100), 0, 100);
@@ -353,7 +382,7 @@
     }
 
     const baseF = U.safeNum(p.effForce !== undefined ? p.effForce : p.force, 10.0);
-    const score = baseF * compat * footMul * (1.0 + stackBonus / 100.0) * starMul * slumpMul * energyMul;
+    const score = baseF * compat * clubSyncMul * footMul * (1.0 + stackBonus / 100.0) * starMul * moodMul * slumpMul * energyMul;
 
     return {
       score,
@@ -363,9 +392,11 @@
   }
 
   /**
-   * Audit Set-Piece & Kapten (#17450 vs Manual Terbaik).
-   * Mengembalikan objek terstruktur `{ id, name, pos, force, s1, s2, score, reason }` untuk UI v8.3
-   * sekaligus string ringkasan agar kompatibel penuh.
+   * Audit Set-Piece & Kapten (#21818, #21822, #21823, #21825, #35438, #35439):
+   * - Captain: auto (#35438) memilih starter tertua; hanya age >= 28 yang memberi +3% MID (+6% saat babak 2 & tertinggal).
+   * - Free Kick: auto (#35439) memilih s1==='FIN' || s2==='FIN'; di #21823 hanya FIN yang memberi +2% konversi (PAS/ARM = 0%).
+   * - Corner: auto (#35439) memilih s1==='CRU' || s2==='CRU'; di #21823/#21825 s1 CRU = +3% konv & +4 header, s2 CRU = +1.5% konv & +4 header.
+   * - Penalty: auto (#21818) memilih starter dengan s1==='FIN' tertinggi (buta PEN & s2==='FIN'!). Di #21824 s1/s2 FIN memberi +3% gol penalti.
    */
   function auditSetPieces(xiPlayers) {
     if (!xiPlayers || !xiPlayers.length) {
@@ -373,69 +404,72 @@
     }
 
     const capRanked = [...xiPlayers].sort((a, b) => {
-      const lidA = (a.s1 === 'LID' || a.s2 === 'LID' || a.age >= 28) ? 1 : 0;
-      const lidB = (b.s1 === 'LID' || b.s2 === 'LID' || b.age >= 28) ? 1 : 0;
-      return (lidB - lidA) || (b.force - a.force) || (b.age - a.age);
+      const vetA = (a.age || 0) >= 28 ? 1 : 0;
+      const vetB = (b.age || 0) >= 28 ? 1 : 0;
+      return (vetB - vetA) || ((b.age || 0) - (a.age || 0)) || (b.force - a.force);
     });
 
     const fkRanked = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + ((p.s1 === 'PAS' || p.s1 === 'ARM') ? 6 : ((p.s2 === 'PAS' || p.s2 === 'ARM') ? 4 : 0)) + ((p.s1 === 'FIN' || p.s2 === 'FIN') ? 3 : 0);
-      return score(b) - score(a);
+      const finA = (a.s1 === 'FIN' || a.s2 === 'FIN') ? 1 : 0;
+      const finB = (b.s1 === 'FIN' || b.s2 === 'FIN') ? 1 : 0;
+      return (finB - finA) || (b.force - a.force);
     });
 
     const ckRanked = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + (p.s1 === 'CRU' ? 7 : (p.s2 === 'CRU' ? 4.5 : 0)) + ((p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM') ? 3 : 0);
-      return score(b) - score(a);
+      const cruA = a.s1 === 'CRU' ? 2 : (a.s2 === 'CRU' ? 1 : 0);
+      const cruB = b.s1 === 'CRU' ? 2 : (b.s2 === 'CRU' ? 1 : 0);
+      return (cruB - cruA) || (b.force - a.force);
     });
 
     const pkRanked = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force
-        + (p.s1 === 'PEN' ? 10 : (p.s2 === 'PEN' ? 7 : 0))
-        + (p.s1 === 'FIN' ? 6 : (p.s2 === 'FIN' ? 4.5 : 0));
-      return score(b) - score(a);
+      const finA = (a.s1 === 'FIN' || a.s2 === 'FIN') ? 1 : 0;
+      const finB = (b.s1 === 'FIN' || b.s2 === 'FIN') ? 1 : 0;
+      return (finB - finA) || (b.force - a.force);
     });
 
+    // #21818 autoPenaltyTaker: hanya cek s1 === 'FIN'
     const autoPk = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + ((p.s1 === 'PEN' || p.s2 === 'PEN') ? 9 : 0) + (p.s1 === 'FIN' ? 5 : 0);
-      return score(b) - score(a);
+      const s1A = a.s1 === 'FIN' ? 1 : 0;
+      const s1B = b.s1 === 'FIN' ? 1 : 0;
+      return (s1B - s1A) || (b.force - a.force);
     });
 
-    const autoFk = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + (p.s1 === 'PAS' ? 5 : 0);
-      return score(b) - score(a);
-    });
+    // #35439 auto freeKick: cek s1 === 'FIN' || s2 === 'FIN'
+    const autoFk = [...fkRanked];
 
+    // #35439 auto corner: cek s1 === 'CRU' || s2 === 'CRU' (tanpa membedakan s1 vs s2)
     const autoCk = [...xiPlayers].sort((a, b) => {
-      const score = p => p.force + (p.s1 === 'CRU' ? 5 : 0);
-      return score(b) - score(a);
+      const cA = (a.s1 === 'CRU' || a.s2 === 'CRU') ? 1 : 0;
+      const cB = (b.s1 === 'CRU' || b.s2 === 'CRU') ? 1 : 0;
+      return (cB - cA) || (b.force - a.force);
     });
 
     const warnings = [];
     if (pkRanked[0].id !== autoPk[0].id) {
       warnings.push(
-        `Penalti: Auto memilih ${autoPk[0].name} (${autoPk[0].force}), padahal ${pkRanked[0].name} (${pkRanked[0].force}, ${pkRanked[0].s1}/${pkRanked[0].s2}) lebih tajam (Auto buta FIN di slot 2!).`
-      );
-    }
-    if (fkRanked[0].id !== autoFk[0].id) {
-      warnings.push(
-        `Freekick: Set manual ke ${fkRanked[0].name} (${fkRanked[0].s1}/${fkRanked[0].s2}) — Auto melewatkan kombinasi PAS+FIN.`
+        `Penalti (#21818): Auto memilih ${autoPk[0].name} (F${autoPk[0].force}), padahal ${pkRanked[0].name} (F${pkRanked[0].force}, ${pkRanked[0].s1}/${pkRanked[0].s2}) punya FIN di slot 2 (+3% konversi penalti — Auto hanya membaca s1==='FIN'!).`
       );
     }
     if (ckRanked[0].id !== autoCk[0].id) {
       warnings.push(
-        `Corner: Set manual ke ${ckRanked[0].name} (${ckRanked[0].s1}/${ckRanked[0].s2}) — Auto buta CRU di slot 2.`
+        `Corner (#21823): Set manual ke ${ckRanked[0].name} (${ckRanked[0].s1}/${ckRanked[0].s2}) karena CRU di slot 1 memberi +3% konversi (slot 2 hanya +1.5%).`
+      );
+    }
+    if ((capRanked[0].age || 0) < 28) {
+      warnings.push(
+        `Kapten (#21822): Tidak ada starter berusia ≥28 tahun di XI (kapten ${capRanked[0].name} ${capRanked[0].age}th belum mengaktifkan bonus +3% MID / +6% comeback).`
       );
     }
 
     const fmtTaker = (p, roleType) => {
       const sk = [U.skillEn(p.s1), U.skillEn(p.s2)].filter(Boolean).join('/');
       let reason = `F:${p.force}`;
-      if (roleType === 'cap' && (p.s1 === 'LID' || p.s2 === 'LID')) reason = 'LEA +1.5% Tim';
-      else if (roleType === 'pk' && (p.s1 === 'PEN' || p.s2 === 'PEN')) reason = 'Spesialis PEN';
-      else if (roleType === 'pk' && p.s2 === 'FIN') reason = 'FIN Slot 2 (Lewat di Auto)';
-      else if (roleType === 'pk' && p.s1 === 'FIN') reason = 'FIN Slot 1';
-      else if (roleType === 'fk' && (p.s1 === 'PAS' || p.s2 === 'PAS')) reason = 'Akurasi PAS+FIN';
-      else if (roleType === 'ck' && (p.s1 === 'CRU' || p.s2 === 'CRU')) reason = 'Umpan Silang CRO';
+      if (roleType === 'cap') reason = (p.age >= 28) ? `Usia ${p.age}th (+3% MID / +6% Comeback)` : `Tertua (${p.age}th, <28th)`;
+      else if (roleType === 'pk' && p.s2 === 'FIN' && p.s1 !== 'FIN') reason = 'FIN Slot 2 (+3% Penalti, Lewat di Auto!)';
+      else if (roleType === 'pk' && p.s1 === 'FIN') reason = 'FIN Slot 1 (+3% Penalti)';
+      else if (roleType === 'fk' && (p.s1 === 'FIN' || p.s2 === 'FIN')) reason = 'FIN (+2% Konversi Freekick #21823)';
+      else if (roleType === 'ck' && p.s1 === 'CRU') reason = 'CRS Slot 1 (+3% Konv & +4 Header)';
+      else if (roleType === 'ck' && p.s2 === 'CRU') reason = 'CRS Slot 2 (+1.5% Konv & +4 Header)';
       return {
         id: p.id,
         name: p.name,
@@ -730,17 +764,37 @@
     }
 
     const falseNineMul = (xiObj && xiObj.noDedicatedStriker) ? 0.90 : 1.00;
-    const leaderMul = (xiObj && xiObj.hasLeader === false) ? 1.00 : 1.015;
-    const lockerMul = Math.max(0.92, 1.0 - lockerHitPct / 100.0);
+    const lockerMul = Math.max(0.96, 1.0 - lockerHitPct / 100.0);
     const chem = (xiObj && xiObj.chemistry !== undefined) ? xiObj.chemistry : 100;
     const chemMul = chemistryMul(chem);
-    const globalMul = leaderMul * lockerMul * chemMul;
+    const outfieldGlobalMul = lockerMul * chemMul;
 
-    // #21891: Denominator tetap /5, /5, /3
-    let rawGk = (cntG > 0 ? sumG / cntG : 15.0) * globalMul;
-    let rawDef = (sumD / 5.0) * globalMul;
-    let rawMid = (sumM / 5.0) * globalMul;
-    let rawAtk = (sumA / 3.0) * falseNineMul * globalMul;
+    // #21822: Denominator tetap /5, /5, /3; lockerMul & chemMul hanya berlaku pada DEF, MID, ATK (bukan GK)
+    const baseGk = (cntG > 0 ? sumG / cntG : 15.0);
+    const baseDef = (sumD / 5.0);
+    const baseMid = (sumM / 5.0);
+    const baseAtk = (sumA / 3.0);
+
+    let rawGk = baseGk;
+    let rawDef = baseDef * outfieldGlobalMul;
+    let rawMid = baseMid * outfieldGlobalMul;
+    let rawAtk = baseAtk * falseNineMul * outfieldGlobalMul;
+
+    // #21822: False Nine (f9Count >= 2) juga memberi +4% MID, atau jika 0 dedicated striker tapi ada gelandang serang memberi +3% MID
+    const f9Cnt = (xiObj && Array.isArray(xiObj.falseNinePlayers)) ? xiObj.falseNinePlayers.length : ((xiObj && xiObj.falseNine) ? 2 : 0);
+    if (f9Cnt >= 2) {
+      rawMid *= 1.04;
+    } else if (xiObj && xiObj.noDedicatedStriker) {
+      rawMid *= 1.03;
+    }
+
+    // #21822: Kapten berusia >= 28 memberi +3% MID (+6% saat babak ke-2 & tertinggal)
+    const hasVetCaptain = xiList.length
+      ? xiList.some(item => ((item.player || item).age || 0) >= 28)
+      : true;
+    if (hasVetCaptain) {
+      rawMid *= 1.03;
+    }
 
     if (isHome && crowdOver70) {
       rawMid *= 1.02;
@@ -767,22 +821,22 @@
       staminaDrainLabel = 'Agak Cepat (-18% stamina)';
     }
 
-    if (shout.includes('praise') || shout.includes('elogiar')) {
-      rawAtk *= 1.04;
-      rawMid *= 1.04;
-    } else if (shout.includes('focus') || shout.includes('concentrar')) {
-      rawDef *= 1.06;
-      rawMid *= 1.04;
-    } else if (shout.includes('push') || shout.includes('avan')) {
-      rawAtk *= 1.08;
-      rawDef *= 0.96;
+    if (shout.includes('praise') || shout.includes('elogiar') || shout.includes('encourage')) {
+      rawMid *= 1.012;
+    } else if (shout.includes('focus') || shout.includes('concentrar') || shout.includes('tighten')) {
+      rawDef *= 1.012;
+    } else if (shout.includes('push') || shout.includes('avan') || shout.includes('attack')) {
+      rawAtk *= 1.012;
     }
 
     const totalPower = rawDef + rawMid + rawAtk + rawGk * 0.35;
     const bugInfo = (C.FORMATION_BUGS && C.FORMATION_BUGS[fk]) || null;
 
-    // Hitung jumlah pengumpan silang sayap & perkiraan skor penembak (#21822 + #21835)
+    // Hitung pengumpan silang sayap, playmaker tengah, bonus FIN/SAI, & skor penembak (#21822, #21833, #21834, #21835)
     let wingCrossers = 0;
+    let centerPlaymakers = 0;
+    let finAttackers = 0;
+    let gkSaveBonus = 0.0;
     let shooterNum = 0;
     let shooterDen = 0;
     if (xiList.length) {
@@ -791,12 +845,23 @@
         const pos = p.pos || item.slot || '';
         const s1 = p.s1 || '';
         const s2 = p.s2 || '';
+        const sec = item.sectorCode || 'M';
+        if (sec === 'G') {
+          if (s1 === 'SAI') gkSaveBonus += 0.02;
+          else if (s2 === 'SAI') gkSaveBonus += 0.01;
+        }
         if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU')) {
           wingCrossers++;
         }
-        const sec = item.sectorCode || 'M';
+        if (sec === 'M' && (s1 === 'PAS' || s2 === 'PAS' || s1 === 'ARM' || s2 === 'ARM')) {
+          centerPlaymakers++;
+        }
+        if (sec === 'A' && (s1 === 'FIN' || s2 === 'FIN')) {
+          finAttackers++;
+        }
         if (sec !== 'G' && sec !== 'X') {
-          const w = sec === 'A' ? 5.0 : sec === 'M' ? 2.0 : 0.4;
+          let w = sec === 'A' ? 5.0 : sec === 'M' ? 2.0 : 0.4;
+          if (s1 === 'FIN' || s2 === 'FIN') w += 4.0; // #21835: FIN menambah bobot shooter +4
           const sc = U.safeNum(item.score !== undefined ? item.score : p.force, 0);
           shooterNum += sc * w;
           shooterDen += w;
@@ -806,12 +871,26 @@
     const shooterVal = shooterDen > 0
       ? shooterNum / shooterDen
       : U.safeNum(xiObj && xiObj.avgScore, (rawGk + rawDef + rawMid + rawAtk) / 4);
+    const finBonusMul = 1.0 + Math.min(0.05, finAttackers * 0.025);
+    const gkSaveMul = 1.0 + gkSaveBonus;
 
-    // #21822 effectiveSectors: Focus Center (0.8*ATK + 0.2*MID) vs Focus Wings (+2%/crosser up to +6%, atau -4% jika 0 crosser)
+    // #21822 effectiveSectors:
+    // Focus Center: weighted (0.8*ATK + 0.2*MID) * (centerPlaymakers > 0 ? 1 + 0.015*min(3, centerPlaymakers) : 0.97)
+    // Focus Wings: rawAtk * (wingCrossers > 0 ? 1 + 0.02*min(3, wingCrossers) : 0.96)
+    // Lalu di-clamp ke ±8% (sectorCap = 0.08) terhadap baseDef / baseMid / baseAtk!
+    const clampCap = (val, base) => base > 0 ? U.clamp(val, base * 0.92, base * 1.08) : val;
     const focusOpt = String(opts.focus || opts.attackFocus || '').toLowerCase();
-    const atkCenter = (rawAtk > 0 && rawMid > 0) ? (rawAtk * 0.8 + rawMid * 0.2) : rawAtk;
+    const centerPmMul = centerPlaymakers > 0 ? (1.0 + 0.015 * Math.min(3, centerPlaymakers)) : 0.97;
+    const rawAtkCenter = ((rawAtk > 0 && rawMid > 0) ? (rawAtk * 0.8 + rawMid * 0.2) : rawAtk) * centerPmMul;
     const wingMul = wingCrossers > 0 ? (1.0 + 0.02 * Math.min(3, wingCrossers)) : 0.96;
-    const atkWings = rawAtk * wingMul;
+    const rawAtkWings = rawAtk * wingMul;
+
+    rawDef = clampCap(rawDef, baseDef);
+    rawMid = clampCap(rawMid, baseMid);
+    const atkCenter = clampCap(rawAtkCenter, (baseAtk * 0.8 + baseMid * 0.2));
+    const atkWings = clampCap(rawAtkWings, baseAtk);
+    rawAtk = clampCap(rawAtk, baseAtk);
+
     let effAtk = rawAtk;
     if (focusOpt.includes('wing') || focusOpt.includes('sayap')) effAtk = atkWings;
     else if (focusOpt.includes('center') || focusOpt.includes('tengah')) effAtk = atkCenter;
@@ -827,6 +906,9 @@
       atkCenter: U.roundTo(atkCenter, 1),
       atkWings: U.roundTo(atkWings, 1),
       wingCrossers,
+      centerPlaymakers,
+      finBonusMul: U.roundTo(finBonusMul, 4),
+      gkSaveMul: U.roundTo(gkSaveMul, 4),
       shooterVal: U.roundTo(shooterVal, 1),
       totalPower: U.roundTo(totalPower, 1),
       convBonusPct,
@@ -883,13 +965,18 @@
       shooter: U.safeNum(oPow.shooterVal, 40) / 10,
     };
 
-    const uConvMul = uStyle.includes('counter') ? 1.07 : 1.0;
-    const oConvMul = oStyle.includes('counter') ? 1.07 : 1.0;
+    // #21833 conversionMul: convBase = 0.965 * (counter ? 1.07 : 1.0) * finBonusMul
+    const uFinMul = U.safeNum(uPow.finBonusMul, 1.025);
+    const oFinMul = U.safeNum(oPow.finBonusMul, 1.025);
+    const uGkSaveMul = U.safeNum(uPow.gkSaveMul, 1.0);
+    const oGkSaveMul = U.safeNum(oPow.gkSaveMul, 1.0);
+    const uConvMul = 0.965 * (uStyle.includes('counter') ? 1.07 : 1.0) * uFinMul;
+    const oConvMul = 0.965 * (oStyle.includes('counter') ? 1.07 : 1.0) * oFinMul;
     const hU = (!neutral && isHome) ? 0.3 : 0.0;
     const hO = (!neutral && !isHome) ? 0.3 : 0.0;
     const nPerSide = 48; // 96 total lances rata-rata per laga (#21844: 45+stop1 + 45+stop2)
 
-    function sideRates(att, def, attHomeBonus, attIsHome, convMul) {
+    function sideRates(att, def, attHomeBonus, attIsHome, convMul, defGkSaveMul) {
       const midD = gapDamp(att.MID - def.MID);
       const pAtt = Math.max(0.2, 1 + midD / 8 + attHomeBonus);
       const pDef = Math.max(0.2, 1 - midD / 8);
@@ -903,7 +990,7 @@
       const diffGk = def.GK - att.shooter;
       const dampGk = diffGk < 0 ? gapDamp(diffGk) : diffGk;
       const sideHomeAdj = (!neutral && attIsHome) ? 0.1 : 0.0;
-      const gkF = Math.max(0.2, 1 + dampGk / 8 + sideHomeAdj);
+      const gkF = Math.max(0.2, 1 + dampGk / 8 + sideHomeAdj) * defGkSaveMul;
       const missF = Math.max(0.2, 1 - dampGk / 8 + sideHomeAdj);
 
       const conv0 = (5.5 * convMul) / (5.5 * convMul + 35.55 * gkF + 15 * missF);
@@ -911,15 +998,16 @@
       return { duelProb, shotProb: duelProb * shotGivenDuel, conv0, conv2 };
     }
 
-    const rU = sideRates(uSec, oSec, hU, isHome, uConvMul);
-    const rO = sideRates(oSec, uSec, hO, !isHome, oConvMul);
+    const rU = sideRates(uSec, oSec, hU, isHome, uConvMul, oGkSaveMul);
+    const rO = sideRates(oSec, uSec, hO, !isHome, oConvMul, uGkSaveMul);
 
     function goalDist(r) {
       const maxG = 8;
       let dp = new Array(maxG + 1).fill(0);
       dp[0] = 1;
       for (let i = 0; i < nPerSide; i++) {
-        const early = i < 3 ? 0.35 : 1.0;
+        // #48031: earlyGoalDamp = 0.35 pada 15 menit pertama, setelah itu earlyGoalComp = 1.05
+        const early = i < 4 ? 0.35 : 1.05;
         const ndp = new Array(maxG + 1).fill(0);
         for (let g = 0; g <= maxG; g++) {
           if (dp[g] === 0) continue;
@@ -964,20 +1052,16 @@
     };
   }
 
-  // Bytecode #23795 chooseAITactics (hanya Balanced/Offensive/Counter-Attack & Wings/Center)
+  // Bytecode #24016 chooseAITactics:
+  // - diff = oppTop11ForceAvg - userTop11ForceAvg (TIDAK ADA bonus kandang ±1.5!)
+  // - diff <= -4: velDefCount >= 2 ? 'Counter-Attack' : 'Balanced' (velDefCount = non-G/ZD/ZE dengan VEL)
+  // - diff >= 6: 'Offensive' (60% chance) / 'Balanced' (40%)
+  // - -4 < diff < 6: velDefCount >= 3 ? 'Balanced (30% Counter)' : 'Balanced'
+  // - attackFocus: count(pos in ['LD','LE','PD','PE'] && has CRU) >= 2 ? 'Wings' : 'Center'
   function predictAiTacticsDetail(oppForce, userForce, oppIsHome = false, oppXiPlayers = null) {
-    const diff = (oppForce - userForce) + (oppIsHome ? 1.5 : -1.5);
-    let aiStyle = 'Balanced';
-    let styleReason = 'Kekuatan berimbang (selisih kekuatan di rentang -2.5 s.d. +3.5)';
-    if (diff >= 3.5) {
-      aiStyle = 'Offensive';
-      styleReason = `Lawan unggul kekuatan (+${diff.toFixed(1)} termasuk faktor kandang) → AI otomatis menyerang (+8% ATK, -8% DEF)`;
-    } else if (diff <= -2.5) {
-      aiStyle = 'Counter-Attack';
-      styleReason = `Lawan kalah kekuatan (${diff.toFixed(1)}) → AI parkir bus & mengincar serangan balik (-6% MID, +6..12% konversi)`;
-    }
-
-    let wingTags = 0;
+    const diff = oppForce - userForce;
+    let velDefCount = 0;
+    let wingCruCount = 0;
     let centerTags = 0;
     const wingNames = [];
     const centerNames = [];
@@ -986,38 +1070,60 @@
       const pos = p.pos || '';
       const s1 = p.s1 || '';
       const s2 = p.s2 || '';
-      if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU' || s1 === 'VEL' || s2 === 'VEL')) {
-        wingTags++;
-        if (wingNames.length < 3) wingNames.push(`${p.name || U.posEn(pos)}(${U.skillEn(s1)})`);
+      if (!['G', 'ZD', 'ZE', 'ZAG', 'Z'].includes(pos) && (s1 === 'VEL' || s2 === 'VEL')) {
+        velDefCount++;
       }
-      if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(pos) && (s1 === 'PAS' || s2 === 'PAS' || s1 === 'ARM' || s2 === 'ARM' || s1 === 'DRI' || s2 === 'DRI')) {
+      if (['LD', 'LE', 'LAT', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU')) {
+        wingCruCount++;
+        if (wingNames.length < 3) wingNames.push(`${p.name || U.posEn(pos)}(CRS)`);
+      }
+      if (['VOL', 'V', 'MC', 'MA', 'MO', 'MEI', 'SA', 'ATA', 'A'].includes(pos) && (s1 === 'PAS' || s2 === 'PAS' || s1 === 'ARM' || s2 === 'ARM')) {
         centerTags++;
         if (centerNames.length < 3) centerNames.push(`${p.name || U.posEn(pos)}(${U.skillEn(s1)})`);
       }
     }
 
+    let aiStyle = 'Balanced';
+    let styleReason = `Selisih Force Top-11 (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}) di rentang -4 s.d. +6 (#24016) → AI memilih Balanced`;
+    if (diff >= 6.0) {
+      aiStyle = 'Offensive';
+      styleReason = `Lawan unggul Force +${diff.toFixed(1)} (≥ +6.0 di #24016) → AI 60% pilih Offensive (+8% ATK, -8% DEF) / 40% Balanced`;
+    } else if (diff <= -4.0) {
+      if (velDefCount >= 2) {
+        aiStyle = 'Counter-Attack';
+        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & punya ${velDefCount} pemain cepat VEL (≥2) → AI otomatis Counter-Attack (-6% MID, +7% konversi)`;
+      } else {
+        aiStyle = 'Balanced';
+        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) tapi hanya punya ${velDefCount} pemain VEL (<2) → AI tetap Balanced (#24016)`;
+      }
+    } else if (velDefCount >= 3) {
+      aiStyle = 'Balanced';
+      styleReason = `Selisih Force berimbang (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}), punya ${velDefCount} pemain VEL (≥3) → AI 70% Balanced / 30% Counter-Attack`;
+    }
+
     let aiFocus = 'Center';
-    let focusReason = `Poros tengah PAS/DRI (${centerTags}) >= sayap CRO/PAC (${wingTags})`;
-    if (wingTags > centerTags) {
+    let focusReason = `Pemain sayap (LD/LE/PD/PE) ber-skill CRS hanya ${wingCruCount} (< 2 di #24016) → AI otomatis fokus Center`;
+    if (wingCruCount >= 2) {
       aiFocus = 'Wings';
-      focusReason = `Sayap lawan memiliki ${wingTags} pemain CRO/PAC (${wingNames.join(', ')}) > poros tengah (${centerTags})`;
+      focusReason = `Lawan punya ${wingCruCount} pemain LD/LE/PD/PE ber-skill CRS (≥ 2 di #24016: ${wingNames.join(', ')}) → AI otomatis fokus Wings`;
     }
 
     let counterTip = 'Balanced';
     if (aiStyle === 'Offensive') {
-      counterTip = 'Counter-Attack (+6..12% konversi peluang vs DEF lawan yang terbuka -8%)';
+      counterTip = 'Counter-Attack (+7% konversi peluang vs DEF lawan yang terbuka -8%)';
     } else if (aiStyle === 'Counter-Attack') {
-      counterTip = 'Offensive (+8% ATK untuk membongkar parkir bus lawan) + Shout Praise';
+      counterTip = 'Dominasi MID + Offensive (+8% ATK untuk membongkar lawan yang melepas -6% MID)';
     } else {
-      counterTip = diff < -1.0 ? 'Balanced → Offensive jika buntu di menit 60' : 'Balanced + Marking Heavy';
+      counterTip = 'Dominasi H2H Lini Tengah (3-5-2 / 4-5-1) + Marking Heavy';
     }
 
     return {
       aiStyle,
       aiFocus,
       diff: U.roundTo(diff, 1),
-      wingTags,
+      wingTags: wingCruCount,
       centerTags,
+      velDefCount,
       styleReason,
       focusReason,
       counterTip,
@@ -1245,20 +1351,20 @@
     const shoutPlan = [
       {
         phase: 'Kickoff / Babak 1 (Menit 15–30)',
-        shout: recEdge >= 0 ? 'Praise (Elogiar)' : 'Focus (Concentrar)',
+        shout: recEdge >= 0 ? 'Encourage (Incentivar)' : 'Tighten Up (Fechar Atrás)',
         why: recEdge >= 0
-          ? '+4% ATK & +4% MID selama 12 menit (tanpa penalti DEF) untuk mencuri gol pembuka (kuota 1: efek 100%).'
-          : '+6% DEF & +4% MID selama 15 menit untuk meredam gempuran awal lawan (kuota 1: efek 100%).',
+          ? '+1.2% MID selama 15 menit (#3640) untuk memenangkan duel penguasaan bola & shot attempt.'
+          : '+1.2% DEF selama 15 menit (#3640) untuk meredam peluang gol awal lawan.',
       },
       {
         phase: 'Babak 2 — Jika Unggul (Menit 65+)',
-        shout: 'Focus (Concentrar)',
-        why: 'Kunci kemenangan dengan +6% DEF & +4% MID (kuota 2: efek 70%) + tarik keluar pemain berenergi <65%.',
+        shout: 'Focus (Concentrar) + Order Defend Lead',
+        why: 'Focus memberi +1.2% DEF (bebas decay pengulangan 25m jika bergantian dengan Tighten Up) + Order Defend Lead (+4% DEF, -3% ATK) + gunakan 5 kuota sub (#21779) untuk pemain <60% energi.',
       },
       {
         phase: 'Babak 2 — Jika Imbang/Tertinggal (Menit 75+)',
-        shout: 'Push Forward (Avançar)',
-        why: '+8% ATK selama 10 menit terakhir (kombinasikan dengan Play Style Offensive & Supersub PAC/FIN).',
+        shout: 'Attack More (Atacar Mais) + Order All-Out Attack',
+        why: '+1.2% ATK dari shout + Order All-Out Attack (+8% ATK, -7% DEF) + masukkan Supersub PAC/FIN segar.',
       },
     ];
 
@@ -1277,7 +1383,7 @@
       strict: {
         marking: 'Light (0%)',
         badge: 'b-info',
-        note: 'Wasit Ketat (+45% risiko kartu): pakai Light (0%) agar terhindar dari kartu merah & penalti.',
+        note: 'Wasit Ketat (#21836: +20% risiko pelanggaran/kartu, foulMul 1.20x): pakai Light (0%) atau Order Stay Calm (-25% kartu).',
       },
       normal: {
         marking: recMarking,
@@ -1287,29 +1393,33 @@
       lenient: {
         marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+8% DEF)' : 'Heavy (+4% DEF)',
         badge: 'b-good',
-        note: 'Wasit Longgar (-30% kartu): manfaatkan untuk menaikkan intensitas marking demi bonus +4% s.d. +8% DEF!',
+        note: 'Wasit Longgar (#21836: -18% risiko kartu, foulMul 0.82x): manfaatkan untuk menaikkan marking demi +4% s.d. +8% DEF!',
       },
     };
 
     const weatherPlan = {
       clear: {
         label: '☀️ Cerah (Normal)',
-        note: 'Kondisi ideal — jalankan fokus serangan & 3 pergantian normal di menit 60–70.',
+        note: 'Kondisi ideal — jalankan fokus serangan & manfaatkan hingga 5 pergantian pemain (#21779) saat energi <60%.',
       },
       rain: {
-        label: '🌧️ Hujan (Lapangan Basah)',
-        note: 'Bola licin & duel udara meningkat: prioritaskan fokus Wings (umpan silang) & eksekutor bola mati.',
+        label: '🌧️ Hujan (+12% Miss, +8% Kartu)',
+        note: 'Di #21837/#21838, hujan menaikkan missMul 1.12x (+12% tembakan meleset) & foulMul 1.08x: prioritaskan volume peluang (MID tinggi) & bola mati.',
       },
       heat: {
-        label: '🔥 Panas (Kuras Stamina)',
-        note: 'Stamina terkuras lebih cepat (energyFactor turun 0.1%/poin): masukkan 3 pergantian lebih awal di menit 55–62!',
+        label: '🔥 Panas (+12% Kuras Stamina)',
+        note: 'Di #21839, cuaca panas menaikkan energyDrainMul 1.12x (+12% kuras energi; Altitude juga +18%): rotasikan 5 sub lebih awal mulai menit 55!',
+      },
+      snow: {
+        label: '❄️ Salju (+18% Miss, +5% Kuras Stamina)',
+        note: 'Di #21837/#21839, salju menaikkan missMul 1.18x & energyDrainMul 1.05x: kurangi spekulasi jarak jauh dan jaga kesegaran lini tengah.',
       },
     };
 
     const halftimePlan = {
-      win: "Unggul di HT: Pilih 'Focus (Concentrar)' (+6% DEF & +4% MID selama 15 menit).",
-      draw: "Seri di HT: Pilih 'Praise (Elogiar)' (+4% ATK & +4% MID tanpa penalti DEF).",
-      lose: "Tertinggal di HT: Pilih 'Push Forward (Avançar)' (+8% ATK) + masukkan Supersub PAC/FIN di menit 58.",
+      win: "Unggul di HT (#3642): Pilih 'Praise (Elogiar)' (+1.5% DEF & +1.5% MID selama 20 menit babak ke-2) atau 'Calm' jika unggul ≥2 gol (+2% DEF, -15% kartu).",
+      draw: "Seri di HT (#3642): Pilih 'Demand More (Cobrar)' (+2.0% ATK & +1.0% MID selama 20 menit babak ke-2).",
+      lose: "Tertinggal di HT (#3642): Pilih 'Motivate (Motivar)' (+2.0% MID & +2.0% ATK selama 20 menit jika tertinggal) + siapkan 5 kuota sub!",
     };
 
     const top3List = candidates.slice(0, 3).map(c => ({
@@ -1472,21 +1582,23 @@
   }
 
   // =========================================================================
-  // Bytecode #23839, #23840, #23845, #23847, #23850, #23919, #24474:
+  // Bytecode #24059–#24064, #24136, #24715:
   // Transfer Policy, Buyer Force Ceiling, Refuses Distance, & Bosman Guard
   // =========================================================================
 
-  // Bytecode #23839 buyerForceCeiling
-  function buyerForceCeiling(rep = 60, division = 1) {
+  // Bytecode #24059 buyerForceCeiling: Math.max(repCap, divCap, avgTop11 + 8) + ctCeilingBonus
+  function buyerForceCeiling(rep = 60, division = 1, avgTop11 = 0, ctLevel = 1) {
     const rLv = U.reputationLevel(rep);
-    const repCap = (C.REP_CEILING && C.REP_CEILING[rLv] !== undefined) ? C.REP_CEILING[rLv] : 72;
-    const div = U.safeInt(division, 1);
-    const divCap = (C.DIV_CEILING && C.DIV_CEILING[div] !== undefined) ? C.DIV_CEILING[div] : 68;
-    return Math.min(repCap, divCap);
+    const repCap = (C.REP_CEILING && C.REP_CEILING[rLv] !== undefined) ? C.REP_CEILING[rLv] : 45;
+    const div = U.clamp(U.safeInt(division, 1), 0, 5);
+    const divCap = (C.DIV_CEILING && C.DIV_CEILING[div] !== undefined) ? C.DIV_CEILING[div] : 60;
+    const squadCap = U.safeNum(avgTop11, 0) > 0 ? Math.round(U.safeNum(avgTop11, 0) + 8) : 0;
+    const ctBonus = U.safeInt(ctLevel, 1) >= 10 ? 3 : 0; // #21426: CT L10 ceilingBonus = +3
+    return Math.max(repCap, divCap, squadCap) + ctBonus;
   }
 
-  // Bytecode #23845 transferPolicy
-  function transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers = null, posCount = null) {
+  // Bytecode #24061 transferPolicy (#3695 SELLER_STANCE: listed 0.90x, topStar <=27 1.35x, top3 1.25x, starter 1.10x, scarce 1.15x)
+  function transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers = null, posCount = null, playerRankInClub = 99) {
     if (!p || !sellerCountry) return { status: 'OK', mult: 1.0, reason: null };
 
     const sPlayers = Array.isArray(sellerPlayers) ? sellerPlayers : [];
@@ -1499,24 +1611,28 @@
     }
 
     const age = U.safeInt(p.age, 24);
-    const isYoungStar = Boolean(age <= 22 && ((p.potential || 0) >= (p.force || 0) + 10 || (p.hash || 0) >= 8 || p.star || p.top));
-    const isKeyTop = Boolean(p.top || (p.star && age <= 28));
+    const isTopOrStar = Boolean(p.top || p.star || p.starAwarded);
+    const isTop3 = U.safeInt(playerRankInClub, 99) <= 3;
+    const isStarter = U.safeInt(playerRankInClub, 99) <= 11;
+    const isYoungStar = Boolean(age <= 22 && ((p.potential || 0) >= (p.force || 0) + 10 || (p.hash || 0) >= 8 || isTopOrStar));
+    const isKeyTop = Boolean(isTopOrStar || isTop3);
 
-    const bLv = U.safeInt(buyerLevel, 10);
-    const sLv = U.safeInt(sellerLevel, 10);
-    const levelDiff = bLv - sLv;
-
-    if (U.sameCountry(sellerCountry, buyerCountry) && sLv >= 14 && Math.abs(levelDiff) <= 2 && (isKeyTop || isYoungStar)) {
-      return { status: 'REFUSE', mult: 2.0, reason: 'domesticRival' };
+    if (p.forSale) {
+      return {
+        status: 'OK',
+        mult: 0.90,
+        reason: null,
+        isKeyTop,
+        isYoungStar,
+      };
     }
 
     let mult = 1.0;
-    if (isKeyTop) mult += 0.35;
-    if (isYoungStar) mult += 0.30;
-    if (samePosCount <= 2) mult += 0.25;
-    if ((p.contractDays || 365) > 720) mult += 0.15;
-    if (levelDiff < 0) mult += Math.min(0.4, Math.abs(levelDiff) * 0.08);
-    if (p.forSale) mult = Math.min(mult, 0.90);
+    if (isTopOrStar && age <= 27) mult = 1.35;
+    else if (isTop3) mult = 1.25;
+    else if (isStarter) mult = 1.10;
+
+    if (samePosCount <= 2) mult *= 1.15;
 
     return {
       status: 'OK',
@@ -1527,94 +1643,110 @@
     };
   }
 
-  // Bytecode #23840 refusesDistance
+  // Bytecode #24060 refusesDistance
+  // gS===0 && gB>0 -> sL>=7 && bL+1<sL && !aff && !homeReturn && age<32
+  // gS!==gB && !aff && !homeReturn -> sL>=7 && (sL - bL) >= 2 && age<30
   function refusesDistance(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel) {
     if (!buyerCountry || !sellerCountry) return false;
     if (U.sameCountry(sellerCountry, buyerCountry)) return false;
 
-    const bLv = U.safeInt(buyerLevel, 10);
-    const sLv = U.safeInt(sellerLevel, 10);
+    const bLv = U.safeInt(buyerLevel, 7);
+    const sLv = U.safeInt(sellerLevel, 7);
     const age = U.safeInt(p && p.age, 25);
     const pNat = String((p && p.nationality) || '').toUpperCase();
 
-    if (pNat && U.sameCountry(pNat, buyerCountry)) {
-      if (age >= 30) return false;
-      if (bLv >= sLv - 3) return false;
-    }
-
+    const homeReturn = Boolean(pNat && U.sameCountry(pNat, buyerCountry));
+    const aff = U.hasAffinity(sellerCountry, buyerCountry) || Boolean(pNat && U.hasAffinity(pNat, buyerCountry));
     const gSeller = U.countryGroup(sellerCountry);
     const gBuyer = U.countryGroup(buyerCountry);
-    const aff = U.hasAffinity(sellerCountry, buyerCountry) || (pNat && U.hasAffinity(pNat, buyerCountry));
 
-    let minBuyerLevel = sLv;
-    if (gSeller === 0 && gBuyer !== 0) {
-      minBuyerLevel = sLv + (age < 29 ? 3 : 0);
-    } else if (gSeller === 1 && gBuyer === 0) {
-      minBuyerLevel = Math.max(8, sLv - 2);
-    } else if (!aff && gSeller !== gBuyer) {
-      minBuyerLevel = sLv + (age < 28 ? 2 : 0);
-    } else if (aff) {
-      minBuyerLevel = sLv - 1;
+    if (gSeller === 0 && gBuyer > 0) {
+      if (sLv >= 7 && (bLv + 1) < sLv && !aff && !homeReturn && age < 32) {
+        return true;
+      }
     }
-
-    if (p && (p.top || p.star) && age < 30 && gBuyer !== 0 && gSeller === 0) {
-      return true;
+    if (gSeller !== gBuyer && !aff && !homeReturn) {
+      if (sLv >= 7 && (sLv - bLv) >= 2 && age < 30) {
+        return true;
+      }
     }
-    return bLv < minBuyerLevel;
+    return false;
   }
 
-  // Bytecode #23847 userBuyPolicy
-  function userBuyPolicy(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, buyerRep, buyerDiv, sellerPlayers = null, posCount = null, isUnattached = false) {
+  // Bytecode #24062 userBuyPolicy
+  function userBuyPolicy(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, buyerRep, buyerDiv, sellerPlayers = null, posCount = null, isUnattached = false, extra = null) {
+    const ex = (extra && typeof extra === 'object') ? extra : {};
+    const rankInClub = U.safeInt(ex.rankInClub, 99);
+    const avgTop11 = U.safeNum(ex.avgTop11, 0);
+    const ctLevel = U.safeInt(ex.ctLevel, 1);
+
     const pol = isUnattached
-      ? { status: 'OK', mult: 1.0, reason: null, isKeyTop: Boolean(p.top || (p.star && p.age <= 28)), isYoungStar: false }
-      : transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers, posCount);
+      ? { status: 'OK', mult: 1.0, reason: null, isKeyTop: Boolean(p.top || p.star), isYoungStar: false }
+      : transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers, posCount, rankInClub);
     if (pol.status === 'REFUSE') return pol;
 
-    const sLv = isUnattached ? U.clamp(Math.round(((p.force || 50) - 18) / 3), 1, 20) : U.safeInt(sellerLevel, 10);
-    const bLv = U.safeInt(buyerLevel, 10);
+    const sLv = isUnattached ? U.clamp(Math.round(((p.force || 50) - 18) / 7), 1, 10) : U.safeInt(sellerLevel, 7);
+    const bLv = U.safeInt(buyerLevel, 7);
     const sCountry = isUnattached ? (p.nationality || '') : sellerCountry;
 
-    if (refusesDistance(p, sCountry, buyerCountry, sLv, bLv)) {
-      return { status: 'REFUSE', mult: 2.0, reason: 'distanceOrLeague', code: 'REFUSE_DIST' };
+    if (!isUnattached && refusesDistance(p, sCountry, buyerCountry, sLv, bLv)) {
+      return { status: 'REFUSE', mult: 2.0, reason: 'distanceOrLeague', code: 'REFUSE_DIST', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
     }
 
     const gap = sLv - bLv;
-    if (!p.forSale) {
-      const maxStepDown = (p.age >= 32) ? 5 : ((p.age >= 29) ? 3 : 2);
-      if (gap > maxStepDown) {
-        return { status: 'REFUSE', mult: 2.0, reason: 'clubLevelLow', code: 'REFUSE_LVL' };
+    const age = U.safeInt(p && p.age, 25);
+    const isTopOrStar = Boolean(p && (p.top || p.star || p.starAwarded));
+    const isUnhappy = Boolean(ex.isUnhappy || (p && p.mood === 'unhappy'));
+
+    if (!p.forSale && !isUnhappy) {
+      if (gap >= 3 && age < 29) {
+        return { status: 'REFUSE', mult: 2.0, reason: 'clubLevelLow', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
       }
-      if ((p.top || p.star) && gap >= 2 && p.age < 31) {
-        return { status: 'REFUSE', mult: 2.0, reason: 'ambition', code: 'REFUSE_LVL' };
+      if (gap >= 2 && isTopOrStar && age < 28) {
+        return { status: 'REFUSE', mult: 2.0, reason: 'ambition', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
       }
     }
 
-    const ceil = buyerForceCeiling(buyerRep, buyerDiv);
+    const ceil = buyerForceCeiling(buyerRep, buyerDiv, avgTop11, ctLevel);
     let ceilMult = 1.0;
     if ((p.force || 0) > ceil) {
-      const over = (p.force || 0) - ceil;
-      if (over >= 12 && !p.forSale) {
-        return { status: 'REFUSE', mult: 2.0, reason: 'clubStatusLow', code: 'REFUSE_LVL' };
+      if (!p.forSale && !isUnhappy && (p.force || 0) > ceil + 5) {
+        return { status: 'REFUSE', mult: 2.0, reason: 'clubStatusLow', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
       }
       ceilMult = 2.0;
     }
 
     return {
       status: 'OK',
-      mult: U.roundTo(Math.min(3.5, pol.mult * ceilMult), 2),
+      mult: U.roundTo(Math.min(3.5, Math.max(pol.mult, ceilMult)), 2),
       reason: null,
       code: ceilMult > 1.0 ? 'CEIL_2X' : 'OK',
       ceilMult,
+      isKeyTop: pol.isKeyTop,
+      isYoungStar: pol.isYoungStar,
     };
   }
 
-  // Bytecode #23850 buyPersuadable (tawaran >= 1.5x MV memberi slack +2 level, max 2.0x)
-  function buyPersuadable(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, pol) {
+  // Bytecode #24064 buyPersuadable: tawaran >= 1.5x MV memberi slack +2 pada buyerLevel & +4 pada ceiling!
+  function buyPersuadable(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, pol, extra = null) {
     if (!pol || pol.status !== 'REFUSE') return false;
     if (pol.reason === 'onlyGoalkeeper' || pol.reason === 'domesticRival') return false;
-    if (p && p.top && (p.age || 25) < 28 && U.safeInt(buyerLevel, 10) < U.safeInt(sellerLevel, 10) - 2) return false;
-    const slack = 2;
-    return !refusesDistance(p, sellerCountry, buyerCountry, sellerLevel, U.safeInt(buyerLevel, 10) + slack);
+    const ex = (extra && typeof extra === 'object') ? extra : {};
+    const bLv = U.safeInt(buyerLevel, 7) + 2;
+    const sLv = U.safeInt(sellerLevel, 7);
+    const age = U.safeInt(p && p.age, 25);
+    const isTopOrStar = Boolean(p && (p.top || p.star || p.starAwarded));
+
+    if (refusesDistance(p, sellerCountry, buyerCountry, sLv, bLv)) return false;
+    const gap = sLv - bLv;
+    if (gap >= 3 && age < 29) return false;
+    if (gap >= 2 && isTopOrStar && age < 28) return false;
+
+    if (ex.buyerRep !== undefined) {
+      const ceil = buyerForceCeiling(ex.buyerRep, ex.buyerDiv || 1, ex.avgTop11 || 0, ex.ctLevel || 1) + 4;
+      if ((p.force || 0) > ceil + 5) return false;
+    }
+    return true;
   }
 
   LF.tactics = {

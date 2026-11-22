@@ -40,9 +40,9 @@ function renderTab5() {
     kpiEl.innerHTML = `
       <div class="t3-mini-strip">
         <div class="t3-mini-card"><div class="kpi-lbl">Total Prospek</div><div class="kpi-val mono c-sky">${youth.length}</div><div class="kpi-sub">★6+: ${star6Cnt} pemain</div></div>
-        <div class="t3-mini-card"><div class="kpi-lbl">Siap Promosi</div><div class="kpi-val mono c-green">${promoCnt}</div><div class="kpi-sub">Dev ≥90 atau 20th</div></div>
+        <div class="t3-mini-card"><div class="kpi-lbl">Siap Promosi</div><div class="kpi-val mono c-green">${promoCnt}</div><div class="kpi-sub">Dev ≥90 atau 20th+</div></div>
         <div class="t3-mini-card"><div class="kpi-lbl">Tambal Lubang</div><div class="kpi-val mono c-purple">${holeCnt}</div><div class="kpi-sub">Cocok lubang senior</div></div>
-        <div class="t3-mini-card"><div class="kpi-lbl">Mentok Usia 20</div><div class="kpi-val mono ${age20Cnt ? 'c-amber' : 'c-muted'}">${age20Cnt}</div><div class="kpi-sub">Berhenti tumbuh di 20th</div></div>
+        <div class="t3-mini-card"><div class="kpi-lbl">Usia 20+ (Puncak)</div><div class="kpi-val mono ${age20Cnt ? 'c-amber' : 'c-muted'}">${age20Cnt}</div><div class="kpi-sub">Rate 0.35 @20, stop @21+</div></div>
       </div>`;
   }
 
@@ -89,7 +89,7 @@ function renderTab5() {
     const devPct = Math.min(100, Math.max(0, Math.round(y.development || 0)));
     const devCol = devPct >= 90 ? 'var(--green)' : (devPct >= 60 ? 'var(--sky)' : 'var(--amber)');
     const actCls = y.action.includes('PROMO') ? 'b-good' : (y.action.includes('TAHAN') ? 'b-info' : 'b-muted');
-    const age20Badge = (y.age || 0) >= 20 ? '<span class="badge b-warn">⚠ MENTOK 20th</span>' : '';
+    const age20Badge = (y.age || 0) > 20 ? '<span class="badge b-crit">⚠ STALLED 21+</span>' : ((y.age || 0) === 20 ? '<span class="badge b-warn">🔥 PUNCAK 20th</span>' : '');
     return `<tr>
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('youth','${escJs(y.id)}')"><b>${esc(y.name)}</b></a></div>
@@ -129,13 +129,13 @@ function renderTab5() {
       <div style="border-top:1px solid var(--border);padding-top:12px">
         <div class="flex-between mb-8">
           <div>
-            <h3 style="margin:0">🎓 Radar Olheiro da Base (#23984 — Bajak U-21 Rival 1.5x MV)</h3>
-            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh ≥10 yang memenuhi syarat Youth Scout instan (kuota maks 2/musim).</div>
+            <h3 style="margin:0">🎓 Radar Olheiro da Base (#24197 — Bajak U-21 Rival 2.0x MV)</h3>
+            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh (potential - force) ≥10 yang memenuhi syarat Youth Scout instan (kuota maks 2/musim; biaya scout -25% di CT Lv 3+).</div>
           </div>
           <span class="badge b-info mono">${(D.youthScoutTargets || []).length} Kandidat</span>
         </div>
         <div class="tbl-wrap tbl-sticky"><table>
-          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap Scout</th><th>Skill Stack</th><th>Harga 1.5x MV</th><th>Klub Asal</th></tr></thead>
+          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap Scout</th><th>Skill Stack</th><th>Harga 2.0x MV</th><th>Klub Asal</th></tr></thead>
           <tbody>${ysList.map(t => `<tr>
             <td>
               <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>

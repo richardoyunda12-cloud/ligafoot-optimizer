@@ -132,15 +132,18 @@
     return false;
   }
 
-  // Bytecode #21518 teamLevelOf
+  // Bytecode #21442 teamLevelOf: DIV_LEVEL=[1, 10, 6, 3, 2, 1], max(divLvl, REP_LEVEL[repLvl])
   function teamLevelOf(team, division = 1, staticLevel = null) {
-    const lv = safeInt(team && team.level, safeInt(staticLevel, 0));
-    if (lv > 0) {
-      const divBonus = (safeInt(division, 1) === 1) ? 1 : 0;
-      return clamp(lv + divBonus, 1, 22);
+    const divTbl = [1, 10, 6, 3, 2, 1];
+    const repTbl = [1, 2, 4, 7, 9, 10];
+    const divIdx = clamp(safeInt((team && team.division !== undefined) ? team.division : division, 1), 0, 5);
+    const divLv = divTbl[divIdx] || 1;
+    const rawRep = safeNum(team && team.reputation, safeNum(staticLevel, 0));
+    if (rawRep > 0) {
+      const rLv = reputationLevel(rawRep);
+      return Math.max(divLv, repTbl[clamp(rLv, 0, 5)] || 1);
     }
-    const rep = safeNum(team && team.reputation, 50);
-    return clamp(Math.round(rep / 5), 1, 20);
+    return divLv;
   }
 
   // Bytecode #21490 getForeignLimit
@@ -150,66 +153,99 @@
     return lims[c] || lims.DEFAULT || { max: 9, field: 7 };
   }
 
-  // Bytecode #21000 terminationFeeRate
+  // Bytecode #19789 terminationFeeRate (sisa hari <= 0 -> 0; maks 30%)
   function terminationFeeRate(daysLeft) {
-    const d = Math.max(0, safeInt(daysLeft, 0));
+    const d = safeInt(daysLeft, 0);
+    if (d <= 0) return 0;
     for (const t of (C.TERMINATION_FEE_TIERS || [])) {
       if (d <= t.maxDays) return t.rate;
     }
-    return 0.70;
+    return 0.30;
   }
 
-  // Bytecode #20892/#20893 injuryTier & injurySaleFactor
+  // Bytecode #24161 renewalMinimumSalary: persentase perubahan gaji minimum saat perpanjang.
+  // termIdx: 0=6bln, 1=1th, 2=2th, 3=3th. Negatif = diskon, positif = kenaikan.
+  function renewalSalaryDelta(contractDays, termIdx = 3) {
+    const d = safeInt(contractDays, 0);
+    const i = Math.max(0, Math.min(3, safeInt(termIdx, 3)));
+    if (d <= 10) return C.RENEWAL_RAISE_LAST[i];
+    if (d < C.RENEWAL_DISCOUNT_FROM_DAYS) return C.RENEWAL_RAISE_MID[i];
+    return C.RENEWAL_DISCOUNT[i];
+  }
+
+  // Bytecode #24160 salaryFloorFactor + #24162 salaryCutMinimum
+  // Mengembalikan pengali gaji terendah yang masih bisa dipotong (1 = tidak bisa dipotong lagi).
+  function salaryCutFloorMul(isReserve, age, salaryCuts, renewRefusals) {
+    const S = C.SALARY_CUT;
+    if (safeInt(salaryCuts, 0) >= S.maxCuts) return 1.0;
+    const factor = Math.max(0.5, 1
+      + (isReserve ? S.reserve : 0)
+      + (safeInt(age, 25) >= S.veteranAge ? S.veteran : 0)
+      + safeInt(salaryCuts, 0) * S.perCut
+      + safeInt(renewRefusals, 0) * S.perRefusal);
+    return Math.min(1.0, S.cutBase * factor);
+  }
+
+  // Bytecode #20971 & #20972 injuryTier & injurySaleFactor (#3724 L806140)
+  // <=10d: minor (0.70), <=30d: moderate (0.55), <=60d: major (0.40), >60d: severe (0.25)
   function injuryTier(days) {
     const d = safeInt(days, 0);
     if (d <= 0) return 'none';
-    const cfg = C.INJURED_SALE || { minorMaxDays: 14, moderateMaxDays: 45 };
-    if (d <= cfg.minorMaxDays) return 'minor';
-    if (d <= cfg.moderateMaxDays) return 'moderate';
+    const cfg = C.INJURED_SALE || { minorMaxDays: 10, moderateMaxDays: 30, majorMaxDays: 60 };
+    if (d <= (cfg.minorMaxDays || 10)) return 'minor';
+    if (d <= (cfg.moderateMaxDays || 30)) return 'moderate';
+    if (d <= (cfg.majorMaxDays || 60)) return 'major';
     return 'severe';
   }
 
   function injurySaleFactor(days) {
     const tier = injuryTier(days);
-    const cfg = C.INJURED_SALE || { minorFactor: 0.90, moderateFactor: 0.72, severeFactor: 0.50 };
+    const cfg = C.INJURED_SALE || { minorFactor: 0.70, moderateFactor: 0.55, majorFactor: 0.40, severeFactor: 0.25 };
     if (tier === 'none') return 1.0;
-    if (tier === 'minor') return cfg.minorFactor;
-    if (tier === 'moderate') return cfg.moderateFactor;
-    return cfg.severeFactor;
+    if (tier === 'minor') return cfg.minorFactor || 0.70;
+    if (tier === 'moderate') return cfg.moderateFactor || 0.55;
+    if (tier === 'major') return cfg.majorFactor || 0.40;
+    return cfg.severeFactor || 0.25;
   }
 
-  // Bytecode #20901 retirementChance
-  function retirementChance(age, pos, force) {
-    const a = safeInt(age, 25);
-    const f = safeInt(force, 50);
-    const startAge = (pos === 'G') ? 37 : 35;
-    if (a < startAge) return 0;
-    const yearsOver = a - startAge;
-    let chance = 0.15 + yearsOver * 0.18;
-    if (f < 25) chance += 0.20;
-    else if (f < 40) chance += 0.10;
-    return Math.min(0.95, roundTo(chance, 2));
+  // Bytecode #21374 retirementChance (diverifikasi): TIDAK memakai force.
+  //   eff = age - (worldTop ? 3 : 0) - ((craque||worldTop) ? 1 : 0) - (GK ? 3 : 0)
+  //   Asumsi pemetaan: p.top -> worldTop, p.star -> craque.
+  function retirementChance(age, pos, force, opts = {}) {
+    const top = Boolean(opts && opts.top);
+    const star = Boolean(opts && opts.star);
+    const eff = safeInt(age, 25) - (top ? 3 : 0) - ((star || top) ? 1 : 0) - (pos === 'G' ? 3 : 0);
+    if (eff < 32) return 0;
+    if (eff === 32) return 0.01;
+    if (eff <= 34) return 0.10;
+    if (eff === 35) return 0.45;
+    if (eff === 36) return 0.70;
+    if (eff <= 38) return 0.85;
+    if (eff === 39) return 0.95;
+    if (eff === 40) return 0.97;
+    if (eff <= 42) return 0.98;
+    if (eff <= 48) return 0.99;
+    return 1.0;
   }
 
-  // Bytecode #20496 loanBuyDecisionChance (probabilitas AI menebus pemain pinjaman di akhir musim)
+  // Bytecode #20408 loanBuyDecisionChance (#3730 LOAN_OPTION L806200)
+  // games = max(seasonGames, round(seasonMinutes/70)); jika games < 5 -> 0
+  // chance = 0.15 + min(1, games/20)*0.35 + min(0.25, goals*0.02) + (age<=23 ? 0.15 : 0) + (!injured ? 0.15 : 0), cap 0.85
   function loanBuyDecisionChance(p) {
     if (!p || !p.loanedFrom || safeNum(p.loanBuyFee, 0) <= 0) return 0;
-    const cfg = C.LOAN_OPTION || { baseChance: 0.35, playedBonus: 0.25, goalsBonus: 0.20, ratingBonus: 0.15, highFeePenalty: 0.25 };
-    let chance = cfg.baseChance;
+    const cfg = C.LOAN_OPTION || {
+      baseChance: 0.15, minGames: 5, gamesTarget: 20, gamesBonus: 0.35,
+      goalsBonusPerGoal: 0.02, goalsBonusMax: 0.25, youngAge: 23, youngBonus: 0.15, fitBonus: 0.15, maxChance: 0.85,
+    };
     const mins = safeNum(p.seasonMinutes, 0);
-    if (mins >= 900) chance += cfg.playedBonus;
-    else if (mins >= 450) chance += cfg.playedBonus * 0.5;
-    const goals = safeInt(p.seasonGoals, 0);
-    if (goals >= 8) chance += cfg.goalsBonus;
-    else if (goals >= 4) chance += cfg.goalsBonus * 0.5;
-    const ratings = Array.isArray(p.matchRatings) ? p.matchRatings : [];
-    if (ratings.length > 0) {
-      const avgR = ratings.reduce((s, x) => s + safeNum(x, 6.0), 0) / ratings.length;
-      if (avgR >= 7.0) chance += cfg.ratingBonus;
-    }
-    const mv = Math.max(1, safeNum(p.marketValue, 1));
-    if (safeNum(p.loanBuyFee, 0) > mv * 1.3) chance -= cfg.highFeePenalty;
-    return clamp(roundTo(chance, 2), 0.05, 0.90);
+    const games = Math.max(safeInt(p.seasonGames ?? p.gamesPlayed, 0), Math.round(mins / 70.0));
+    if (games < (cfg.minGames || 5)) return 0;
+    let chance = cfg.baseChance || 0.15;
+    chance += Math.min(1.0, games / (cfg.gamesTarget || 20)) * (cfg.gamesBonus || 0.35);
+    chance += Math.min(cfg.goalsBonusMax || 0.25, safeInt(p.seasonGoals, 0) * (cfg.goalsBonusPerGoal || 0.02));
+    if (safeInt(p.age, 25) <= (cfg.youngAge || 23)) chance += (cfg.youngBonus || 0.15);
+    if (!p.injured) chance += (cfg.fitBonus || 0.15);
+    return clamp(roundTo(chance, 2), 0, cfg.maxChance || 0.85);
   }
 
   // Bytecode #19869 fixedSponsorParcel
@@ -225,7 +261,7 @@
 
   // Bytecode #21866 statement row parser (mendukung tuple [date, cat, amt, ...meta] & object fallback)
   const EXPENSE_CATEGORIES = new Set([
-    'salaries', 'purchases', 'stadium', 'ct', 'termination', 'loans', 'loanInterest', 'youthCoach',
+    'salaries', 'purchases', 'stadium', 'ct', 'termination', 'loans', 'loanInterest', 'interest', 'youthCoach', 'misc',
   ]);
 
   const STMT_CAT_LABELS = {
@@ -244,7 +280,9 @@
     termination: 'Pesangon / Pemutusan',
     loans: 'Cicilan Pinjaman Bank',
     loanInterest: 'Bunga Pinjaman Bank',
+    interest: 'Bunga & Cicilan Bank',
     youthCoach: 'Pelatih Akademi',
+    misc: 'Biaya Lain-lain (Olheiro / Akademi)',
   };
 
   function parseStatementRow(row) {
@@ -608,6 +646,8 @@
     teamLevelOf,
     getForeignLimit,
     terminationFeeRate,
+  renewalSalaryDelta,
+  salaryCutFloorMul,
     injuryTier,
     injurySaleFactor,
     retirementChance,
