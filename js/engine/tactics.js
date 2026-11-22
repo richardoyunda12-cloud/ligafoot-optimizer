@@ -1803,6 +1803,108 @@
     return true;
   }
 
+  /**
+   * Simulasi cepat dampak perubahan skuad (Cart / What-If Transfer) terhadap Win%, xPts, xG,
+   * formasi terbaik, dan kekuatan sektor terhadap lawan acuan (`oppPow`) via #21822 + #48031.
+   */
+  function evaluateSquadImpact(simRoster, oppPow, opts = {}) {
+    const isHome = opts.isHome !== undefined ? Boolean(opts.isHome) : true;
+    const neutral = Boolean(opts.neutral);
+    const oppStyle = String(opts.oppStyle || 'Balanced');
+    const oppFocus = String(opts.oppFocus || 'Center');
+    const foreignCap = U.safeInt(opts.foreignCap, 7);
+    const userCountry = String(opts.userCountry || '');
+    const repLevel = U.safeInt(opts.repLevel, 3);
+    const formList = Array.isArray(opts.formations) && opts.formations.length
+      ? opts.formations
+      : Object.keys(C.FORMATIONS).filter(fk => !(C.FORMATION_BUGS && C.FORMATION_BUGS[fk] && C.FORMATION_BUGS[fk].hasBug));
+
+    let best = null;
+    for (const fk of formList) {
+      const xiRes = solveBestXi(simRoster, fk, foreignCap, userCountry, null, false, repLevel);
+      const uPowBase = computeEngineSectorPower(xiRes, fk, {
+        isHome, crowdOver70: true, style: 'Balanced', marking: 'Heavy',
+      });
+      const simC = simulateMatchExpectation(uPowBase, oppPow, {
+        isHome, neutral, focus: 'Center', oppFocus, style: 'Balanced', oppStyle,
+      });
+      const simW = simulateMatchExpectation(uPowBase, oppPow, {
+        isHome, neutral, focus: 'Wings', oppFocus, style: 'Balanced', oppStyle,
+      });
+      const optFocus = simC.xPts >= simW.xPts ? 'Center' : 'Wings';
+      const sim = optFocus === 'Center' ? simC : simW;
+      const wfPen = xiRes.wrongFootCount * 0.002;
+      const score = sim.xPts - wfPen;
+      if (!best || score > best.score) {
+        best = {
+          score,
+          formation: fk,
+          xiRes,
+          uPow: { ...uPowBase, ATK: sim.effAtkUser },
+          optFocus,
+          optStyle: 'Balanced',
+          sim,
+        };
+      }
+    }
+
+    if (!best) return null;
+
+    // Cek juga apakah Offensive atau Counter-Attack memberi xPts lebih tinggi pada formasi terbaik
+    let bestStyle = 'Balanced';
+    let bestSim = best.sim;
+    let bestPow = best.uPow;
+    for (const stTry of ['Offensive', 'Counter-Attack']) {
+      const pTry = computeEngineSectorPower(best.xiRes, best.formation, {
+        isHome, crowdOver70: true, style: stTry, marking: 'Heavy',
+      });
+      const sTry = simulateMatchExpectation(pTry, oppPow, {
+        isHome, neutral, focus: best.optFocus, oppFocus, style: stTry, oppStyle,
+      });
+      if (sTry.xPts >= bestSim.xPts + 0.012) {
+        bestStyle = stTry;
+        bestSim = sTry;
+        bestPow = { ...pTry, ATK: sTry.effAtkUser };
+      }
+    }
+
+    // Cek opsi False Nine (#21822) pada formasi & gaya terbaik
+    let falseNineTarget = null;
+    const atkItems = (best.xiRes.xi || []).filter(it => it.sectorCode === 'A' && it.player);
+    if (atkItems.length >= 2) {
+      for (const it of atkItems) {
+        const p = it.player;
+        const pF9 = computeEngineSectorPower(best.xiRes, best.formation, {
+          isHome, crowdOver70: true, style: bestStyle, marking: 'Heavy', falseNineId: p.id,
+        });
+        const sF9 = simulateMatchExpectation(pF9, oppPow, {
+          isHome, neutral, focus: best.optFocus, oppFocus, style: bestStyle, oppStyle,
+        });
+        if (sF9.xPts >= bestSim.xPts + 0.005) {
+          bestSim = sF9;
+          bestPow = { ...pF9, ATK: sF9.effAtkUser };
+          falseNineTarget = { id: p.id, name: p.name, pos: U.posEn(p.pos) };
+        }
+      }
+    }
+
+    return {
+      formation: best.formation,
+      avgScore: best.xiRes.avgScore,
+      winPct: bestSim.winPct,
+      drawPct: bestSim.drawPct,
+      lossPct: bestSim.lossPct,
+      xPts: bestSim.xPts,
+      xGF: bestSim.xGF,
+      xGA: bestSim.xGA,
+      possPct: bestSim.possPct,
+      optFocus: best.optFocus,
+      optStyle: bestStyle,
+      falseNineTarget,
+      uPow: bestPow,
+    };
+  }
+
   LF.tactics = {
     repToLevel,
     evalSkillStacking,
@@ -1822,6 +1924,7 @@
     predictAiTacticsDetail,
     predictAiTactics,
     recommendMatchupForOpponent,
+    evaluateSquadImpact,
     detectSquadHoles,
     buyerForceCeiling,
     transferPolicy,

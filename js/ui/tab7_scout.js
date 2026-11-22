@@ -31,6 +31,73 @@ function getEffectiveBuyCost(r) {
   return Number(r[14]) || 0;
 }
 
+function scoutRowToSimPlayer(r) {
+  const pos = r[1] || 'MC';
+  return {
+    id: r[19],
+    name: r[0],
+    pos,
+    cat: EXACT_CAT[pos] ?? 3,
+    age: r[2] || 22,
+    foot: r[3] || 'D',
+    nationality: r[4] || '',
+    force: r[5] || 20,
+    effForce: r[5] || 20,
+    potential: r[6] || r[5] || 20,
+    potCap: r[7] || r[6] || r[5] || 20,
+    s1: r[8] || '',
+    s2: r[9] || '',
+    stackPct: r[10] || 0,
+    nonStack: Boolean(r[11]),
+    salary: Math.round((r[12] || 0) * 0.95),
+    marketValue: r[13] || 0,
+    energy: 100,
+    injured: false,
+    suspended: false,
+    star: r[20] === 1,
+    top: r[20] === 2,
+    starAwarded: false,
+    integration: 90,
+    rx: 7,
+    mood: 'ok',
+    fineSlump: 0,
+  };
+}
+
+function getBenchmarkMatchContext() {
+  const Eng = window.LFEngine;
+  if (!Eng || !Eng.tactics || typeof Eng.tactics.evaluateSquadImpact !== 'function') return null;
+  const fx = (D.upcoming && D.upcoming[0]) || null;
+  const oppName = fx ? fx.oppName : 'Rival Setara';
+  const cacheKey = `${(D.meta && D.meta.currentDate) || ''}_${oppName}_${(D.roster || []).length}`;
+  if (D._benchImpactCache && D._benchImpactCache.key === cacheKey) {
+    return D._benchImpactCache.ctx;
+  }
+
+  let oppPow = fx && fx.matchup && fx.matchup.oppPow;
+  if (!oppPow) {
+    const avg = Number((D.bestXi && D.bestXi.avgScore) || 35);
+    oppPow = { GK: avg, DEF: avg * 0.75, MID: avg * 0.85, ATK: avg * 0.75, atkCenter: avg * 0.77, atkWings: avg * 0.75, shooterVal: avg };
+  }
+  const isHome = fx ? Boolean(fx.isHome) : true;
+  const neutral = fx ? Boolean(fx.neutral) : false;
+  const oppStyle = (fx && fx.aiStyle) || 'Balanced';
+  const oppFocus = (fx && fx.aiFocus) || 'Center';
+  const opts = {
+    isHome,
+    neutral,
+    oppStyle,
+    oppFocus,
+    foreignCap: (D.meta && D.meta.foreignCap) || 7,
+    userCountry: (D.meta && D.meta.country) || '',
+    repLevel: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
+  };
+  const base = Eng.tactics.evaluateSquadImpact(D.roster || [], oppPow, opts);
+  const ctx = { oppName, isHome, neutral, oppPow, opts, base, fx };
+  D._benchImpactCache = { key: cacheKey, ctx };
+  return ctx;
+}
+
 function getCartMetrics() {
   let cashIn = 0, cashOut = 0, salDelta = 0, fDelta = 0;
   const hc = D.meta.country;
@@ -341,7 +408,76 @@ function renderScoutBlueprint() {
     .map(r => enrichScoutRow(r, cm));
 
   let picks = [];
+  let moneyballHtml = '';
   if (scoutBlueprintTab === 'UPGRADE') {
+    // Moneyball Upgrade Finder (#21822 + #48031): cari sektor terlemah & ukur Win% gain per Euro!
+    const ctx = getBenchmarkMatchContext();
+    if (ctx && ctx.base) {
+      const bPow = ctx.base.uPow;
+      const oPow = ctx.oppPow;
+      const secMargins = [
+        { sec: 'ATK', label: 'Serang (ATK)', diff: +(bPow.ATK - oPow.ATK).toFixed(1), poses: new Set(['ATA', 'A', 'SA', 'PD', 'PE']) },
+        { sec: 'MID', label: 'Tengah (MID)', diff: +(bPow.MID - oPow.MID).toFixed(1), poses: new Set(['VOL', 'V', 'MC', 'MD', 'ME', 'MA', 'MO', 'MEI']) },
+        { sec: 'DEF', label: 'Belakang (DEF)', diff: +(bPow.DEF - oPow.DEF).toFixed(1), poses: new Set(['LD', 'LE', 'LAT', 'ZD', 'ZE', 'ZAG', 'Z']) },
+        { sec: 'GK',  label: 'Kiper (GK)',   diff: +(bPow.GK - oPow.GK).toFixed(1),   poses: new Set(['G']) },
+      ].sort((a, b) => a.diff - b.diff);
+
+      const weakest = secMargins[0];
+      const weakPosSet = new Set([
+        ...secMargins[0].poses,
+        ...(secMargins[1].diff < 2 ? secMargins[1].poses : []),
+      ]);
+      const hc = D.meta.country;
+      const foreignFull = cm.projForeign >= D.meta.foreignCap;
+      const mbPool = cleanPool
+        .filter(x => {
+          if (x.affordCode === 'EXP' && !cartIn[x.r[19]]) return false;
+          if (!weakPosSet.has(x.r[1])) return false;
+          if (x.isForeign && foreignFull && !(x.swap && hc && x.swap.p.nationality !== hc)) return false;
+          return x.fillsHole || (x.swap && x.swap.deltaEff >= 0.5);
+        })
+        .sort((a, b) => b.upgradeScore - a.upgradeScore)
+        .slice(0, 15);
+
+      const fastForms = Array.from(new Set([ctx.base.formation, '3-5-2', '4-2-3-1', '4-3-3', '4-4-2']))
+        .filter(fk => D.formations && (fk in D.formations));
+      const mbResults = [];
+      const Eng = window.LFEngine;
+      for (const cand of mbPool) {
+        const dropId = cand.swap ? cand.swap.p.id : null;
+        const simR = (D.roster || []).filter(p => !cartOut[p.id] && p.id !== dropId);
+        simR.push(scoutRowToSimPlayer(cand.r));
+        const aft = Eng.tactics.evaluateSquadImpact(simR, ctx.oppPow, { ...ctx.opts, formations: fastForms });
+        if (!aft) continue;
+        const dWin = +(aft.winPct - ctx.base.winPct).toFixed(1);
+        const dXPts = +(aft.xPts - ctx.base.xPts).toFixed(3);
+        const effCost = cand.isBosman ? 0 : Math.max(0, cand.netCostIfSwap);
+        const winPerM = effCost > 0 ? +(dWin / (effCost / 1e6)).toFixed(2) : (dWin > 0 ? 999 : 0);
+        if (dXPts > 0.002) {
+          mbResults.push({ cand, aft, dWin, dXPts, effCost, winPerM });
+        }
+      }
+      mbResults.sort((a, b) => (b.dXPts - a.dXPts) || (b.winPerM - a.winPerM));
+      const top3Mb = mbResults.slice(0, 3);
+      if (top3Mb.length) {
+        const mbCards = top3Mb.map(m => {
+          const effTag = m.effCost === 0 ? '0€ BOSMAN' : (m.winPerM > 0 ? `+${m.winPerM}%/M` : fmtM(m.effCost));
+          return renderDealCard(m.cand, `💎 +${m.dWin}% WIN (${effTag})`, 'b-accent');
+        }).join('');
+        moneyballHtml = `
+          <div style="margin-bottom:14px;padding:10px 11px;background:var(--bg2);border:1px solid rgba(168,85,247,.4);border-radius:11px">
+            <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+              <div>
+                <span class="badge b-accent">💎 MONEYBALL UPGRADE FINDER</span>
+                <b style="margin-left:6px">Sektor Terlemah vs ${esc(ctx.oppName)}: <span class="c-amber">${esc(weakest.label)} (${weakest.diff >= 0 ? '+' : ''}${weakest.diff})</span></b>
+              </div>
+              <span class="c-muted mono" style="font-size:10.5px">Baseline ${fmtForm(ctx.base.formation)} · ${ctx.base.winPct}% Win · xPts ${ctx.base.xPts}</span>
+            </div>
+            <div class="deal-grid">${mbCards}</div>
+          </div>`;
+      }
+    }
+
     const ranked = cleanPool
       .filter(x => (x.affordCode !== 'EXP' || cartIn[x.r[19]]) && (x.fillsHole || (x.swap && x.swap.deltaEff >= 1.0)))
       .sort((a, b) => b.upgradeScore - a.upgradeScore);
@@ -369,11 +505,11 @@ function renderScoutBlueprint() {
     }
   }
 
-  if (!picks.length) {
+  if (!picks.length && !moneyballHtml) {
     box.innerHTML = `<div class="alert-item"><span class="badge b-warn">KAS KETAT</span><div>Belum ada rekomendasi yang muat di <b>Sisa Daya Beli (${fmtM(cm.projBudget)})</b>. Klik tombol <b>⚡ Jual</b> di atas untuk menambah modal, atau cek tab <b>🆓 Gratis/Diskon</b>!</div></div>`;
     return;
   }
-  box.innerHTML = `<div class="deal-grid">${picks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>`;
+  box.innerHTML = moneyballHtml + (picks.length ? `<div class="deal-grid">${picks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>` : '');
 }
 
 function addAllShortlistToCart() {
@@ -816,15 +952,63 @@ function renderCart() {
       <div class="kpi-sub">${projForeign > D.meta.foreignCap ? '⚠ Melebihi batas XI!' : '✓ Aman masuk XI'}</div>
     </div>`;
 
-  // Strip Proyeksi Dampak Skuad
+  // Strip Proyeksi Dampak Skuad + Simulasi Dampak Cart ke Win% War Room (#48031)
   const impEl = document.getElementById('t7-cart-impact');
   if (impEl) {
     const curSq = (D.roster || []).length;
     const projSq = curSq - outCount + inCount;
-    const hc = D.meta.country;
     const extraForeignWarn = (projForeign > D.meta.foreignCap)
       ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual 1 pemain asing lama</span>`
       : `<span class="badge b-good">✓ Komposisi Asing &amp; Kas Sehat</span>`;
+
+    let matchImpactHtml = '';
+    if (outCount > 0 || inCount > 0) {
+      const ctx = getBenchmarkMatchContext();
+      const Eng = window.LFEngine;
+      if (ctx && ctx.base && Eng && Eng.tactics) {
+        const simRoster = (D.roster || []).filter(p => !cartOut[p.id]).concat(inList.map(scoutRowToSimPlayer));
+        const aft = simRoster.length >= 11
+          ? Eng.tactics.evaluateSquadImpact(simRoster, ctx.oppPow, ctx.opts)
+          : null;
+        if (aft) {
+          const b = ctx.base;
+          const dWin = +(aft.winPct - b.winPct).toFixed(1);
+          const dXPts = +(aft.xPts - b.xPts).toFixed(3);
+          const dPoss = +(aft.possPct - b.possPct).toFixed(1);
+          const dDef = +(aft.uPow.DEF - b.uPow.DEF).toFixed(1);
+          const dMid = +(aft.uPow.MID - b.uPow.MID).toFixed(1);
+          const dAtk = +(aft.uPow.ATK - b.uPow.ATK).toFixed(1);
+          const fmtD = (v, suf = '') => `<span class="${v > 0 ? 'c-green' : (v < 0 ? 'c-red' : 'c-muted')}">(${v >= 0 ? '+' : ''}${v}${suf})</span>`;
+          const netSpend = cashOut - cashIn;
+          const effBadge = (dWin > 0 && cashOut > 0)
+            ? `<span class="badge b-info mono">+${(dWin / (cashOut / 1e6)).toFixed(2)}% Win / 1M</span>`
+            : (dWin > 0 && netSpend <= 0 ? '<span class="badge b-good">🆓 Gratis / Surplus Kas!</span>' : '');
+          matchImpactHtml = `
+            <div style="margin-top:8px;padding:9px 11px;background:var(--bg2);border:1px solid ${dXPts >= 0 ? 'rgba(16,185,129,.45)' : 'rgba(239,68,68,.45)'};border-radius:10px;font-size:11.5px">
+              <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+                <div><b>🧪 Simulasi Dampak ke Match Engine vs ${esc(ctx.oppName)}</b> <span class="c-muted">(${ctx.isHome ? 'Kandang' : 'Tandang'})</span></div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                  <span class="badge ${dWin >= 0 ? 'b-good' : 'b-crit'} mono">Win ${b.winPct}% → ${aft.winPct}% ${dWin >= 0 ? '+' : ''}${dWin}%</span>
+                  ${effBadge}
+                </div>
+              </div>
+              <div class="mono" style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px">
+                <span>Formasi: <b>${esc(fmtForm(b.formation))} → ${esc(fmtForm(aft.formation))}</b></span>
+                <span>xPts: <b>${b.xPts} → ${aft.xPts}</b> ${fmtD(dXPts)}</span>
+                <span>xG: <b>${b.xGF}–${b.xGA} → ${aft.xGF}–${aft.xGA}</b></span>
+                <span>Ball: <b>${b.possPct}% → ${aft.possPct}%</b> ${fmtD(dPoss, '%')}</span>
+              </div>
+              <div class="mono c-muted" style="margin-top:4px;font-size:10.5px">
+                Sektor Engine: DEF <b>${b.uPow.DEF}→${aft.uPow.DEF}</b> ${fmtD(dDef)} · MID <b>${b.uPow.MID}→${aft.uPow.MID}</b> ${fmtD(dMid)} · ATK <b>${b.uPow.ATK}→${aft.uPow.ATK}</b> ${fmtD(dAtk)}
+                ${aft.falseNineTarget ? ` · <span class="c-sky">⚡ F9 Aktif: ${esc(aft.falseNineTarget.name)}</span>` : ''}
+              </div>
+            </div>`;
+        } else {
+          matchImpactHtml = `<div class="alert-item CRITICAL mt-8"><span class="badge b-crit">SKUAD &lt;11</span><div>Sisa pemain di Cart kurang dari 11 — tambahkan target masuk sebelum menjual!</div></div>`;
+        }
+      }
+    }
+
     impEl.innerHTML = `
       <div class="cart-impact-strip">
         <div class="mono">
@@ -833,7 +1017,7 @@ function renderCart() {
           Gaji/Bln: <b>${fmtM(D.meta.payroll + salDelta)}</b>
         </div>
         ${extraForeignWarn}
-      </div>`;
+      </div>${matchImpactHtml}`;
   }
 
   // Tabel Pemain Keluar dengan pencarian cepat
