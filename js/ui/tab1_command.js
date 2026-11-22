@@ -250,6 +250,9 @@ function renderTab1() {
   // 3. AUTO-GUARD RINGKAS (Benar-benar 1 baris bila 6/6 aman!)
   renderAutoGuard();
 
+  // 3B. PLAYBOOK EKSEKUSI KONKRET DI GAME (Tinggal Ikuti 1-2-3!)
+  renderActionPlaybook();
+
   // 4. ACTION QUEUE TERPADU (Urutan Mobile Rapi + Filter + Stable ID + Smart Deep-Link)
   renderActionQueue();
 
@@ -385,6 +388,86 @@ function renderAutoGuard() {
       <button type="button" class="btn btn-sm" style="flex-shrink:0" onclick="toggleGuardExpand()">${open ? 'Ringkas ▲' : 'Rincian ▼'}</button>
     </div>
     ${detailsGrid}`;
+}
+
+function renderActionPlaybook() {
+  const agWrap = document.getElementById('t1-auto-guard');
+  if (!agWrap || !agWrap.parentNode) return;
+  let pbEl = document.getElementById('t1-playbook');
+  if (!pbEl) {
+    pbEl = document.createElement('div');
+    pbEl.id = 't1-playbook';
+    pbEl.className = 'card mb-8';
+    agWrap.parentNode.insertBefore(pbEl, agWrap.nextSibling);
+  }
+
+  const roster = D.roster || [];
+  const pLink = p => `<a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>`;
+
+  // 1. Ruang Ganti (#21465 / #21831): pemain #12+ yang unhappy/warn & belum reserve
+  const needReserve = roster.filter(p =>
+    (p.squadRank || 99) > 11 && !p.injured && String(p.squadRole || 'auto').toLowerCase() !== 'reserve' && (p.mood === 'unhappy' || p.mood === 'warn')
+  );
+  const starterUnhappy = roster.filter(p =>
+    (p.squadRank || 99) <= 11 && !p.injured && (p.mood === 'unhappy' || p.mood === 'warn')
+  );
+  const lockerHit = Number((D.meta && D.meta.lockerHitPct) || 0);
+
+  // 2. Special Training (#21430)
+  const ta = D.trainAudit || {};
+  const tSlots = ta.slots || 3;
+  const idealTop = (ta.ideal || []).slice(0, tSlots);
+  const curIdSet = new Set(ta.currentIds || []);
+  const needSwapTrain = idealTop.filter(x => !curIdSet.has(x.id));
+  const wastedTrain = ta.wastedNames || [];
+
+  // 3. Kontrak (Golden 60-120d & Loophole <=10d) + Rotasi / Kartu Kuning
+  const goldList = roster.filter(p => p.contractDays >= 60 && p.contractDays <= 120 && !p.loanedFrom);
+  const loopList = roster.filter(p => p.autoRenewLoophole);
+  const nextFx = (D.upcoming && D.upcoming[0]) || null;
+  const yRisks = (nextFx && nextFx.yellowRisks) || [];
+  const needMins = roster.filter(p => !p.injured && p.moodTier === 1 && Number(p.minPct ?? 100) < 12.0);
+
+  const step1Html = needReserve.length
+    ? `Set <code>squadRole = reserve</code> untuk: ${needReserve.slice(0, 6).map(p => `${pLink(p)} <span class="c-muted">(#${p.squadRank})</span>`).join(', ')}${needReserve.length > 6 ? ` (+${needReserve.length - 6} lainnya)` : ''}.${starterUnhappy.length ? ` <span class="c-amber">Inti kurang menit: ${starterUnhappy.map(pLink).join(', ')}.</span>` : ''}`
+    : (starterUnhappy.length
+      ? `<span class="c-amber">Mainkan inti kurang menit: ${starterUnhappy.map(pLink).join(', ')}.</span>`
+      : '<span class="c-green">✓ Ruang ganti aman — tidak ada cadangan yang perlu diubah role.</span>');
+
+  const step2Html = idealTop.length
+    ? `${idealTop.map(x => `<a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(x.id)}')"><b>${esc(x.name)}</b></a> <span class="mono c-green">(+${x.gap})</span>`).join(', ')}${wastedTrain.length ? ` · <span class="c-red">Keluarkan mentok: ${esc(wastedTrain.join(', '))}</span>` : (needSwapTrain.length ? ` · <span class="c-amber">${needSwapTrain.length} slot belum terisi ideal</span>` : ' <span class="c-green">✓ Sudah optimal</span>')}`
+    : '<span class="c-muted">Belum ada pemain di bawah potCap.</span>';
+
+  const step3Parts = [];
+  if (goldList.length) step3Parts.push(`<b>Renew 3Th (-12%):</b> ${goldList.slice(0, 4).map(p => `${pLink(p)} (${p.contractDays}d)`).join(', ')}`);
+  if (loopList.length) step3Parts.push(`<b>Loophole 0% (≤10d):</b> ${loopList.slice(0, 4).map(pLink).join(', ')}`);
+  if (yRisks.length) step3Parts.push(`<span class="c-amber"><b>Waspada 2 Kuning:</b> ${yRisks.map(x => esc(x.name)).join(', ')}</span>`);
+  if (needMins.length) step3Parts.push(`<b>Butuh Menit (8%):</b> ${needMins.slice(0, 3).map(pLink).join(', ')}`);
+  const step3Html = step3Parts.length ? step3Parts.join(' · ') : '<span class="c-green">✓ Kontrak &amp; rotasi laga berikutnya aman.</span>';
+
+  const actionBadges = (needReserve.length ? 1 : 0) + (wastedTrain.length || needSwapTrain.length ? 1 : 0) + (goldList.length || loopList.length || yRisks.length ? 1 : 0);
+
+  pbEl.innerHTML = `
+    <details class="glossary-inline" ${actionBadges > 0 ? 'open' : ''} style="border:none;padding:0;background:transparent">
+      <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer">
+        <span style="font-size:14px;font-weight:800">📋 Playbook Eksekusi di Game <span class="badge ${lockerHit > 0 ? 'b-crit' : (actionBadges > 0 ? 'b-warn' : 'b-good')}">${lockerHit > 0 ? `Penalti -${lockerHit}% Aktif` : (actionBadges > 0 ? `${actionBadges} Langkah` : '✓ Beres')}</span></span>
+        <span class="c-muted" style="font-size:11px">Klik nama → Profil</span>
+      </summary>
+      <div class="grid g3 mt-12" style="gap:8px;font-size:11.5px">
+        <div style="background:var(--bg2);border:1px solid ${needReserve.length ? 'rgba(239,68,68,.45)' : 'var(--border)'};border-radius:10px;padding:9px 10px">
+          <div class="flex-between mb-8"><b>1. Ruang Ganti (Reserve)</b><button type="button" class="btn btn-sm" onclick="goToView('t3','t3-train')">Tab Mood →</button></div>
+          <div>${step1Html}</div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid ${wastedTrain.length || needSwapTrain.length ? 'rgba(245,158,11,.45)' : 'var(--border)'};border-radius:10px;padding:9px 10px">
+          <div class="flex-between mb-8"><b>2. Special Training (${tSlots} Slot)</b><button type="button" class="btn btn-sm" onclick="goToView('t3','t3-train')">Atur →</button></div>
+          <div>${step2Html}</div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 10px">
+          <div class="flex-between mb-8"><b>3. Kontrak &amp; Rotasi</b><button type="button" class="btn btn-sm" onclick="goToView('t3','t3-squad')">Skuad →</button></div>
+          <div>${step3Html}</div>
+        </div>
+      </div>
+    </details>`;
 }
 
 function renderActionQueue() {

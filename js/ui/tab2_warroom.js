@@ -494,16 +494,31 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </tbody></table></div>
     </div>` : '';
 
+  const styleCmpRows = (m && Array.isArray(m.styleCompare) && m.styleCompare.length) ? `
+    <div class="tbl-wrap" style="margin-top:5px;margin-bottom:6px">
+      <table style="font-size:10.5px">
+        <thead><tr><th>Gaya Main (#48031)</th><th>W / D / L</th><th>xPts</th><th>xG</th><th>Ball</th></tr></thead>
+        <tbody>${m.styleCompare.map(sc => `<tr class="${sc.isRec ? 'hl-user' : ''}">
+          <td><b>${esc(sc.style)}</b>${sc.isRec ? ' <span class="badge b-good">✓</span>' : ''}</td>
+          <td class="mono"><b class="c-green">${sc.winPct}%</b> / <span class="c-amber">${sc.drawPct}%</span> / <span class="c-red">${sc.lossPct}%</span></td>
+          <td class="mono"><b>${sc.xPts}</b></td>
+          <td class="mono">${sc.xGF}–${sc.xGA}</td>
+          <td class="mono">${sc.possPct}%</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '';
+
   // Kartu 2: Taktik, Intel AI #23795, Wasit & Cuaca
   const tacticBlock = (m && refObj && wObj) ? `
     <div id="wr-sec-tactic" style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:11px;font-size:11px">
-      <div class="kpi-lbl mb-8">2. Contekan Taktik, Intel AI (#23795), Wasit &amp; Cuaca</div>
+      <div class="kpi-lbl mb-8">2. Contekan Taktik, Intel AI (#24016), Wasit &amp; Cuaca</div>
       <div class="mb-8" style="background:var(--card);padding:6px 8px;border-radius:7px">
         <b>🤖 Prediksi AI Lawan:</b> <span class="badge b-warn">${esc(fx.aiStyle)}</span>
         <span class="badge b-accent">Fokus: ${esc(aiFocus)}</span>
       </div>
       <div class="mb-8"><b>Gaya Main:</b> <span class="badge b-good">${esc(m.playStyle)}</span>
         <div class="c-muted" style="margin-top:2px">${esc(m.playReason)}</div>
+        ${styleCmpRows}
       </div>
       <div class="mb-8"><b>Fokus Serang:</b> <span class="badge b-info">${esc(m.attackFocus)}</span>
         <div class="c-muted" style="margin-top:2px">${esc(m.focusReason)}</div>

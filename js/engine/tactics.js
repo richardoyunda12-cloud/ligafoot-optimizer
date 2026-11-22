@@ -1327,6 +1327,21 @@
       recStyleWhy = `Balanced paling stabil (${styleSims.Balanced.winPct}% Win · ${styleSims.Balanced.drawPct}% Seri · xPts ${styleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive) maupun -6% MID (Counter).`;
     }
 
+    const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack'].map(stName => {
+      const s = styleSims[stName];
+      return {
+        style: stName,
+        winPct: s.winPct,
+        drawPct: s.drawPct,
+        lossPct: s.lossPct,
+        xPts: s.xPts,
+        xGF: s.xGF,
+        xGA: s.xGA,
+        possPct: s.possPct,
+        isRec: stName === recStyle,
+      };
+    });
+
     // Evaluasi opsi False Nine (#21822: f9Atk=0.6, f9MidPlaymaker=0.5, f9MidOther=0.35)
     const baseStyleSim = styleSims[recStyle];
     const atkItems = (bestXiObj.xi || []).filter(it => it.sectorCode === 'A' && it.player);
@@ -1533,6 +1548,7 @@
       playStyle: recStyle,
       playReason: recStyleWhy,
       playStyleWhy: recStyleWhy,
+      styleCompare,
       attackFocus: recFocus,
       focusReason: recFocusWhy,
       attackFocusWhy: recFocusWhy,
