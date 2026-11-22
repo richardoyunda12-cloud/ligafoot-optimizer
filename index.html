@@ -432,6 +432,8 @@
           </select>
           <select id="s-sort-mob" onchange="syncScoutQuick('sort', this.value)">
             <option value="SMART">Urut: Pintar</option>
+            <option value="WINPCT">Urut: +Win% Engine</option>
+            <option value="WINPERM">Urut: +Win% / 1M</option>
             <option value="UPGRADE">Upgrade XI</option>
             <option value="ROI">Flip ROI %</option>
             <option value="PROFIT">Profit Max</option>
@@ -466,6 +468,8 @@
               </select>
               <select id="s-sort" onchange="syncScoutDesktopToMob();resetScoutLimitAndRender()">
                 <option value="SMART">Urut: Rekomendasi Pintar</option>
+                <option value="WINPCT">Urut: +Win% Tertinggi (Match Engine)</option>
+                <option value="WINPERM">Urut: +Win% / 1M Terbaik (Moneyball)</option>
                 <option value="UPGRADE">Urut: Upgrade XI (ΔEff)</option>
                 <option value="ROI">Urut: Flip ROI % Tertinggi</option>
                 <option value="PROFIT">Urut: Est. Profit Tertinggi</option>

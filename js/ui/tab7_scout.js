@@ -98,6 +98,32 @@ function getBenchmarkMatchContext() {
   return ctx;
 }
 
+function getScoutWinImpact(it, ctx, fastForms) {
+  if (!ctx || !ctx.base || !it || !it.r) return null;
+  const Eng = window.LFEngine;
+  if (!Eng || !Eng.tactics || typeof Eng.tactics.evaluateSquadImpact !== 'function') return null;
+  const pid = it.r[19];
+  const dropId = it.swap ? it.swap.p.id : '';
+  const cKey = `${ctx.oppName}|${(D.meta && D.meta.currentDate) || ''}|${pid}|${dropId}`;
+  if (!D._scoutWinCache) D._scoutWinCache = new Map();
+  if (D._scoutWinCache.has(cKey)) return D._scoutWinCache.get(cKey);
+
+  const simR = (D.roster || []).filter(p => !cartOut[p.id] && p.id !== dropId);
+  simR.push(scoutRowToSimPlayer(it.r));
+  const aft = Eng.tactics.evaluateSquadImpact(simR, ctx.oppPow, { ...ctx.opts, formations: fastForms });
+  if (!aft) {
+    D._scoutWinCache.set(cKey, null);
+    return null;
+  }
+  const dWin = +(aft.winPct - ctx.base.winPct).toFixed(1);
+  const dXPts = +(aft.xPts - ctx.base.xPts).toFixed(3);
+  const effCost = it.isBosman ? 0 : Math.max(0, it.netCostIfSwap);
+  const winPerM = effCost > 0 ? +(dWin / (effCost / 1e6)).toFixed(2) : (dWin > 0 ? 999 : 0);
+  const res = { dWin, dXPts, effCost, winPerM, form: aft.formation, winPct: aft.winPct };
+  D._scoutWinCache.set(cKey, res);
+  return res;
+}
+
 function getCartMetrics() {
   let cashIn = 0, cashOut = 0, salDelta = 0, fDelta = 0;
   const hc = D.meta.country;
@@ -635,6 +661,7 @@ function renderScoutPresetChips() {
   if (!el) return;
   const defs = [
     ['ALL', 'Semua'],
+    ['MONEYBALL', '💎 +Win%'],
     ['HOLES', '🎯 Lubang'],
     ['BOSMAN', '🆓 Bosman ≤180d'],
     ['UNH', '🔥 Unhappy -15%'],
@@ -685,7 +712,7 @@ function applyScoutPreset(preset) {
   setVal('s-max-price', '');
   setChk('s-only-stack', preset === 'FLIP');
   setChk('s-hide-trap', true);
-  setVal('s-sort', preset === 'FLIP' ? 'ROI' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART'));
+  setVal('s-sort', preset === 'MONEYBALL' ? 'WINPCT' : (preset === 'FLIP' ? 'ROI' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART')));
   syncScoutDesktopToMob();
   renderScout();
   showToast('Preset Scout: ' + preset);
@@ -739,6 +766,25 @@ function getFilteredScout() {
     filtered.push(item);
   }
 
+  if (sortBy === 'WINPCT' || sortBy === 'WINPERM') {
+    const ctx = getBenchmarkMatchContext();
+    if (ctx && ctx.base) {
+      const fastForms = Array.from(new Set([ctx.base.formation, '3-5-2', '4-2-3-1', '4-3-3']))
+        .filter(fk => D.formations && (fk in D.formations));
+      // Evaluasi Top 45 kandidat terbaik (atau seluruh hasil filter jika <=45) di Match Engine
+      filtered.sort((a, b) => b.upgradeScore - a.upgradeScore);
+      for (const it of filtered.slice(0, 45)) {
+        it.winImpact = getScoutWinImpact(it, ctx, fastForms);
+      }
+    }
+    filtered.sort((a, b) => {
+      const wa = a.winImpact ? (sortBy === 'WINPERM' ? a.winImpact.winPerM : a.winImpact.dXPts) : -999;
+      const wb = b.winImpact ? (sortBy === 'WINPERM' ? b.winImpact.winPerM : b.winImpact.dXPts) : -999;
+      return (wb - wa) || (b.upgradeScore - a.upgradeScore);
+    });
+    return filtered;
+  }
+
   filtered.sort((a, b) => {
     if (sortBy === 'UPGRADE') return b.upgradeScore - a.upgradeScore;
     if (sortBy === 'ROI') return b.roiPct - a.roiPct || b.estProfit - a.estProfit;
@@ -760,6 +806,16 @@ function renderScout() {
   document.getElementById('t7-cnt').textContent = items.length + ' target';
   const show = items.slice(0, scoutPageLimit);
 
+  const ctx = getBenchmarkMatchContext();
+  const fastForms = (ctx && ctx.base)
+    ? Array.from(new Set([ctx.base.formation, '3-5-2', '4-2-3-1', '4-3-3'])).filter(fk => D.formations && (fk in D.formations))
+    : [];
+  if (ctx && ctx.base) {
+    for (const it of show.slice(0, 40)) {
+      if (!it.winImpact) it.winImpact = getScoutWinImpact(it, ctx, fastForms);
+    }
+  }
+
   document.getElementById('t7-scout-tbl').innerHTML = `<thead><tr>
     <th>Pemain &amp; Aksi Cepat</th><th>Pos / Usia</th><th>F → Cap &amp; Skill</th>
     <th>Est. Beli &amp; Fit</th><th>Saran Swap</th><th>Flip &amp; ROI</th><th class="col-desk-only">Aksi</th>
@@ -777,10 +833,14 @@ function renderScout() {
     else if (it.affordCode === 'CASH') fitBadge = '<span class="badge b-good">✓ KAS</span>';
     else if (it.affordCode === 'SWAP') fitBadge = '<span class="badge b-info">⇄ SWAP</span>';
 
+    const wi = it.winImpact;
+    const winTagHtml = wi
+      ? `<span class="badge ${wi.dWin > 0 ? 'b-good' : (wi.dWin < 0 ? 'b-crit' : 'b-muted')} mono" title="Simulasi Match Engine vs ${esc(ctx ? ctx.oppName : '')} (${fmtForm(wi.form)} · ${wi.winPct}% Win)">${wi.dWin >= 0 ? '+' : ''}${wi.dWin}% Win</span>`
+      : '';
     const swCell = sw
       ? `<div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(sw.p.id)}')"><b>${esc(sw.p.name)}</b></a> <span class="mono ${sw.deltaEff >= 0 ? 'c-green' : 'c-amber'}">(${sw.deltaEff >= 0 ? '+' : ''}${sw.deltaEff} Eff)</span></div>
-         <div class="c-muted" style="font-size:10px">Net: <b class="mono">${it.netCostIfSwap <= 0 ? '+' + fmtM(-it.netCostIfSwap) : '-' + fmtM(it.netCostIfSwap)}</b> • ΔGaji ${sw.deltaSal >= 0 ? '+' : ''}${fmtM(sw.deltaSal)}</div>`
-      : '<span class="c-muted">-</span>';
+         <div class="c-muted" style="font-size:10px">Net: <b class="mono">${it.netCostIfSwap <= 0 ? '+' + fmtM(-it.netCostIfSwap) : '-' + fmtM(it.netCostIfSwap)}</b> • ΔGaji ${sw.deltaSal >= 0 ? '+' : ''}${fmtM(sw.deltaSal)} ${winTagHtml}</div>`
+      : (winTagHtml ? `<div>${winTagHtml}</div>` : '<span class="c-muted">-</span>');
 
     const pidJs = escJs(pid);
     const repIdJs = sw ? escJs(sw.p.id) : '';
