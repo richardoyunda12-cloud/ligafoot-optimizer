@@ -332,32 +332,41 @@
       }
     }
 
-    // #22553 & #22557: Iterasi tobj.playerIds terlebih dahulu (menggabungkan staticPlayers[pid] + dynMap.get(pid))
-    // Penting untuk klub AI di compactTeams yang pemainnya tidak mengalami perubahan dinamis!
+    // Buat peta extraRows (pemain regens / promosi akademi / transfer tambahan) SEBELUM iterasi playerIds
+    const extraMap = new Map();
+    for (const row of (Array.isArray(tobj.extraRows) ? tobj.extraRows : [])) {
+      const [pid, d] = U.parseExtraRow(row);
+      if (pid && d) extraMap.set(pid, d);
+    }
+
+    // #22553 & #22557: Iterasi tobj.playerIds terlebih dahulu (menggabungkan extraRows + playerDynamic + staticPlayers[pid])
+    // Penting untuk klub AI di compactTeams yang pemainnya tidak mengalami perubahan dinamis,
+    // sekaligus menjaga atribut pemain regen/akademi yang tersimpan di extraRows!
     if (Array.isArray(tobj.playerIds)) {
       for (const rawPid of tobj.playerIds) {
         const pid = String(rawPid || '').trim();
         if (!pid || seenIds.has(pid)) continue;
-        const dObj = dynMap.get(pid) || { id: pid };
+        const ex = extraMap.get(pid);
+        const dy = dynMap.get(pid);
+        const dObj = (ex && dy) ? { ...ex, ...dy, id: pid } : (dy || ex || { id: pid });
         seenIds.add(pid);
         roster.push(buildPlayerRecord(dObj, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
       }
     }
 
-    // Tambahkan entri playerDynamic yang mungkin belum ada di playerIds
+    // Tambahkan entri playerDynamic atau extraRows yang mungkin belum ada di playerIds
     for (const [pid, dObj] of dynMap.entries()) {
+      if (!seenIds.has(pid)) {
+        const ex = extraMap.get(pid);
+        seenIds.add(pid);
+        roster.push(buildPlayerRecord(ex ? { ...ex, ...dObj, id: pid } : dObj, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
+      }
+    }
+
+    for (const [pid, dObj] of extraMap.entries()) {
       if (!seenIds.has(pid)) {
         seenIds.add(pid);
         roster.push(buildPlayerRecord(dObj, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
-      }
-    }
-
-    // Tambahkan extraRows (pemain regens / promosi akademi / transfer tambahan)
-    for (const row of (Array.isArray(tobj.extraRows) ? tobj.extraRows : [])) {
-      const [pid, d] = U.parseExtraRow(row);
-      if (pid && !seenIds.has(pid)) {
-        seenIds.add(pid);
-        roster.push(buildPlayerRecord(d, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv));
       }
     }
 
