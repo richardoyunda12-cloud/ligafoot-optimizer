@@ -391,7 +391,7 @@ function renderAutoGuard() {
 }
 
 function renderActionPlaybook() {
-  const agWrap = document.getElementById('t1-auto-guard');
+  const agWrap = document.getElementById('t1-autoguard-wrap');
   if (!agWrap || !agWrap.parentNode) return;
   let pbEl = document.getElementById('t1-playbook');
   if (!pbEl) {

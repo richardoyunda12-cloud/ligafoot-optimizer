@@ -496,14 +496,13 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
 
   const styleCmpRows = (m && Array.isArray(m.styleCompare) && m.styleCompare.length) ? `
     <div class="tbl-wrap" style="margin-top:5px;margin-bottom:6px">
-      <table style="font-size:10.5px">
-        <thead><tr><th>Gaya Main (#48031)</th><th>W / D / L</th><th>xPts</th><th>xG</th><th>Ball</th></tr></thead>
+      <table style="font-size:10px">
+        <thead><tr><th>Gaya (#48031)</th><th>W / D / L</th><th>xPts</th><th>xG (Ball)</th></tr></thead>
         <tbody>${m.styleCompare.map(sc => `<tr class="${sc.isRec ? 'hl-user' : ''}">
-          <td><b>${esc(sc.style)}</b>${sc.isRec ? ' <span class="badge b-good">✓</span>' : ''}</td>
-          <td class="mono"><b class="c-green">${sc.winPct}%</b> / <span class="c-amber">${sc.drawPct}%</span> / <span class="c-red">${sc.lossPct}%</span></td>
+          <td><b>${esc(sc.style === 'Counter-Attack' ? 'Counter' : sc.style)}</b>${sc.isRec ? ' <span class="badge b-good">✓</span>' : ''}</td>
+          <td class="mono"><b class="c-green">${sc.winPct}</b>/<span class="c-amber">${sc.drawPct}</span>/<span class="c-red">${sc.lossPct}%</span></td>
           <td class="mono"><b>${sc.xPts}</b></td>
-          <td class="mono">${sc.xGF}–${sc.xGA}</td>
-          <td class="mono">${sc.possPct}%</td>
+          <td class="mono">${sc.xGF}–${sc.xGA} <span class="c-muted">(${sc.possPct}%)</span></td>
         </tr>`).join('')}</tbody>
       </table>
     </div>` : '';
