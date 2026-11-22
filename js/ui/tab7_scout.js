@@ -693,6 +693,8 @@ function updateScoutFilterSummary() {
   if (os) tags.push('Stack OK');
   const af = (document.getElementById('s-afford') || {}).checked;
   if (!af) tags.push('Semua Harga');
+  const reachEl = document.getElementById('s-only-reach');
+  if (reachEl && !reachEl.checked) tags.push('Termasuk Refuse');
   const badgeHtml = tags.length
     ? ` <span class="badge b-good" style="margin-left:4px">${esc(tags.join(' · '))}</span>`
     : '';
