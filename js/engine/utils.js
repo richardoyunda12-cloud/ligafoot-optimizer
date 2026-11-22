@@ -132,18 +132,23 @@
     return false;
   }
 
-  // Bytecode #21442 teamLevelOf: DIV_LEVEL=[1, 10, 6, 3, 2, 1], max(divLvl, REP_LEVEL[repLvl])
+  // Bytecode #21510 clubLevelFromReputation + #21571 baseTeamLevelOf + #21572 teamLevelOf
   function teamLevelOf(team, division = 1, staticLevel = null) {
-    const divTbl = [1, 10, 6, 3, 2, 1];
-    const repTbl = [1, 2, 4, 7, 9, 10];
-    const divIdx = clamp(safeInt((team && team.division !== undefined) ? team.division : division, 1), 0, 5);
-    const divLv = divTbl[divIdx] || 1;
-    const rawRep = safeNum(team && team.reputation, safeNum(staticLevel, 0));
-    if (rawRep > 0) {
-      const rLv = reputationLevel(rawRep);
-      return Math.max(divLv, repTbl[clamp(rLv, 0, 5)] || 1);
+    const rawBonus = Number(team && team.levelBonus);
+    const levelBonus = Number.isFinite(rawBonus) ? Math.max(0, Math.round(rawBonus)) : 0;
+
+    const rawTeamLv = Number(team && team.level);
+    const rawStatLv = Number(staticLevel);
+    let base = 0;
+    if (Number.isFinite(rawTeamLv) && rawTeamLv > 0) {
+      base = Math.min(25, rawTeamLv);
+    } else if (Number.isFinite(rawStatLv) && rawStatLv > 0) {
+      base = Math.min(25, rawStatLv);
+    } else {
+      const rawRep = safeNum(team && (team.reputation !== undefined ? team.reputation : team.rep), 50);
+      base = Math.max(1, Math.round(clamp(rawRep, 0, 100) * 0.23));
     }
-    return divLv;
+    return Math.min(25, base + levelBonus);
   }
 
   // Bytecode #21490 getForeignLimit

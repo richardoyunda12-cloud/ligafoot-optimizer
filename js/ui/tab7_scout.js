@@ -21,7 +21,7 @@ function isBosmanTarget(r) {
 function isBlockedTransfer(r) {
   if (!r) return false;
   const fl = String(r[18] || '');
-  return fl.includes('REFUSE_DIST') || fl.includes('REFUSE_LVL') || fl.includes('KEY_LOCK') || (fl.includes('REFUSE') && !fl.includes('PERSUADE'));
+  return fl.includes('REFUSE_DIST') || fl.includes('REFUSE_LVL') || fl.includes('KEY_LOCK') || fl.includes('PERSUADE') || fl.includes('REFUSE');
 }
 
 function getEffectiveBuyCost(r) {
