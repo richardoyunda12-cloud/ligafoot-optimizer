@@ -156,9 +156,9 @@ function renderMoodTable() {
     sumEl.innerHTML = `
       <div class="t3-mini-strip" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px">
         <div class="t3-mini-card">
-          <div class="kpi-lbl">Unhappy (≥3 = Penalti)</div>
-          <div class="kpi-val mono ${unhCnt >= 3 ? 'c-red' : (unhCnt > 0 ? 'c-amber' : 'c-green')}">${unhCnt}</div>
-          <div class="kpi-sub">${unhCnt >= 3 ? `Penalti -${D.meta.lockerHitPct}%!` : 'Aman (<3 org)'}</div>
+          <div class="kpi-lbl">Unhappy (≥4 = Penalti)</div>
+          <div class="kpi-val mono ${unhCnt >= 4 ? 'c-red' : (unhCnt > 0 ? 'c-amber' : 'c-green')}">${unhCnt}</div>
+          <div class="kpi-sub">${unhCnt >= 4 ? `Penalti -${D.meta.lockerHitPct}%!` : 'Aman (<4 org)'}</div>
         </div>
         <div class="t3-mini-card">
           <div class="kpi-lbl">Rawan Menit</div>
@@ -171,7 +171,7 @@ function renderMoodTable() {
           <div class="kpi-sub">0% risiko unhappy</div>
         </div>
       </div>
-      <div class="c-muted" style="font-size:11px">Kuota bytecode #21546 (aktif setelah ≥6 laga): <b>40%</b> Starter Top-11 / roleSore · <b>25%</b> Rotasi #12–#18 · <b>8%</b> U-19. Set cadangan (#12 ke bawah) ke <b>reserve</b> agar 100% kebal!</div>`;
+      <div class="c-muted" style="font-size:11px">Kuota bytecode #21465 (aktif setelah ≥6 laga): <b>40%</b> Top-11 (1 GK + 10 Outfield) / <code>role=starter</code> · <b>25%</b> <code>role=rotation</code> · <b>8%</b> Cadangan #12–#18 (&gt;19th) / <code>role=youth</code>. Usia ≤19th (auto) &amp; <code>reserve</code> kebal 0%!</div>`;
   }
 
   const mRows = [...roster].sort(

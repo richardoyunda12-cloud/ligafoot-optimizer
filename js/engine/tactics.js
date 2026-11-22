@@ -452,7 +452,7 @@
     }
     if (ckRanked[0].id !== autoCk[0].id) {
       warnings.push(
-        `Corner (#21823): Set manual ke ${ckRanked[0].name} (${ckRanked[0].s1}/${ckRanked[0].s2}) karena CRU di slot 1 memberi +3% konversi (slot 2 hanya +1.5%).`
+        `Corner (#21823): Set manual ke ${ckRanked[0].name} (${U.skillEn(ckRanked[0].s1)}/${U.skillEn(ckRanked[0].s2)}) karena CRS di slot 1 memberi +3% konversi (slot 2 hanya +1.5%).`
       );
     }
     if ((capRanked[0].age || 0) < 28) {
@@ -1102,10 +1102,10 @@
     }
 
     let aiFocus = 'Center';
-    let focusReason = `Pemain sayap (LD/LE/PD/PE) ber-skill CRS hanya ${wingCruCount} (< 2 di #24016) → AI otomatis fokus Center`;
+    let focusReason = `Pemain sayap (RB/LB/RW/LW) ber-skill CRS hanya ${wingCruCount} (< 2 di #24016) → AI otomatis fokus Center`;
     if (wingCruCount >= 2) {
       aiFocus = 'Wings';
-      focusReason = `Lawan punya ${wingCruCount} pemain LD/LE/PD/PE ber-skill CRS (≥ 2 di #24016: ${wingNames.join(', ')}) → AI otomatis fokus Wings`;
+      focusReason = `Lawan punya ${wingCruCount} pemain RB/LB/RW/LW ber-skill CRS (≥ 2 di #24016: ${wingNames.join(', ')}) → AI otomatis fokus Wings`;
     }
 
     let counterTip = 'Balanced';
