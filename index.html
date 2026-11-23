@@ -448,7 +448,7 @@
           <div class="mobile-filter-body">
             <div class="pill-row">
               <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="syncScoutDesktopToMob();resetScoutLimitAndRender()" />
-              <select id="s-pos" onchange="syncScoutDesktopToMob();resetScoutLimitAndRender()">
+              <select id="s-pos" onchange="onScoutPosSelectChange(this.value)">
                 <option value="">Semua Posisi</option>
                 <option value="G">GK — Kiper</option><option value="LD">RB — Bek Kanan</option><option value="LE">LB — Bek Kiri</option>
                 <option value="ZD">RCB — Bek Tengah Kanan</option><option value="ZE">LCB — Bek Tengah Kiri</option>
@@ -485,6 +485,7 @@
               <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-trap" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> Sembunyikan TRAP</label>
               <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input id="s-hide-inj" type="checkbox" checked onchange="resetScoutLimitAndRender()" /> Sembunyikan Cedera</label>
             </div>
+            <div id="s-pos-chips" class="pill-row" style="margin-bottom:4px;gap:4px"></div>
           </div>
         </details>
 

@@ -727,11 +727,50 @@ function renderShortlistTab() {
 }
 
 // ==================== SINKRONISASI 2 ARAH FILTER MOBILE <-> DESKTOP ====================
+let scoutPosSet = new Set();
+
+function renderScoutPosChips() {
+  const el = document.getElementById('s-pos-chips');
+  if (!el) return;
+  const defs = [
+    ['', 'Semua Pos'], ['G', 'GK'], ['LD', 'RB'], ['LE', 'LB'],
+    ['ZD', 'RCB'], ['ZE', 'LCB'], ['VOL', 'CDM'], ['MC', 'CM'],
+    ['MD', 'RM'], ['ME', 'LM'], ['MA', 'CAM'], ['PD', 'RW'],
+    ['PE', 'LW'], ['SA', 'SS'], ['ATA', 'ST'],
+  ];
+  el.innerHTML = defs.map(([k, lbl]) => {
+    const act = k === '' ? scoutPosSet.size === 0 : scoutPosSet.has(k);
+    return `<button type="button" class="qchip ${act ? 'active' : ''}" onclick="toggleScoutPos('${k}')">${lbl}</button>`;
+  }).join('');
+}
+
+function toggleScoutPos(code) {
+  if (!code) scoutPosSet.clear();
+  else if (scoutPosSet.has(code)) scoutPosSet.delete(code);
+  else scoutPosSet.add(code);
+  const single = scoutPosSet.size === 1 ? Array.from(scoutPosSet)[0] : '';
+  const sp = document.getElementById('s-pos');
+  const spm = document.getElementById('s-pos-mob');
+  if (sp) sp.value = single;
+  if (spm) spm.value = single;
+  scoutPageLimit = 80;
+  renderScout();
+}
+
+function onScoutPosSelectChange(val) {
+  scoutPosSet.clear();
+  if (val) scoutPosSet.add(val);
+  syncScoutDesktopToMob();
+  resetScoutLimitAndRender();
+}
+
 function syncScoutQuick(kind, val) {
   if (kind === 'q') {
     const el = document.getElementById('s-q');
     if (el) el.value = val;
   } else if (kind === 'pos') {
+    scoutPosSet.clear();
+    if (val) scoutPosSet.add(val);
     const el = document.getElementById('s-pos');
     if (el) el.value = val;
   } else if (kind === 'sort') {
@@ -786,6 +825,7 @@ function updateScoutFilterSummary() {
   if (!sum) return;
   const tags = [];
   if (scoutPreset !== 'ALL') tags.push(scoutPreset);
+  if (scoutPosSet.size > 0) tags.push('Pos ' + Array.from(scoutPosSet).map(fmtPos).join('+'));
   const foot = (document.getElementById('s-foot') || {}).value;
   if (foot) tags.push('Kaki ' + fmtFoot(foot));
   const ma = (document.getElementById('s-max-age') || {}).value;
@@ -813,6 +853,7 @@ function applyScoutPreset(preset) {
   const setChk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v; };
   setVal('s-q', '');
   setVal('s-pos', '');
+  scoutPosSet.clear();
   setVal('s-foot', '');
   setVal('s-max-age', preset === 'FLIP' ? '21' : '');
   setVal('s-min-f', '');
@@ -849,7 +890,8 @@ function getFilteredScout() {
     const flags = r[18] || '';
     if (q && !(r[0].toLowerCase().includes(q) || r[16].toLowerCase().includes(q))) continue;
     if (onlyReach && isBlockedTransfer(r) && scoutPreset !== 'SHORTLIST') continue;
-    if (pos && r[1] !== pos) continue;
+    if (scoutPosSet.size > 0 && !scoutPosSet.has(r[1])) continue;
+    else if (scoutPosSet.size === 0 && pos && r[1] !== pos) continue;
     if (foot && r[3] !== foot) continue;
     if (!isNaN(maxAge) && r[2] > maxAge) continue;
     if (!isNaN(minF) && r[5] < minF) continue;
@@ -907,6 +949,7 @@ function getFilteredScout() {
 function renderScout() {
   syncScoutDesktopToMob();
   renderScoutPresetChips();
+  renderScoutPosChips();
   updateScoutFilterSummary();
 
   const items = getFilteredScout();
