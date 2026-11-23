@@ -406,10 +406,17 @@ function renderTab8Extras() {
     if (tac.marking) tacParts.push(`Marking: <b>${esc(tac.marking)}</b>`);
     if (tac.attackFocus) tacParts.push(`Fokus: <b>${esc(tac.attackFocus)}</b>`);
 
+    const rosterIds = new Set((D.roster || []).map(p => p.id));
+    const scoutIds = new Set((D.scoutPool || []).map(r => r[19]));
     const natMap = new Map();
+    (D.nation.lineup || []).forEach(p => {
+      const src = rosterIds.has(p.id) ? 'roster' : (scoutIds.has(p.id) ? 'scout' : '');
+      natMap.set(p.id, { ...p, _called: true, _src: src, _club: p.clubName || '-' });
+    });
     (D.roster || []).forEach(p => {
       if (String(p.nationality || '').toUpperCase() === iso) {
-        natMap.set(p.id, { ...p, _src: 'roster', _club: D.meta.clubName || 'Klubmu' });
+        const prev = natMap.get(p.id);
+        natMap.set(p.id, { ...p, _called: !!(prev && prev._called), _src: 'roster', _club: D.meta.clubName || 'Klubmu' });
       }
     });
     (D.scoutPool || []).forEach(r => {
@@ -418,10 +425,11 @@ function renderTab8Extras() {
           id: r[19], name: r[0], pos: r[1], age: r[2], foot: r[3], nationality: r[4],
           force: r[5], effForce: r[5], potCap: r[7], s1: r[8], s2: r[9], stackPct: r[10], nonStack: !!r[11], energy: 100,
         };
-        natMap.set(r[19], { ...sp, _src: 'scout', _club: r[16] || '-' });
+        natMap.set(r[19], { ...sp, _called: false, _src: 'scout', _club: r[16] || '-' });
       }
     });
     const natPool = Array.from(natMap.values()).sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
+    const natMatches = Array.isArray(D.nation.upcomingMatches) ? D.nation.upcomingMatches : [];
 
     let bestNatXi = null;
     const Eng = window.LFEngine;
@@ -436,16 +444,20 @@ function renderTab8Extras() {
     natHtml += `
       <div class="mb-8">Melatih Timnas: <span class="badge b-good">${esc(iso)}</span> · Skuad dipanggil: <b class="mono">${D.nation.squadCount || 0}</b> · Pool Terdeteksi: <b class="mono">${natPool.length}</b> pemain</div>
       ${tacParts.length ? `<div class="c-muted mb-8" style="font-size:11.5px">Taktik Timnas: ${tacParts.join(' · ')}</div>` : ''}
+      ${natMatches.length ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:8px;font-size:11.5px">
+        <div><b>📅 Jadwal Timnas ${esc(iso)} Mendatang</b> <span class="c-muted" style="font-size:10.5px">(Dipisah dari War Room Klub)</span></div>
+        <div class="mono" style="font-size:11px;margin-top:4px">${natMatches.map(m => `<span class="badge b-info" style="margin:2px 4px 2px 0">${esc(m.compName)}${m.roundName ? ' · ' + esc(m.roundName) : ''}: <b>${esc(m.home)} vs ${esc(m.away)}</b> (Hari ${m.day})</span>`).join('')}</div>
+      </div>` : `<div class="c-muted mb-8" style="font-size:11px">Belum ada jadwal pertandingan Timnas mendatang di kalender aktif (jadwal Timnas dipisah dari War Room Klub).</div>`}
       ${bestNatXi ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:8px;font-size:11.5px">
         <div><b>🏆 Rekomendasi Best XI Timnas ${esc(iso)}:</b> <span class="badge b-good mono">${esc(fmtForm(bestNatXi.formation))} · Avg ${bestNatXi.avgScore}</span></div>
         <div class="c-muted mono" style="font-size:10.5px;margin-top:4px">${bestNatXi.xi.map(x => `${fmtPos(x.slot)}:${x.player.name}(${x.player.force})`).join(' · ')}</div>
       </div>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:8px">
-        <b>Top-23 Pemain Dunia Berpaspor ${esc(iso)} (Klik → Profil):</b>
+        <b>Skuad Timnas & Top Pemain Berpaspor ${esc(iso)}:</b>
         <div class="tbl-wrap tbl-sticky mt-8" style="max-height:320px;overflow-y:auto"><table>
           <thead><tr><th>Pemain</th><th>Pos</th><th>Usia</th><th>Force</th><th>Skill Stack</th><th>Klub</th></tr></thead>
-          <tbody>${natPool.slice(0, 23).map(p => `<tr>
-            <td><a class="clickable-name" onclick="openPlayerDrawer('${p._src}','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>${p._src === 'roster' ? ' <span class="badge b-good">KLUBMU</span>' : ''}</td>
+          <tbody>${natPool.slice(0, 26).map(p => `<tr>
+            <td>${p._src ? `<a class="clickable-name" onclick="openPlayerDrawer('${p._src}','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>` : `<b>${esc(p.name)}</b>`}${p._called ? ' <span class="badge b-info">DIPANGGIL</span>' : ''}${p._src === 'roster' ? ' <span class="badge b-good">KLUBMU</span>' : ''}</td>
             <td class="mono"><b>${fmtPos(p.pos)}</b></td>
             <td class="mono">${p.age}</td>
             <td class="mono"><b class="c-green">${p.force}</b></td>

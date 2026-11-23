@@ -919,11 +919,63 @@
       }));
 
     const natId = save.userNationId || save.nationalTeamId || save.nationId || '';
-    const nationInfo = natId ? {
-      iso: natId,
-      squadCount: Array.isArray(save.nationalTeamLineup) ? save.nationalTeamLineup.length : 0,
-      tactics: save.nationalTeamTactics || {},
-    } : null;
+    const natIso = natId ? String(natId).toUpperCase() : '';
+    let nationInfo = null;
+    if (natIso) {
+      const rawLineup = Array.isArray(save.nationalTeamLineup) ? save.nationalTeamLineup : [];
+      const clubNameById = {};
+      const dynById = {};
+      rawLineup.forEach(rp => {
+        if (rp && rp.id) {
+          dynById[rp.id] = rp;
+          clubNameById[rp.id] = rp.clubName || '';
+        }
+      });
+      const parsedLineup = rawLineup.length
+        ? R.extractTeamRoster({ playerDynamic: dynById }, staticPlayers, false, natIso, natIso, natIso).roster
+            .map(p => ({ ...p, clubName: clubNameById[p.id] || p.teamName || '-' }))
+        : [];
+      const natMatches = [];
+      const wComps = (save.world && save.world.comps && typeof save.world.comps === 'object') ? save.world.comps : {};
+      for (const [cid, comp] of Object.entries(wComps)) {
+        if (!comp || typeof comp !== 'object' || comp.finished) continue;
+        if (!String(cid).startsWith('nat:') && comp.kind !== 'nations') continue;
+        const cname = U.translateCompName(comp.name || cid, cid);
+        for (const st of (comp.stages || [])) {
+          if (!st || st.done) continue;
+          for (const rnd of (st.rounds || [])) {
+            if (!rnd || typeof rnd !== 'object') continue;
+            const day = U.safeInt((rnd.day !== undefined && rnd.day !== null) ? rnd.day : rnd.d, 0);
+            const rName = U.translateRoundName(rnd.name || st.name || '');
+            for (const fx of (rnd.matches || [])) {
+              if (!fx || fx.played || (fx.homeGoals !== undefined && fx.homeGoals !== null)) continue;
+              const h = String(fx.home || fx.homeId || fx.h || '').toUpperCase();
+              const a = String(fx.away || fx.awayId || fx.a || '').toUpperCase();
+              if (h === natIso || a === natIso) {
+                natMatches.push({
+                  compId: cid,
+                  compName: cname,
+                  roundName: rName,
+                  day,
+                  home: h,
+                  away: a,
+                  isHome: h === natIso,
+                  oppIso: h === natIso ? a : h,
+                });
+              }
+            }
+          }
+        }
+      }
+      natMatches.sort((a, b) => a.day - b.day);
+      nationInfo = {
+        iso: natIso,
+        squadCount: rawLineup.length,
+        tactics: save.nationalTeamTactics || {},
+        lineup: parsedLineup,
+        upcomingMatches: natMatches.slice(0, 6),
+      };
+    }
 
     const standingsRows = [];
     const rawStandings = Array.isArray(save.standings) ? save.standings.slice(0, 24) : [];
