@@ -385,4 +385,63 @@ function renderTab3Pitch() {
       </div>`;
     }
   }
+
+  // Blok Baru v8.5.0: Top-3 Pengganti Langsung di Titik Lemah XI (dari Pasar Global)
+  let weakBox = document.getElementById('t3-weak-upgrades');
+  if (!weakBox && absBox && absBox.parentNode) {
+    weakBox = document.createElement('div');
+    weakBox.id = 't3-weak-upgrades';
+    absBox.parentNode.appendChild(weakBox);
+  }
+  if (weakBox && Array.isArray(D.scoutPool) && D.scoutPool.length && res.xi && res.xi.length) {
+    const sortedWeak = [...res.xi].sort((a, b) => a.score - b.score);
+    const weakest = sortedWeak[0];
+    if (weakest) {
+      const wSlot = weakest.slot;
+      const wForce = weakest.p ? weakest.p.force : Math.round(weakest.score);
+      const budgetNow = (D.meta && D.meta.budget) || 0;
+      const instCap = Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30));
+      const cands = [];
+      for (const r of D.scoutPool) {
+        if (r[1] !== wSlot && !(wSlot === 'A' && r[1] === 'ATA')) continue;
+        const fl = String(r[18] || '');
+        if (fl.includes('REFUSE') || fl.includes('PERSUADE') || fl.includes('KEY_LOCK') || fl.includes('TRAP') || fl.includes('INJ')) continue;
+        if (r[5] <= wForce) continue;
+        const isBos = fl.includes('BOSMAN');
+        const cost = isBos ? 0 : (r[14] || 0);
+        const dp25 = Math.round(cost * 0.25);
+        const inst24 = Math.round((cost - dp25) / 24);
+        const canCash = cost <= budgetNow;
+        const canInst = !canCash && dp25 <= budgetNow && inst24 <= instCap;
+        if (!isBos && !canCash && !canInst) continue;
+        cands.push({ r, isBos, cost, dp25, inst24, canInst, dF: r[5] - wForce });
+      }
+      cands.sort((a, b) => (b.dF - a.dF) || (a.cost - b.cost));
+      const top3 = cands.slice(0, 3);
+      if (top3.length) {
+        weakBox.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;font-size:11.5px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+            <div><b>🎯 Rekomendasi Pengganti Titik Lemah XI:</b> <span class="badge b-warn">${esc(fmtPos(wSlot))} ${esc(weakest.p.name)} (F${wForce})</span></div>
+            <span class="c-muted" style="font-size:10.5px">Target Pasar Global yang mau pindah &amp; masuk kas / DP 25%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
+            ${top3.map(c => {
+              const r = c.r;
+              const pidJs = escJs(r[19]);
+              const tag = c.isBos ? '<span class="badge b-good">🆓 Bosman 0€</span>' : (c.canInst ? `<span class="badge b-info">💳 DP ${fmtM(c.dp25)}</span>` : `<span class="badge b-good">${fmtM(c.cost)}</span>`);
+              return `<div style="padding:7px 9px;background:var(--bg1);border:1px solid var(--border);border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:6px">
+                <div style="min-width:0">
+                  <div><a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')"><b>${esc(r[0])}</b></a> <span class="c-green mono">+${c.dF}F</span></div>
+                  <div class="c-muted mono" style="font-size:10px">F${r[5]}→${r[7]} · ${r[2]}th · ${tag}</div>
+                </div>
+                <button type="button" class="btn btn-sm btn-green" onclick="toggleCartIn('${pidJs}', ${c.isBos ? 'true' : 'false'})">+Beli</button>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      } else {
+        weakBox.innerHTML = '';
+      }
+    }
+  }
 }

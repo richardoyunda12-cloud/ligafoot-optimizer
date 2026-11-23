@@ -667,6 +667,7 @@ function openPlayerDrawer(kind, id) {
         <h3>💸 Estimasi Harga &amp; Flip ROI</h3>
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(r[13])}</span></div>
         <div class="drawer-kv"><span>Estimasi Beli Riil</span><b class="mono c-amber">${fmtM(r[14])}</b></div>
+        ${r[14] > 0 && r[15] > 180 ? `<div class="drawer-kv"><span>Opsi Cicilan DP 25% (OTA)</span><span class="mono c-sky">DP <b>${fmtM(Math.round(r[14] * 0.25))}</b> · ${fmtM(Math.round(r[14] * 0.75 / 24))}/bln (24b)</span></div>` : ''}
         <div class="drawer-kv"><span>Gaji Kontrak 3 Tahun (-5%)</span><b class="mono">${fmtM(Math.round(r[12] * 0.95))}/bln</b></div>
         ${it ? `
         <div class="drawer-kv"><span>Proyeksi Jual (1–2 Musim)</span><b class="mono c-green">${fmtM(it.estResale)} (+${it.projGain}F)</b></div>

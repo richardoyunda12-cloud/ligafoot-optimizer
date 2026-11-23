@@ -244,11 +244,17 @@ function enrichScoutRow(r, cm) {
 
   const remCash = cm.projBudget;
   const netCostIfSwap = swap ? swap.netCost : estBuy;
+  const dp25 = isBosman ? 0 : Math.round(estBuy * 0.25);
+  const inst12 = isBosman ? 0 : Math.round((estBuy - dp25) / 12);
+  const inst24 = isBosman ? 0 : Math.round((estBuy - dp25) / 24);
+  const instCap = Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30));
+
   let affordCode = 'EXP';
   // Target BOSMAN selalu bisa direkrut 0€ lewat Pra-Kontrak!
   if (isBosman) affordCode = 'BOSMAN';
   else if (estBuy <= remCash) affordCode = 'CASH';
   else if (swap && !swap.p.injured && !cartOut[swap.p.id] && netCostIfSwap <= remCash) affordCode = 'SWAP';
+  else if (dp25 <= remCash && inst24 <= instCap) affordCode = 'INST';
 
   const dEff = swap ? swap.deltaEff : (r[5] - D.bestXi.avgScore);
   const effCostForScore = isBosman ? 0 : Math.max(0, netCostIfSwap);
@@ -265,7 +271,7 @@ function enrichScoutRow(r, cm) {
 
   return {
     r, flags, isBosman, estBuy, sal3y, estResale, projGain, estProfit, roiPct,
-    fillsHole, isForeign, swap, affordCode, netCostIfSwap,
+    fillsHole, isForeign, swap, affordCode, netCostIfSwap, dp25, inst12, inst24, instCap,
     upgradeScore: +upgradeScore.toFixed(1),
     smartScore,
   };
@@ -834,6 +840,7 @@ function renderScout() {
     if (it.affordCode === 'BOSMAN') fitBadge = '<span class="badge b-good">🆓 0€</span>';
     else if (it.affordCode === 'CASH') fitBadge = '<span class="badge b-good">✓ KAS</span>';
     else if (it.affordCode === 'SWAP') fitBadge = '<span class="badge b-info">⇄ SWAP</span>';
+    else if (it.affordCode === 'INST') fitBadge = '<span class="badge b-info" title="Cicilan 24 bln (OTA TRANSFER_INSTALLMENTS): DP 25%">💳 DP 25%</span>';
 
     const wi = it.winImpact;
     const winTagHtml = wi
@@ -875,7 +882,7 @@ function renderScout() {
       </td>
       <td class="mono">
         <b>${it.isBosman ? '<span class="c-green">0€*</span>' : fmtM(it.estBuy)}</b> ${fitBadge}
-        <div class="c-muted" style="font-size:10px">${it.isBosman ? 'Tebus ' + fmtM(it.estBuy) + ' · ' : ''}Gaji ${fmtM(it.sal3y)}</div>
+        <div class="c-muted" style="font-size:10px">${it.isBosman ? 'Tebus ' + fmtM(it.estBuy) + ' · ' : (it.affordCode === 'INST' ? `DP ${fmtM(it.dp25)} (${fmtM(it.inst24)}/b) · ` : '')}Gaji ${fmtM(it.sal3y)}</div>
       </td>
       <td>${swCell}</td>
       <td class="mono">
@@ -1032,6 +1039,13 @@ function renderCart() {
     const extraForeignWarn = (projForeign > D.meta.foreignCap)
       ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual 1 pemain asing lama</span>`
       : `<span class="badge b-good">✓ Komposisi Asing &amp; Kas Sehat</span>`;
+    const dp25Tot = Math.round(cashOut * 0.25);
+    const inst24Tot = Math.round((cashOut - dp25Tot) / 24);
+    const instCapTot = Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30));
+    const estSurplus = (D.cashflow && typeof D.cashflow.estProjectedNet === 'number') ? D.cashflow.estProjectedNet : null;
+    const instHtml = cashOut > 0
+      ? `<span class="badge ${inst24Tot <= instCapTot ? 'b-info' : 'b-warn'} mono" title="Simulasi TRANSFER_INSTALLMENTS (DP 25% + 24 bln)">💳 Cicil DP 25%: ${fmtM(dp25Tot)} + ${fmtM(inst24Tot)}/bln${estSurplus !== null ? ` (Sisa Net/bln: ${fmtM(estSurplus - inst24Tot - salDelta)})` : ''}</span>`
+      : '';
 
     let matchImpactHtml = '';
     if (outCount > 0 || inCount > 0) {
@@ -1089,6 +1103,7 @@ function renderCart() {
           Gaji/Bln: <b>${fmtM(D.meta.payroll + salDelta)}</b>
         </div>
         ${extraForeignWarn}
+        ${instHtml}
       </div>${matchImpactHtml}`;
   }
 

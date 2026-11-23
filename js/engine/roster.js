@@ -290,17 +290,23 @@
     if (isTop5Arab && p.age >= p.sellWarnAge) {
       return { action: 'JUAL ARAB 1.4x + COUNTER +40%', cls: 'b-gold' };
     }
+    if (rankIdx < 5 && p.age === 25 && p.force >= 42) {
+      return { action: 'TAHAN S.D. 26TH (BUKA ARAB 2.5–3x)', cls: 'b-gold' };
+    }
     if (p.isDeclining && rankIdx >= 11) {
       return { action: 'JUAL SEGERA (FASE REGRESI)', cls: 'b-red' };
     }
     if (p.isTrap && rankIdx >= 14) {
       return { action: 'JUAL FLIP (TRAP POTCAP)', cls: 'b-amber' };
     }
+    if (p.force >= p.potCap && p.age >= 24 && rankIdx >= 11 && !p.isGem) {
+      return { action: 'MENTOK POTCAP — JUAL (+40% CTR)', cls: 'b-amber' };
+    }
     if (mood === 'unhappy' && rankIdx >= 11) {
       return { action: 'SET ROLE RESERVE / ROTASI', cls: 'b-amber' };
     }
-    if (p.isGem && (p.potCap - p.force) >= 6) {
-      return { action: 'SLOT SPECIAL TRAINING', cls: 'b-cyan' };
+    if ((p.isGem && (p.potCap - p.force) >= 6) || ((p.potCap - p.force) >= 6 && p.age <= 22)) {
+      return { action: `SLOT TRAINING (+${p.potCap - p.force}F RUANG)`, cls: 'b-cyan' };
     }
     if (rankIdx < 11) {
       return { action: 'INTI (STARTER XI)', cls: 'b-green' };
