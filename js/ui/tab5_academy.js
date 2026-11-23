@@ -125,39 +125,38 @@ function renderTab5() {
   }
   if (ysBox) {
     const rawYs = D.youthScoutTargets || [];
-    const curYsMode = window._ysFilterMode || 'ALL';
-    const ysFiltered = curYsMode === 'LOCAL'
-      ? rawYs.filter(x => x.isLocal)
-      : (curYsMode === 'FOREIGN' ? rawYs.filter(x => !x.isLocal) : rawYs);
-    const ysList = ysFiltered.slice(0, 15);
+    const ysLoc = rawYs.filter(x => x.isLocal).slice(0, 10);
+    const ysFrg = rawYs.filter(x => !x.isLocal).slice(0, 10);
+    const renderYsRows = (arr) => arr.length ? arr.map(t => `<tr>
+      <td><a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a></td>
+      <td class="mono"><b>${fmtPos(t.pos)}</b> · ${t.age}th · ${fmtFoot(t.foot)}</td>
+      <td class="mono"><b>${t.force}</b>→<b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
+      <td class="mono c-sky"><b>+${t.youthScoutGap}</b></td>
+      <td><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
+      <td class="mono c-amber"><b>${fmtM(t.scoutPrice)}</b></td>
+      <td>${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
+    </tr>`).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat.</td></tr>';
+
     ysBox.innerHTML = rawYs.length ? `
       <div style="border-top:1px solid var(--border);padding-top:12px">
-        <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
-          <div>
-            <h3 style="margin:0">🎓 Radar Olheiro da Base (#24197 — Bajak U-21 Rival)</h3>
-            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh (potential - force) ≥10 yang memenuhi syarat Youth Scout instan (kuota maks 2/musim; biaya scout -25% di CT Lv 3+).</div>
-          </div>
-          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-            <button type="button" class="qchip ${curYsMode === 'ALL' ? 'active' : ''}" onclick="window._ysFilterMode='ALL';renderAcademy()">Semua (${rawYs.length})</button>
-            <button type="button" class="qchip ${curYsMode === 'LOCAL' ? 'active' : ''}" onclick="window._ysFilterMode='LOCAL';renderAcademy()">Lokal (${rawYs.filter(x => x.isLocal).length})</button>
-            <button type="button" class="qchip ${curYsMode === 'FOREIGN' ? 'active' : ''}" onclick="window._ysFilterMode='FOREIGN';renderAcademy()">Luar Negeri (${rawYs.filter(x => !x.isLocal).length})</button>
-          </div>
+        <div class="mb-8">
+          <h3 style="margin:0">🎓 Radar Olheiro da Base (#24197 — Bajak U-21 Rival)</h3>
+          <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh ≥10 (kuota maks 2/musim; biaya scout -25% di CT Lv 3+). Dipisah Lokal &amp; Asing agar tetap ada pilihan bebas kuota asing.</div>
         </div>
-        <div class="tbl-wrap tbl-sticky"><table>
-          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap Scout</th><th>Skill Stack</th><th>Harga 2.0x MV</th><th>Klub Asal</th></tr></thead>
-          <tbody>${ysList.length ? ysList.map(t => `<tr>
-            <td>
-              <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>
-              ${t.isLocal ? ' <span class="badge b-good">LOCAL</span>' : ' <span class="badge b-info">ASING</span>'}
-            </td>
-            <td class="mono"><b>${fmtPos(t.pos)}</b> • ${t.age}th • ${fmtFoot(t.foot)}</td>
-            <td class="mono"><b>${t.force}</b> → <b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
-            <td class="mono c-sky"><b>+${t.youthScoutGap}</b></td>
-            <td><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
-            <td class="mono c-amber"><b>${fmtM(t.scoutPrice)}</b></td>
-            <td>${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
-          </tr>`).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat di filter ini.</td></tr>'}</tbody>
-        </table></div>
+        <div style="margin-bottom:12px">
+          <div class="flex-between mb-6"><b class="c-green">🇮🇩 Prospek U-21 Lokal (Bebas Kuota Asing)</b><span class="badge b-good mono">${rawYs.filter(x => x.isLocal).length} Kandidat</span></div>
+          <div class="tbl-wrap tbl-sticky"><table>
+            <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap</th><th>Skill Stack</th><th>Harga 2.0x MV</th><th>Klub Asal</th></tr></thead>
+            <tbody>${renderYsRows(ysLoc)}</tbody>
+          </table></div>
+        </div>
+        <div>
+          <div class="flex-between mb-6"><b class="c-sky">🌍 Prospek U-21 Asing (PotCap Global Tertinggi)</b><span class="badge b-info mono">${rawYs.filter(x => !x.isLocal).length} Kandidat</span></div>
+          <div class="tbl-wrap tbl-sticky"><table>
+            <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap</th><th>Skill Stack</th><th>Harga 2.0x MV</th><th>Klub Asal</th></tr></thead>
+            <tbody>${renderYsRows(ysFrg)}</tbody>
+          </table></div>
+        </div>
       </div>` : '';
   }
 }

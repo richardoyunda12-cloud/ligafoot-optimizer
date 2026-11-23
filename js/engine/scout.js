@@ -658,16 +658,13 @@
       ]);
     }
 
-    youthScoutCandidates.sort((a, b) => {
-      const potDiff = (b.potCap - a.potCap) || (b.youthScoutGap - a.youthScoutGap);
-      if (potDiff !== 0) return potDiff;
-      const locDiff = (b.isLocal ? 1 : 0) - (a.isLocal ? 1 : 0);
-      return locDiff || (a.scoutPrice - b.scoutPrice);
-    });
+    youthScoutCandidates.sort((a, b) => (b.potCap - a.potCap) || (b.youthScoutGap - a.youthScoutGap) || (a.scoutPrice - b.scoutPrice));
+    const ysLocal = youthScoutCandidates.filter(x => x.isLocal).slice(0, 30);
+    const ysForeign = youthScoutCandidates.filter(x => !x.isLocal).slice(0, 30);
 
     return {
       scoutPool: selected,
-      youthScoutTargets: youthScoutCandidates.slice(0, 60),
+      youthScoutTargets: ysLocal.concat(ysForeign),
       aiUnhappyTotal,
       aiBosmanTotal,
     };
