@@ -79,7 +79,7 @@ function renderTab5() {
     ${acadTh('hash', 'Bintang')}
     ${acadTh('development', 'Dev')}
     ${acadTh('age', 'Usia')}
-    ${acadTh('force', 'F')}
+    ${acadTh('force', 'F → Est. PotCap')}
     <th>Plafon +</th>
     <th>Est. Mega Eropa</th>
     <th>Skill Stack</th>
@@ -103,7 +103,7 @@ function renderTab5() {
       <td class="mono c-amber"><b>★${y.hash}</b></td>
       <td><div class="mini-bar-wrap"><div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${devPct}%;background:${devCol}"></div></div><span class="mono" style="font-size:11px;min-width:28px;text-align:right">${devPct}%</span></div></td>
       <td class="mono ${y.age >= 20 ? 'c-amber' : ''}"><b>${y.age}</b></td>
-      <td class="mono">${y.force}</td>
+      <td class="mono"><b>${y.force}</b> → <b class="c-green">${y.estPotCap || y.potCap || y.force}</b>${Array.isArray(y.estPotRange) ? `<div class="c-muted" style="font-size:10px">Est ${y.estPotRange[0]}–${y.estPotRange[1]}</div>` : ''}</td>
       <td class="mono c-green">${y.ceilBonus ? '+' + y.ceilBonus : '-'}</td>
       <td class="mono ${y.isMegaProspect ? 'c-green' : 'c-muted'}"><b>${fmtM(y.estMegaOffer || 0)}</b>${y.isMegaProspect ? ' 🔥' : ''}</td>
       <td><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></td>

@@ -604,6 +604,7 @@ function openPlayerDrawer(kind, id) {
       <div class="drawer-sec">
         <h3>🌱 Progres Akademi</h3>
         <div class="drawer-kv"><span>Force Saat Ini</span><b class="mono">${y.force}</b></div>
+        <div class="drawer-kv"><span>Est. Pot / PotCap (#22231)</span><b class="mono c-green">${y.estPotCap || y.potCap || y.force}${Array.isArray(y.estPotRange) ? ` (rentang ${y.estPotRange[0]}–${y.estPotRange[1]})` : ''}</b></div>
         <div class="drawer-kv"><span>Development</span><b class="mono c-green">${y.development}%</b></div>
         <div class="mini-bar-bg" style="height:9px;margin:4px 0 8px"><div class="mini-bar-fill" style="width:${Math.min(100, y.development)}%;background:var(--green)"></div></div>
         <div class="drawer-kv"><span>Bonus Tembus Plafon Klub (v9)</span><b class="mono c-sky">${y.ceilBonus ? '+' + y.ceilBonus + ' PotCap' : 'Belum (butuh ★7+ & Dev ≥60)'}</b></div>

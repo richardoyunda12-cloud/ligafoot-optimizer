@@ -370,12 +370,31 @@
       }
     }
 
+    const YOUTH_PEAK_RANGES = [
+      [25, 30], [27, 33], [30, 36], [33, 39], [36, 43],
+      [40, 48], [45, 53], [51, 60], [58, 68], [66, 78],
+    ];
     const youth = [];
     for (const yRow of (Array.isArray(tobj.youthPlayers) ? tobj.youthPlayers : [])) {
       if (!yRow || typeof yRow !== 'object') continue;
       const yRec = buildPlayerRecord({ ...yRow, isYouth: true }, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
       yRec.development = U.safeInt(yRow.development, 50);
       yRec.isYouth = true;
+      // Bytecode #22231 youthPeakEstimate & #21532 youthPeakFromPotential
+      const rawStar = U.safeInt(yRow.shownPotential !== undefined && yRow.shownPotential !== null ? yRow.shownPotential : yRec.hash, 1);
+      const potStar = U.clamp(yRec.star ? Math.max(8, rawStar) : rawStar, 1, 10);
+      const rng = YOUTH_PEAK_RANGES[potStar - 1] || [25, 30];
+      const basePeak = Math.round(((rng[0] + rng[1]) / 2) / 5) * 5;
+      const estPeak = Math.min(100, Math.round((basePeak + (yRec.star ? 4 : 0)) / 5) * 5);
+      yRec.estPotRange = rng;
+      yRec.estPotCap = Math.max(yRec.force, estPeak);
+      if (yRow.potential === undefined || yRow.potential === null) {
+        yRec.potential = Math.max(yRec.force, Math.round((rng[0] + rng[1]) / 2));
+      }
+      if (yRow.potCap === undefined || yRow.potCap === null) {
+        yRec.potCap = yRec.estPotCap;
+        yRec.potGap = yRec.potCap - yRec.force;
+      }
       youth.push(yRec);
     }
 
