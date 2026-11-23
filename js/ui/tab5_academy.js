@@ -124,22 +124,31 @@ function renderTab5() {
     }
   }
   if (ysBox) {
-    const ysList = (D.youthScoutTargets || []).slice(0, 10);
-    ysBox.innerHTML = ysList.length ? `
+    const rawYs = D.youthScoutTargets || [];
+    const curYsMode = window._ysFilterMode || 'ALL';
+    const ysFiltered = curYsMode === 'LOCAL'
+      ? rawYs.filter(x => x.isLocal)
+      : (curYsMode === 'FOREIGN' ? rawYs.filter(x => !x.isLocal) : rawYs);
+    const ysList = ysFiltered.slice(0, 15);
+    ysBox.innerHTML = rawYs.length ? `
       <div style="border-top:1px solid var(--border);padding-top:12px">
-        <div class="flex-between mb-8">
+        <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
           <div>
-            <h3 style="margin:0">🎓 Radar Olheiro da Base (#24197 — Bajak U-21 Rival 2.0x MV)</h3>
+            <h3 style="margin:0">🎓 Radar Olheiro da Base (#24197 — Bajak U-21 Rival)</h3>
             <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh (potential - force) ≥10 yang memenuhi syarat Youth Scout instan (kuota maks 2/musim; biaya scout -25% di CT Lv 3+).</div>
           </div>
-          <span class="badge b-info mono">${(D.youthScoutTargets || []).length} Kandidat</span>
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+            <button type="button" class="qchip ${curYsMode === 'ALL' ? 'active' : ''}" onclick="window._ysFilterMode='ALL';renderAcademy()">Semua (${rawYs.length})</button>
+            <button type="button" class="qchip ${curYsMode === 'LOCAL' ? 'active' : ''}" onclick="window._ysFilterMode='LOCAL';renderAcademy()">Lokal (${rawYs.filter(x => x.isLocal).length})</button>
+            <button type="button" class="qchip ${curYsMode === 'FOREIGN' ? 'active' : ''}" onclick="window._ysFilterMode='FOREIGN';renderAcademy()">Luar Negeri (${rawYs.filter(x => !x.isLocal).length})</button>
+          </div>
         </div>
         <div class="tbl-wrap tbl-sticky"><table>
           <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th>Gap Scout</th><th>Skill Stack</th><th>Harga 2.0x MV</th><th>Klub Asal</th></tr></thead>
-          <tbody>${ysList.map(t => `<tr>
+          <tbody>${ysList.length ? ysList.map(t => `<tr>
             <td>
               <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>
-              ${t.isLocal ? ' <span class="badge b-good">LOCAL</span>' : ''}
+              ${t.isLocal ? ' <span class="badge b-good">LOCAL</span>' : ' <span class="badge b-info">ASING</span>'}
             </td>
             <td class="mono"><b>${fmtPos(t.pos)}</b> • ${t.age}th • ${fmtFoot(t.foot)}</td>
             <td class="mono"><b>${t.force}</b> → <b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
@@ -147,7 +156,7 @@ function renderTab5() {
             <td><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
             <td class="mono c-amber"><b>${fmtM(t.scoutPrice)}</b></td>
             <td>${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
-          </tr>`).join('')}</tbody>
+          </tr>`).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat di filter ini.</td></tr>'}</tbody>
         </table></div>
       </div>` : '';
   }
