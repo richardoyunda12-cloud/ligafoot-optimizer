@@ -537,6 +537,15 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Tampilan Potential UI</span><span class="mono">${p.potential} ${p.isTrap ? '<b class="c-red">(lebih tinggi dr asli!)</b>' : ''}</span></div>
         <div class="drawer-kv"><span>Progress GrowthFrac</span>${growthBarHtml(p.growthFrac, p.nearDrop)}</div>
         ${(() => {
+          const eta = (window.LFEngine && LFEngine.roster && LFEngine.roster.estimatePeakEta && p.potCap > p.force && p.age < p.declineAge)
+            ? LFEngine.roster.estimatePeakEta(p.age, p.force, p.potCap, p.growthFrac, D.meta && D.meta.userTeamLevel, D.meta && D.meta.ctLevel, p.declineAge)
+            : null;
+          if (!eta) return '';
+          const trTxt = eta.train.reached ? `<b>${eta.train.peakAge} thn</b> (${eta.train.years} msm)` : `Mentok F${eta.train.endForce} @${p.declineAge}th`;
+          const nrTxt = eta.normal.reached ? `${eta.normal.peakAge} thn` : `F${eta.normal.endForce}`;
+          return `<div class="drawer-kv"><span>Est. Capai PotCap (#21499)</span><span class="mono c-green">🏋️ ${trTxt} <span class="c-muted">· Tanpa Slot ${nrTxt}</span></span></div>`;
+        })()}
+        ${(() => {
           const ta = D.trainAudit || {};
           const inTr = (ta.currentIds || []).includes(p.id);
           const recIdx = (ta.ideal || []).findIndex(x => x.id === p.id || x.name === p.name);
@@ -641,6 +650,16 @@ function openPlayerDrawer(kind, id) {
       <div class="drawer-sec">
         <h3>🔎 Profil &amp; Potensi</h3>
         <div class="drawer-kv"><span>Force → PotCap Asli</span><b class="mono">${r[5]} → <span class="c-green">${r[7]}</span> <span class="c-muted">(UI Pot: ${r[6]})</span></b></div>
+        ${(() => {
+          const decAge = (window.LFEngine && LFEngine.config && LFEngine.config.DECLINE_AGE_BY_CAT) ? (LFEngine.config.DECLINE_AGE_BY_CAT[EXACT_CAT[r[1]] ?? 3] || 32) : 32;
+          const eta = (window.LFEngine && LFEngine.roster && LFEngine.roster.estimatePeakEta && r[7] > r[5] && r[2] < decAge)
+            ? LFEngine.roster.estimatePeakEta(r[2], r[5], r[7], 0, D.meta && D.meta.userTeamLevel, D.meta && D.meta.ctLevel, decAge)
+            : null;
+          if (!eta) return '';
+          const trTxt = eta.train.reached ? `<b>${eta.train.peakAge} thn</b> (${eta.train.years} msm)` : `Mentok F${eta.train.endForce} @${decAge}th`;
+          const nrTxt = eta.normal.reached ? `${eta.normal.peakAge} thn` : `F${eta.normal.endForce}`;
+          return `<div class="drawer-kv"><span>Est. Capai PotCap (#21499)</span><span class="mono c-green">🏋️ ${trTxt} <span class="c-muted">· Tanpa Slot ${nrTxt}</span></span></div>`;
+        })()}
         <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${r[11] ? 'b-crit' : 'b-good'}">${fmtSkills(r[8], r[9])} (+${r[10]}%)</span></div>
         <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${r[15] <= 180 ? 'c-green' : ''}">${r[15]} hari ${r[15] <= 180 ? '(BOSMAN 0€!)' : ''}</b></div>
       </div>

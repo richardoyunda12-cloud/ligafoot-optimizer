@@ -861,6 +861,16 @@ function renderScout() {
       <td class="mono"><b>${fmtPos(r[1])}</b> • ${r[2]}th • <b>${fmtFoot(r[3])}</b><div class="c-muted" style="font-size:10px">Kontrak ${r[15]}d</div></td>
       <td class="mono">
         <b>${r[5]}</b> → <b class="c-green">${r[7]}</b>
+        ${(() => {
+          const decAge = (window.LFEngine && LFEngine.config && LFEngine.config.DECLINE_AGE_BY_CAT) ? (LFEngine.config.DECLINE_AGE_BY_CAT[EXACT_CAT[r[1]] ?? 3] || 32) : 32;
+          const eta = (window.LFEngine && LFEngine.roster && LFEngine.roster.estimatePeakEta && r[7] > r[5] && r[2] < decAge)
+            ? LFEngine.roster.estimatePeakEta(r[2], r[5], r[7], 0, D.meta && D.meta.userTeamLevel, D.meta && D.meta.ctLevel, decAge)
+            : null;
+          if (!eta) return '';
+          return eta.train.reached
+            ? `<div class="c-muted" style="font-size:10px" title="Slot Latihan + Main Rutin: ${eta.train.peakAge}th (${eta.train.years} msm) · Tanpa Slot: ${eta.normal.reached ? eta.normal.peakAge + 'th' : 'F' + eta.normal.endForce}">⏱ Cap ~${eta.train.peakAge}th (${eta.train.years} msm)</div>`
+            : `<div class="c-muted" style="font-size:10px" title="Maks sebelum usia turun @${decAge}th">⏱ Max F${eta.train.endForce} @${decAge}th</div>`;
+        })()}
         <div><span class="badge ${r[11] ? 'b-crit' : 'b-muted'}">${fmtSkills(r[8], r[9])} (+${r[10]}%)</span></div>
       </td>
       <td class="mono">

@@ -402,10 +402,63 @@
     return { roster, youth };
   }
 
+  /**
+   * Simulasi ETA mencapai PotCap berdasarkan #21499 weeklyGrowthRate & #21562 trainGrowthBonus.
+   */
+  function estimatePeakEta(age, force, potCap, growthFrac = 0, clubLevel = 12, ctLevel = 1, declineAge = 32) {
+    const a0 = U.safeInt(age, 20);
+    const f0 = U.safeInt(force, 20);
+    const cap = U.safeInt(potCap, f0);
+    if (f0 >= cap || a0 >= declineAge) return null;
+
+    const lv = U.clamp(U.safeInt(clubLevel, 12), 1, 25);
+    const ct = U.clamp(U.safeInt(ctLevel, 1), 1, 10);
+
+    function runSim(played, trained) {
+      let curAge = a0;
+      let curF = f0;
+      let gf = U.clamp(U.safeNum(growthFrac, 0), -0.99, 0.99);
+      let weeks = 0;
+      const maxWeeks = Math.max(1, (declineAge - curAge) * 52);
+      while (curF < cap && weeks < maxWeeks) {
+        let base = 0.02;
+        if (lv >= 19) base = curAge < 20 ? 0.14 : (curAge <= 28 ? 0.08 : 0.05);
+        else if (lv >= 15) base = curAge < 18 ? 0.12 : (curAge <= 20 ? 0.10 : (curAge <= 28 ? 0.08 : 0.06));
+        else if (lv >= 11) base = curAge < 18 ? 0.10 : (curAge <= 20 ? 0.08 : (curAge <= 28 ? 0.06 : 0.04));
+        else base = curAge < 18 ? 0.08 : (curAge <= 20 ? 0.06 : (curAge <= 28 ? 0.04 : 0.02));
+
+        let rate = base + (played ? 0.01 : 0.0);
+        if (ct >= 4) rate += 0.010;
+        if (ct >= 2 && curAge <= 23) rate += 0.015;
+        if (trained) rate += 0.015 + 0.0015 * (ct - 1);
+        gf += rate;
+        while (gf >= 1.0 && curF < cap) {
+          gf -= 1.0;
+          curF++;
+        }
+        weeks++;
+        if (weeks % 52 === 0) curAge++;
+      }
+      return {
+        reached: curF >= cap,
+        endForce: curF,
+        peakAge: U.roundTo(a0 + weeks / 52, 1),
+        years: U.roundTo(weeks / 52, 1),
+        weeks,
+      };
+    }
+
+    return {
+      train: runSim(true, true),
+      normal: runSim(true, false),
+    };
+  }
+
   LF.roster = {
     calcNetSaleProceeds,
     buildPlayerRecord,
     classifyUserAction,
     extractTeamRoster,
+    estimatePeakEta,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
