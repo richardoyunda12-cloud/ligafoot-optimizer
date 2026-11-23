@@ -537,11 +537,110 @@ function renderScoutBlueprint() {
     }
   }
 
-  if (!picks.length && !moneyballHtml) {
+  // 1) Downgrade Cerdas / Cetak Kas Tanpa Turun Win% + 2) Swap Pemain Non-Stack (0% -> Stack)
+  let extraSmartHtml = '';
+  if (scoutBlueprintTab === 'UPGRADE') {
+    const ctx = getBenchmarkMatchContext();
+    const Eng = window.LFEngine;
+    const cashPairs = [];
+    const sellHigh = (D.roster || [])
+      .filter(p => !p.injured && !cartOut[p.id] && p.age >= 25 && (p.estCounter40 || 0) >= 3000000)
+      .sort((a, b) => (b.estCounter40 || 0) - (a.estCounter40 || 0))
+      .slice(0, 6);
+    for (const sp of sellHigh) {
+      const sellNet = sp.estCounter40 || sp.marketValue || 0;
+      const cands = cleanPool
+        .filter(x => x.r[1] === sp.pos && x.r[11] === 0 && x.r[5] >= sp.force - 3 && (x.isBosman ? 0 : x.estBuy) <= sellNet * 0.6)
+        .sort((a, b) => (b.r[5] - a.r[5]) || (a.estBuy - b.estBuy))
+        .slice(0, 3);
+      for (const c of cands) {
+        const buyCost = c.isBosman ? 0 : c.estBuy;
+        const netCash = sellNet - buyCost;
+        if (netCash < 2000000) continue;
+        let dWin = 0;
+        if (ctx && ctx.base && Eng && Eng.tactics) {
+          const simR = (D.roster || []).filter(x => !cartOut[x.id] && x.id !== sp.id).concat([scoutRowToSimPlayer(c.r)]);
+          if (simR.length >= 11) {
+            const aft = Eng.tactics.evaluateSquadImpact(simR, ctx.oppPow, ctx.opts);
+            if (aft) dWin = +(aft.winPct - ctx.base.winPct).toFixed(1);
+          }
+        }
+        if (dWin < -1.0) continue;
+        cashPairs.push({ sp, c, netCash, dWin });
+      }
+    }
+    cashPairs.sort((a, b) => (b.dWin - a.dWin) || (b.netCash - a.netCash));
+    const topCash = [];
+    const usedSell = new Set();
+    for (const cp of cashPairs) {
+      if (usedSell.has(cp.sp.id)) continue;
+      usedSell.add(cp.sp.id);
+      topCash.push(cp);
+      if (topCash.length >= 3) break;
+    }
+
+    const nsPairs = [];
+    const nsList = (D.roster || []).filter(p => p.nonStack && !p.injured && !cartOut[p.id]);
+    for (const np of nsList) {
+      const bestRep = cleanPool
+        .filter(x => x.r[1] === np.pos && x.r[11] === 0 && x.r[10] >= 5 && x.r[5] >= np.force - 1 && x.affordCode !== 'EXP')
+        .sort((a, b) => (b.r[10] - a.r[10]) || (b.r[5] - a.r[5]) || (a.estBuy - b.estBuy))[0];
+      if (bestRep) {
+        const net = (np.estDirectSaleNet || np.marketValue || 0) - (bestRep.isBosman ? 0 : bestRep.estBuy);
+        nsPairs.push({ np, c: bestRep, net });
+      }
+    }
+
+    if (topCash.length) {
+      extraSmartHtml += `<div style="margin-top:12px;padding:10px 11px;background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:11px;font-size:11.5px">
+        <div style="font-weight:800;margin-bottom:6px" class="c-green">💸 Downgrade Cerdas: Cetak Kas Besar Tanpa Turun Win%</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px">
+          ${topCash.map(cp => {
+            const r = cp.c.r;
+            return `<div style="padding:8px 10px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
+              <div class="flex-between" style="gap:6px">
+                <div>Jual <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(cp.sp.id)}')"><b>${esc(cp.sp.name)}</b></a> <span class="mono c-muted">(${cp.sp.age}th·F${cp.sp.force})</span></div>
+                <span class="badge b-good mono">Net +${fmtM(cp.netCash)}</span>
+              </div>
+              <div style="margin:4px 0">Beli <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(r[19])}')"><b>${esc(r[0])}</b></a> <span class="mono">(${r[2]}th·F${r[5]}→${r[7]}·+${r[10]}%)</span></div>
+              <div class="flex-between" style="gap:6px">
+                <span class="badge ${cp.dWin >= 0 ? 'b-good' : 'b-warn'} mono">Win ${cp.dWin >= 0 ? '+' : ''}${cp.dWin}%</span>
+                <button type="button" class="btn btn-sm btn-green" onclick="swapToCart('${escJs(r[19])}','${escJs(cp.sp.id)}',${cp.c.isBosman ? 'true' : 'false'})">⇄ Eksekusi ke Cart</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+
+    if (nsPairs.length) {
+      extraSmartHtml += `<div style="margin-top:10px;padding:10px 11px;background:var(--bg2);border:1px solid rgba(245,158,11,.35);border-radius:11px;font-size:11.5px">
+        <div style="font-weight:800;margin-bottom:6px" class="c-amber">⚡ Perbaiki Pemain Non-Stack (0% Bonus → Stack Optimal)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px">
+          ${nsPairs.slice(0, 4).map(x => {
+            const r = x.c.r;
+            return `<div style="padding:8px 10px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
+              <div class="flex-between" style="gap:6px">
+                <div>Buang <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(x.np.id)}')"><b>${esc(x.np.name)}</b></a> <span class="badge b-crit">0%</span></div>
+                <span class="badge b-good mono">+${r[10]}% Stack</span>
+              </div>
+              <div style="margin:4px 0">Ganti <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(r[19])}')"><b>${esc(r[0])}</b></a> <span class="mono">(F${r[5]}→${r[7]}·${fmtSkills(r[8], r[9])})</span></div>
+              <div class="flex-between" style="gap:6px">
+                <span class="mono c-muted">Net: <b>${x.net >= 0 ? '+' + fmtM(x.net) : '-' + fmtM(-x.net)}</b></span>
+                <button type="button" class="btn btn-sm btn-green" onclick="swapToCart('${escJs(r[19])}','${escJs(x.np.id)}',${x.c.isBosman ? 'true' : 'false'})">⇄ Swap ke Cart</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+  }
+
+  if (!picks.length && !moneyballHtml && !extraSmartHtml) {
     box.innerHTML = `<div class="alert-item"><span class="badge b-warn">KAS KETAT</span><div>Belum ada rekomendasi yang muat di <b>Sisa Daya Beli (${fmtM(cm.projBudget)})</b>. Klik tombol <b>⚡ Jual</b> di atas untuk menambah modal, atau cek tab <b>🆓 Gratis/Diskon</b>!</div></div>`;
     return;
   }
-  box.innerHTML = moneyballHtml + (picks.length ? `<div class="deal-grid">${picks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>` : '');
+  box.innerHTML = moneyballHtml + (picks.length ? `<div class="deal-grid">${picks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>` : '') + extraSmartHtml;
 }
 
 function addAllShortlistToCart() {
