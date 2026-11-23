@@ -116,8 +116,86 @@ function thSort(col, label, extraCls = '') {
   return `<th class="${act} ${extraCls}" onclick="sortRoster('${col}')">${label}${sortArrow(col)}</th>`;
 }
 
+function renderRosterActionRadar() {
+  const tl = document.getElementById('t4-contract-timeline');
+  if (!tl || !tl.parentNode) return;
+  let box = document.getElementById('t4-action-radar');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 't4-action-radar';
+    tl.parentNode.insertBefore(box, tl.nextSibling);
+  }
+  const roster = D.roster || [];
+  // 1. Radar Panen / Jual Puncak Harga
+  const harvest = roster
+    .map(p => {
+      let tag = '';
+      let prio = 0;
+      if (p.isTop5Arab) { tag = '💎 ARAB 2.5–3x'; prio = 4; }
+      else if (p.squadRank <= 5 && p.age === 25 && p.force >= 42) { tag = '⏳ TAHAN @26TH ARAB'; prio = 3; }
+      else if (p.isDeclining || p.age >= p.sellWarnAge) { tag = '📉 FASE REGRESI'; prio = 2; }
+      else if (p.force >= p.potCap && p.age >= 23 && p.squadRank >= 12) { tag = '🔒 MENTOK POTCAP'; prio = 1; }
+      return prio > 0 ? { p, tag, prio } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.prio - a.prio) || (b.p.estCounter40 - a.p.estCounter40))
+    .slice(0, 5);
+
+  // 2. Prioritas Potong Gaji (salaryCuts < 1 & kontrak >= 60d)
+  const cutList = roster
+    .filter(p => !p.salaryCutLocked && p.contractDays >= 60 && p.salary > 0)
+    .map(p => {
+      const saveMo = Math.round(p.salary * Math.max(0, 1 - (p.salaryFloorFactor || 0.90)));
+      return { p, saveMo, floorPct: Math.round((p.salaryFloorFactor || 0.90) * 100) };
+    })
+    .filter(x => x.saveMo > 0)
+    .sort((a, b) => b.saveMo - a.saveMo)
+    .slice(0, 5);
+
+  if (!harvest.length && !cutList.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  box.innerHTML = `<details class="glossary-inline" style="margin:6px 0 8px" open>
+    <summary>🎯 <b>Radar Keputusan Cepat:</b> Panen Jual Puncak (${harvest.length}) &amp; Prioritas Potong Gaji (${cutList.length})</summary>
+    <div class="grid g2" style="gap:8px;margin-top:6px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px">
+        <div style="font-weight:800;margin-bottom:5px" class="c-gold">🌾 Radar Panen / Jual di Puncak Harga</div>
+        ${harvest.length ? harvest.map(x => {
+          const p = x.p;
+          const inS = typeof cartOut !== 'undefined' && cartOut[p.id];
+          return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <div style="min-width:0">
+              <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
+              <span class="c-muted mono">(${p.age}th · F${p.force}/${p.potCap})</span>
+              <div><span class="badge b-warn">${esc(x.tag)}</span> <span class="mono c-green">Ctr +40%: ${fmtM(p.estCounter40)}</span></div>
+            </div>
+            <button type="button" class="btn btn-sm ${inS ? 'btn-amber' : ''}" onclick="toggleCartOut('${escJs(p.id)}');renderRosterActionRadar()">${inS ? '✓ Cart' : '+Jual'}</button>
+          </div>`;
+        }).join('') : '<div class="c-muted">Belum ada pemain di fase panen/regresi.</div>'}
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px">
+        <div style="font-weight:800;margin-bottom:5px" class="c-sky">✂️ Prioritas Potong Gaji (Kuota 0/1 · Sebelum Renew 3Th)</div>
+        ${cutList.length ? cutList.map(x => {
+          const p = x.p;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <div style="min-width:0">
+              <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
+              <span class="c-muted mono">(${p.contractDays}d · ${p.squadRank > 11 ? 'Cadangan' : 'Inti'})</span>
+              <div class="mono c-muted">Gaji ${fmtM(p.salary)} → Lantai ${x.floorPct}%</div>
+            </div>
+            <span class="badge b-good mono">Hemat -${fmtM(x.saveMo)}/b</span>
+          </div>`;
+        }).join('') : '<div class="c-muted">Semua pemain bergaji besar sudah dipakai kuota potong gajinya.</div>'}
+      </div>
+    </div>
+  </details>`;
+}
+
 function renderRosterTable() {
   renderContractTimeline();
+  renderRosterActionRadar();
   renderRosterQuickChips();
   const rows = getFilteredRoster();
 

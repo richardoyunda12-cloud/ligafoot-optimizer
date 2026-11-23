@@ -83,7 +83,33 @@ function renderTab6() {
             Sponsor Jersey <i>Upfront (Luvas)</i> sudah cair di awal musim &amp; tidak dihitung ganda.
           </div>
         </div>
-      </div>`;
+      </div>
+      ${(() => {
+        const pay = (D.meta && D.meta.payroll) || 0;
+        const bud = (D.meta && D.meta.budget) || 0;
+        const plafonGame = Math.max(500000, Math.round(pay * 0.30));
+        const safeMo = Math.max(0, Math.min(plafonGame, Math.round(net * 0.70)));
+        const maxBuy24 = Math.round((safeMo * 24) / 0.75);
+        const dp25Cap = Math.round(maxBuy24 * 0.25);
+        const ctLv = (D.meta && D.meta.ctLevel) || 1;
+        const ctNext = D.ctUpgrade || null;
+        let invTip = 'Kas sehat — prioritaskan Bosman 0€ atau cicilan DP 25% untuk upgrade titik lemah XI.';
+        if (ctLv < 9 && ctNext && ctNext.cost && bud >= ctNext.cost * 1.1) {
+          invTip = `Rekomendasi: CT Lv ${ctLv} → ${ctLv + 1} (${fmtM(ctNext.cost)}) untuk tambah slot/bonus jangka panjang.`;
+        } else if (safeMo <= 0) {
+          invTip = 'Surplus bulanan tipis/negatif — fokus jual pemain berlebih & optimasi tiket/sponsor dulu sebelum cicil pemain.';
+        }
+        return `<div style="margin-top:8px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:9px;font-size:11.5px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+            <b class="c-sky">💳 Budget Cap Aman Belanja &amp; Cicilan (OTA DP 25%)</b>
+            <span class="badge ${safeMo > 0 ? 'b-info' : 'b-warn'} mono">Plafon Aman: ${fmtM(safeMo)}/bln</span>
+          </div>
+          <div class="mono c-muted" style="font-size:11px">
+            Batas cicilan game: <b>${fmtM(plafonGame)}/bln</b> · Daya beli cicilan 24 bln: <b class="c-green">${fmtM(maxBuy24)}</b> (DP 25%: <b>${fmtM(dp25Cap)}</b> vs Kas <b>${fmtM(bud)}</b>)
+          </div>
+          <div class="c-muted" style="font-size:10.5px;margin-top:3px">${esc(invTip)}</div>
+        </div>`;
+      })()}`;
   }
 
   // 2. Kartu Club Shop, Member Plans & Komersial
