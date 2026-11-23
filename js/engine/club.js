@@ -918,7 +918,7 @@
         loanBuyChance: p.loanBuyChance,
       }));
 
-    const natId = save.userNationId || '';
+    const natId = save.userNationId || save.nationalTeamId || save.nationId || '';
     const nationInfo = natId ? {
       iso: natId,
       squadCount: Array.isArray(save.nationalTeamLineup) ? save.nationalTeamLineup.length : 0,

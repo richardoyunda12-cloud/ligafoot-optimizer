@@ -395,7 +395,7 @@ function renderTab8Extras() {
 
   document.getElementById('t8-precontracts').innerHTML = `<h3>📜 Pra-Kontrak / Bosman Aktif (${(D.preContracts || []).length})</h3>` + pcHtml + bosPreviewHtml;
 
-  // 5. Sub-Tab 6C: Status Timnas + Taktik + Pemain Klub Senegara
+  // 5. Sub-Tab 6C: Status Timnas + Taktik + Best XI & Top-23 Pemain Dunia Berpaspor Sama
   let natHtml = '<h3>🌍 Status Tim Nasional</h3>';
   if (D.nation && D.nation.iso) {
     const iso = String(D.nation.iso).toUpperCase();
@@ -405,16 +405,54 @@ function renderTab8Extras() {
     if (tac.playStyle) tacParts.push(`Gaya: <b>${esc(tac.playStyle)}</b>`);
     if (tac.marking) tacParts.push(`Marking: <b>${esc(tac.marking)}</b>`);
     if (tac.attackFocus) tacParts.push(`Fokus: <b>${esc(tac.attackFocus)}</b>`);
-    const clubCompatriots = (D.roster || []).filter(p => String(p.nationality || '').toUpperCase() === iso);
+
+    const natMap = new Map();
+    (D.roster || []).forEach(p => {
+      if (String(p.nationality || '').toUpperCase() === iso) {
+        natMap.set(p.id, { ...p, _src: 'roster', _club: D.meta.clubName || 'Klubmu' });
+      }
+    });
+    (D.scoutPool || []).forEach(r => {
+      if (String(r[4] || '').toUpperCase() === iso && !natMap.has(r[19])) {
+        const sp = typeof scoutRowToSimPlayer === 'function' ? scoutRowToSimPlayer(r) : {
+          id: r[19], name: r[0], pos: r[1], age: r[2], foot: r[3], nationality: r[4],
+          force: r[5], effForce: r[5], potCap: r[7], s1: r[8], s2: r[9], stackPct: r[10], nonStack: !!r[11], energy: 100,
+        };
+        natMap.set(r[19], { ...sp, _src: 'scout', _club: r[16] || '-' });
+      }
+    });
+    const natPool = Array.from(natMap.values()).sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
+
+    let bestNatXi = null;
+    const Eng = window.LFEngine;
+    if (natPool.length >= 11 && Eng && Eng.tactics && Eng.tactics.solveBestXi) {
+      for (const fk of ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2', '4-1-2-1-2', '3-4-3']) {
+        if (!D.formations || !(fk in D.formations)) continue;
+        const rXi = Eng.tactics.solveBestXi(natPool, fk, 99, '');
+        if (!bestNatXi || rXi.avgScore > bestNatXi.avgScore) bestNatXi = { ...rXi, formation: fk };
+      }
+    }
 
     natHtml += `
-      <div class="mb-8">Melatih Timnas: <span class="badge b-good">${esc(iso)}</span> · Skuad dipanggil: <b class="mono">${D.nation.squadCount || 0}</b> pemain</div>
+      <div class="mb-8">Melatih Timnas: <span class="badge b-good">${esc(iso)}</span> · Skuad dipanggil: <b class="mono">${D.nation.squadCount || 0}</b> · Pool Terdeteksi: <b class="mono">${natPool.length}</b> pemain</div>
       ${tacParts.length ? `<div class="c-muted mb-8" style="font-size:11.5px">Taktik Timnas: ${tacParts.join(' · ')}</div>` : ''}
+      ${bestNatXi ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:8px;font-size:11.5px">
+        <div><b>🏆 Rekomendasi Best XI Timnas ${esc(iso)}:</b> <span class="badge b-good mono">${esc(fmtForm(bestNatXi.formation))} · Avg ${bestNatXi.avgScore}</span></div>
+        <div class="c-muted mono" style="font-size:10.5px;margin-top:4px">${bestNatXi.xi.map(x => `${fmtPos(x.slot)}:${x.player.name}(${x.player.force})`).join(' · ')}</div>
+      </div>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:8px">
-        <b>Pemain Klubmu Berpaspor ${esc(iso)} (${clubCompatriots.length}):</b>
-        <div class="pill-row mt-12" style="margin-bottom:0">${clubCompatriots.length
-          ? clubCompatriots.map(p => `<span class="badge b-info delta-chip" onclick="openPlayerDrawer('roster','${escJs(p.id)}')">${esc(p.name)} (${fmtPos(p.pos)} F${p.force})</span>`).join(' ')
-          : '<span class="c-muted">Belum ada pemain dari klubmu yang berpaspor ' + esc(iso) + '.</span>'}</div>
+        <b>Top-23 Pemain Dunia Berpaspor ${esc(iso)} (Klik → Profil):</b>
+        <div class="tbl-wrap tbl-sticky mt-8" style="max-height:320px;overflow-y:auto"><table>
+          <thead><tr><th>Pemain</th><th>Pos</th><th>Usia</th><th>Force</th><th>Skill Stack</th><th>Klub</th></tr></thead>
+          <tbody>${natPool.slice(0, 23).map(p => `<tr>
+            <td><a class="clickable-name" onclick="openPlayerDrawer('${p._src}','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>${p._src === 'roster' ? ' <span class="badge b-good">KLUBMU</span>' : ''}</td>
+            <td class="mono"><b>${fmtPos(p.pos)}</b></td>
+            <td class="mono">${p.age}</td>
+            <td class="mono"><b class="c-green">${p.force}</b></td>
+            <td><span class="badge ${p.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct || 0}%)</span></td>
+            <td class="c-muted">${esc(p._club)}</td>
+          </tr>`).join('') || '<tr><td colspan="6" class="c-muted">Belum ada pemain berpaspor ' + esc(iso) + ' terdeteksi.</td></tr>'}</tbody>
+        </table></div>
       </div>`;
   } else {
     natHtml += '<div class="c-muted">Saat ini tidak sedang melatih tim nasional.</div>';
