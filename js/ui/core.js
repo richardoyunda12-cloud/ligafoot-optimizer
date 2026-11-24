@@ -537,10 +537,15 @@ function openPlayerDrawer(kind, id) {
       .filter(([, v]) => v && ((v.y || 0) > 0 || (v.s || 0) > 0))
       .map(([cid, v]) => `${(window.LFEngine && LFEngine.utils ? LFEngine.utils.translateCompName(cid, cid) : cid)}: ${v.y || 0}🟨${v.s ? ' ' + v.s + '🟥' : ''}`);
 
+    const isF = typeof isRosterForeign === 'function'
+      ? isRosterForeign(p)
+      : Boolean(D && D.meta && D.meta.country && p.nationality && String(p.nationality).toUpperCase() !== String(D.meta.country).toUpperCase());
+
     body.innerHTML = `
       <div class="flex-between mb-8">
-        <div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
           <span class="badge b-good">SKUAD SENIOR • RANK #${p.squadRank}</span>
+          ${isF ? `<span class="badge b-warn">🌐 ASING${p.nationality ? ' · ' + esc(p.nationality) : ''}</span>` : `<span class="badge b-info">🏠 LOKAL${p.nationality ? ' · ' + esc(p.nationality) : ''}</span>`}
           ${inXi ? '<span class="badge b-info">BEST XI</span>' : '<span class="badge b-muted">CADANGAN</span>'}
           ${p.isTop5Arab ? '<span class="badge b-accent">ARAB WATCH</span>' : ''}
         </div>
@@ -741,7 +746,7 @@ function openPlayerDrawer(kind, id) {
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <span class="badge b-accent">🅱️ ${esc(bt.bTeamName || 'TIM B')}</span>
           ${p.fillsHole ? '<span class="badge b-good">★ ISI LUBANG UTAMA</span>' : ''}
-          ${p.isForeign ? '<span class="badge b-warn">🌐 ASING</span>' : ''}
+          ${p.isForeign ? `<span class="badge b-warn">🌐 ASING${p.nationality ? ' · ' + esc(p.nationality) : ''}</span>` : `<span class="badge b-info">🏠 LOKAL${p.nationality ? ' · ' + esc(p.nationality) : ''}</span>`}
         </div>
         <button class="btn btn-sm" onclick="closePlayerDrawer()">Tutup (ESC)</button>
       </div>
@@ -892,6 +897,9 @@ window.LFResetUIState = function () {
   if (typeof cartBenchOppId !== 'undefined') cartBenchOppId = 'AUTO_NEXT';
   scoutPreset = 'ALL';
   scoutBlueprintTab = 'UPGRADE';
+  rosterSort = { col: 'force', dir: -1 };
+  if (typeof bTeamSort !== 'undefined') bTeamSort = { col: 'force', dir: -1 };
+  if (typeof bTeamFilter !== 'undefined') bTeamFilter = 'ALL';
   if (typeof acadFilter !== 'undefined') acadFilter = 'ALL';
   if (typeof whatsNewDismissed !== 'undefined') whatsNewDismissed = false;
   if (typeof wkTrackerFilter !== 'undefined') wkTrackerFilter = 'ALL';

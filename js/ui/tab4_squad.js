@@ -1,7 +1,82 @@
-// ==================== RENDER TAB 3B & 3C: AUDIT SKUAD, KONTRAK & TRAINING (v8.2.2) ====================
+// ==================== RENDER TAB 3B & 3C: AUDIT SKUAD, KONTRAK & TRAINING (v8.9.3) ====================
+function isRosterForeign(p) {
+  if (p && typeof p.isForeign === 'boolean') return p.isForeign;
+  const uc = String((D && D.meta && D.meta.country) || '').toUpperCase();
+  const nat = String((p && p.nationality) || '').toUpperCase();
+  return Boolean(uc && nat && nat !== uc);
+}
+
+function originNoteHtml(p) {
+  const nat = String((p && p.nationality) || '').toUpperCase();
+  const uc = String((D && D.meta && D.meta.country) || '').toUpperCase();
+  if (isRosterForeign(p)) {
+    return `<span class="badge b-warn origin-note" title="Pemain Asing (${esc(nat || '-')}) — memakan kuota pemain asing tim utama">🌐 ASING${nat ? ' · ' + esc(nat) : ''}</span>`;
+  }
+  return `<span class="badge b-info origin-note" title="Pemain Lokal (${esc(nat || uc || '-')}) — bebas kuota asing &amp; adaptasi 2x lebih cepat">🏠 LOKAL${nat ? ' · ' + esc(nat) : ''}</span>`;
+}
+
+function defaultSortDir(col) {
+  return ['name', 'pos', 'contractDays', 'age', 'action', 'bAction'].includes(col) ? 1 : -1;
+}
+
+function compareAuditRows(a, b, sortObj) {
+  const col = (sortObj && sortObj.col) || 'force';
+  const dir = (sortObj && sortObj.dir) || -1;
+  const fTie = () => ((b.force || 0) - (a.force || 0))
+    || ((b.potCap || 0) - (a.potCap || 0))
+    || ((b.effForce || 0) - (a.effForce || 0))
+    || String(a.name || '').localeCompare(String(b.name || ''));
+
+  if (col === 'pos') {
+    const ca = (typeof EXACT_CAT !== 'undefined' && EXACT_CAT[a.pos] !== undefined) ? EXACT_CAT[a.pos] : 9;
+    const cb = (typeof EXACT_CAT !== 'undefined' && EXACT_CAT[b.pos] !== undefined) ? EXACT_CAT[b.pos] : 9;
+    if (ca !== cb) return (ca - cb) * dir;
+    const pa = fmtPos(a.pos).localeCompare(fmtPos(b.pos));
+    if (pa !== 0) return pa * dir;
+    return fTie();
+  }
+  if (col === 'isForeign') {
+    const fa = isRosterForeign(a) ? 1 : 0;
+    const fb = isRosterForeign(b) ? 1 : 0;
+    if (fa !== fb) return (fa - fb) * dir;
+    return fTie();
+  }
+  if (col === 'potCap') {
+    const pa = Number(a.potCap ?? a.force) || 0;
+    const pb = Number(b.potCap ?? b.force) || 0;
+    if (pa !== pb) return (pa - pb) * dir;
+    return ((b.force || 0) - (a.force || 0))
+      || ((b.effForce || 0) - (a.effForce || 0))
+      || String(a.name || '').localeCompare(String(b.name || ''));
+  }
+  if (col === 'force') {
+    const fa = Number(a.force) || 0;
+    const fb = Number(b.force) || 0;
+    if (fa !== fb) return (fa - fb) * dir;
+    return ((b.potCap || 0) - (a.potCap || 0))
+      || ((b.effForce || 0) - (a.effForce || 0))
+      || String(a.name || '').localeCompare(String(b.name || ''));
+  }
+
+  const va = a[col], vb = b[col];
+  if (typeof va === 'string' || typeof vb === 'string') {
+    const sc = String(va || '').localeCompare(String(vb || ''));
+    if (sc !== 0) return sc * dir;
+    return fTie();
+  }
+  const na = Number(va) || 0, nb = Number(vb) || 0;
+  if (na !== nb) return (na - nb) * dir;
+  return fTie();
+}
+
+function sortArrowHtml(sortObj, col) {
+  if (!sortObj || sortObj.col !== col) return '<span class="sort-ico">⇅</span>';
+  return `<span class="sort-ico">${sortObj.dir === -1 ? '▼' : '▲'}</span>`;
+}
+
 function sortRoster(col) {
   if (rosterSort.col === col) rosterSort.dir *= -1;
-  else { rosterSort.col = col; rosterSort.dir = -1; }
+  else { rosterSort.col = col; rosterSort.dir = defaultSortDir(col); }
   renderRosterTable();
 }
 
@@ -12,6 +87,8 @@ function setRosterQuickFilter(val) {
 }
 
 function matchRosterFilter(p, flt) {
+  if (flt === 'FOREIGN') return isRosterForeign(p);
+  if (flt === 'LOCAL') return !isRosterForeign(p);
   if (flt === 'GOLDEN') return p.contractDays >= 60 && p.contractDays <= 120;
   if (flt === 'DECLINE') return p.isDeclining || p.age >= p.sellWarnAge;
   if (flt === 'NONSTACK') return p.nonStack;
@@ -25,16 +102,21 @@ function matchRosterFilter(p, flt) {
 }
 
 function getFilteredRoster() {
-  const q = ((document.getElementById('t4-search') || {}).value || '').toLowerCase();
+  const q = ((document.getElementById('t4-search') || {}).value || '').trim().toLowerCase();
   const flt = ((document.getElementById('t4-filter') || {}).value) || 'ALL';
   return (D.roster || []).filter(p => {
-    if (q && !(p.name.toLowerCase().includes(q) || p.pos.toLowerCase().includes(q) || fmtPos(p.pos).toLowerCase().includes(q))) return false;
+    if (q) {
+      const originTxt = isRosterForeign(p) ? 'asing foreign' : 'lokal local domestik';
+      const natTxt = String(p.nationality || '').toLowerCase();
+      const hit = p.name.toLowerCase().includes(q)
+        || p.pos.toLowerCase().includes(q)
+        || fmtPos(p.pos).toLowerCase().includes(q)
+        || natTxt.includes(q)
+        || originTxt.includes(q);
+      if (!hit) return false;
+    }
     return matchRosterFilter(p, flt);
-  }).sort((a, b) => {
-    const va = a[rosterSort.col], vb = b[rosterSort.col];
-    if (typeof va === 'string') return va.localeCompare(vb) * rosterSort.dir;
-    return ((va || 0) - (vb || 0)) * rosterSort.dir;
-  });
+  }).sort((a, b) => compareAuditRows(a, b, rosterSort));
 }
 
 function renderContractTimeline() {
@@ -89,6 +171,8 @@ function renderRosterQuickChips() {
   const curFlt = ((document.getElementById('t4-filter') || {}).value) || 'ALL';
   const defs = [
     ['ALL', 'Semua'],
+    ['FOREIGN', '🌐 Asing'],
+    ['LOCAL', '🏠 Lokal'],
     ['GOLDEN', '✅ Golden'],
     ['DECLINE', '📉 Regresi'],
     ['GEM', '💎 Gem'],
@@ -107,13 +191,12 @@ function renderRosterQuickChips() {
 }
 
 function sortArrow(col) {
-  if (rosterSort.col !== col) return '';
-  return rosterSort.dir === -1 ? ' ▼' : ' ▲';
+  return sortArrowHtml(rosterSort, col);
 }
 
 function thSort(col, label, extraCls = '') {
   const act = rosterSort.col === col ? 'sort-active' : '';
-  return `<th class="${act} ${extraCls}" onclick="sortRoster('${col}')">${label}${sortArrow(col)}</th>`;
+  return `<th class="th-sort ${act} ${extraCls}" data-sort-col="${col}" title="Klik untuk urutkan berdasarkan ${esc(label)}" onclick="sortRoster('${col}')">${label}${sortArrow(col)}</th>`;
 }
 
 function renderRosterActionRadar() {
@@ -225,10 +308,22 @@ function renderRosterTable() {
   renderRosterQuickChips();
   const rows = getFilteredRoster();
 
+  const fBadge = document.getElementById('t4-foreign-badge');
+  if (fBadge) {
+    const full = D.roster || [];
+    const fCnt = full.filter(isRosterForeign).length;
+    const fCap = (D.meta && D.meta.foreignCap) || 7;
+    const fMax = (D.meta && D.meta.foreignMax) || 9;
+    const curFlt = ((document.getElementById('t4-filter') || {}).value) || 'ALL';
+    const bCls = fCnt > fMax ? 'b-crit' : (fCnt > fCap ? 'b-warn' : 'b-good');
+    fBadge.innerHTML = `<button type="button" class="badge ${bCls} mono" style="cursor:pointer" title="Klik untuk filter pemain asing skuad" onclick="setRosterQuickFilter('${curFlt === 'FOREIGN' ? 'ALL' : 'FOREIGN'}')">🌐 Asing ${fCnt}/${fCap} (Maks ${fMax}) · Lokal ${full.length - fCnt}</button>`;
+  }
+
   document.getElementById('t4-tbl').innerHTML = `<thead><tr>
-    ${thSort('name', 'Pemain & Aksi')}
+    ${thSort('name', 'Pemain')}
     ${thSort('pos', 'Pos')}
-    ${thSort('force', 'F→Cap')}
+    ${thSort('force', 'Force')}
+    ${thSort('potCap', 'PotCap')}
     ${thSort('contractDays', 'Kontrak')}
     ${thSort('salary', 'Gaji/Bln')}
     ${thSort('energy', 'Energi', 'col-hide-mob')}
@@ -236,7 +331,7 @@ function renderRosterTable() {
     ${thSort('growthFrac', 'Growth', 'col-hide-mob')}
     ${thSort('stackPct', 'Skill Stack', 'col-hide-mob')}
     ${thSort('marketValue', 'Nilai (Jual)', 'col-hide-mob')}
-    <th class="col-desk-only">Rekomendasi Aksi</th>
+    ${thSort('action', 'Rekomendasi Aksi', 'col-desk-only')}
   </tr></thead><tbody>` + (rows.length ? rows.map(p => {
     const stB = p.nonStack ? 'b-crit' : (p.stackGrade === 'GOD' ? 'b-good' : 'b-muted');
     const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
@@ -244,16 +339,22 @@ function renderRosterTable() {
     const slumpBadge = (p.fineSlump > 0) ? ` <span class="badge b-crit" title="${esc(tipFor('SLUMP'))}">SLUMP -${p.fineSlumpPct}%</span>` : '';
     const narTag = p.noAutoRenew ? '<div class="c-muted" style="font-size:10px">noAutoRenew ✓</div>' : '';
     const loopTag = p.autoRenewLoophole ? `<div class="c-sky" style="font-size:10px" title="${esc(tipFor('LOOPHOLE'))}">💎 Auto-Renew 0%</div>` : '';
-    return `<tr>
+    const isF = isRosterForeign(p);
+    const gap = Math.max(0, (p.potCap || p.force) - p.force);
+    return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.top ? '👑' : (p.star ? '⭐' : '')} ${p.injured ? `<span class="badge b-crit">🏥${p.injuryDays}d</span>` : ''}${slumpBadge}</div>
+        <div class="origin-meta">
+          ${originNoteHtml(p)}
+          ${p.isTrap ? `<span class="badge b-crit origin-note" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isGem ? `<span class="badge b-good origin-note" title="${esc(tipFor('GEM'))}">GEM</span>` : '')}
+        </div>
         <div class="inline-sticky-meta">
           <span class="badge ${actB}">${esc(p.action)}</span>
-          ${p.isTrap ? `<span class="badge b-crit" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isGem ? `<span class="badge b-good" title="${esc(tipFor('GEM'))}">GEM</span>` : '')}
         </div>
       </td>
       <td><b>${fmtPos(p.pos)}</b> <span class="c-muted" style="font-size:10px">${fmtFoot(p.foot)}</span></td>
-      <td class="mono"><b>${p.force}</b>→<b class="c-green">${p.potCap}</b><div class="c-muted" style="font-size:10px">UI ${p.potential}</div></td>
+      <td class="mono"><b>${p.force}</b></td>
+      <td class="mono"><b class="c-green">${p.potCap}</b><div class="c-muted" style="font-size:10px">UI ${p.potential}${gap > 0 ? ` · +${gap}` : ' · max'}</div></td>
       <td><span class="badge ${cB} mono">${p.contractDays}d</span>${loopTag}${p.benchCutSave ? `<div class="c-sky" style="font-size:10px">Bangku -${fmtM(p.benchCutSave)}</div>` : ''}${narTag}</td>
       <td class="mono">${fmtM(p.salary)}</td>
       <td class="col-hide-mob">${energyPillHtml(p.energy)}</td>
@@ -263,7 +364,7 @@ function renderRosterTable() {
       <td class="mono col-hide-mob">${fmtM(p.marketValue)} <div class="c-muted" style="font-size:10px">Real ~${fmtM(p.estRealSale)}</div></td>
       <td class="col-desk-only"><span class="badge ${actB}">${esc(p.action)}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="11" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="12" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
 
   renderTrainingAudit();
 }
@@ -562,9 +663,10 @@ function renderWonderkidTracker() {
 
 function exportRosterCsv() {
   const rows = getFilteredRoster();
-  const hdr = ['Name','Pos','Age','DeclineAge','Foot','Energy','Force','Pot','PotCap','S1','S2','StackPct','ContractDays','FineSlumpPct','Salary','MarketValue','EstRealSale','Action'];
+  const hdr = ['Name','Pos','Nationality','Origin','Age','DeclineAge','Foot','Energy','Force','Pot','PotCap','S1','S2','StackPct','ContractDays','FineSlumpPct','Salary','MarketValue','EstRealSale','Action'];
   const lines = [hdr.join(',')].concat(rows.map(p => [
-    `"${p.name.replace(/"/g,'""')}"`, fmtPos(p.pos), p.age, p.declineAge, fmtFoot(p.foot), p.energy, p.force, p.potential, p.potCap,
+    `"${p.name.replace(/"/g,'""')}"`, fmtPos(p.pos), p.nationality || '', isRosterForeign(p) ? 'ASING' : 'LOKAL',
+    p.age, p.declineAge, fmtFoot(p.foot), p.energy, p.force, p.potential, p.potCap,
     fmtSkill(p.s1), fmtSkill(p.s2), p.stackPct, p.contractDays, p.fineSlumpPct || 0, p.salary, p.marketValue, p.estRealSale, `"${p.action}"`
   ].join(',')));
   downloadCsv('ligafoot_skuad.csv', lines.join('\n'));
@@ -572,21 +674,35 @@ function exportRosterCsv() {
 
 // ==================== SUB-TAB 3E: DEEP AUDIT & PIPELINE TIM B ====================
 let bTeamFilter = 'ALL';
+let bTeamSort = { col: 'force', dir: -1 };
 
 function setBTeamFilter(f) {
   bTeamFilter = f || 'ALL';
   renderBTeamPanel();
 }
 
+function sortBTeam(col) {
+  if (bTeamSort.col === col) bTeamSort.dir *= -1;
+  else { bTeamSort.col = col; bTeamSort.dir = defaultSortDir(col); }
+  renderBTeamPanel();
+}
+
+function thSortB(col, label, extraCls = '') {
+  const act = bTeamSort.col === col ? 'sort-active' : '';
+  return `<th class="th-sort ${act} ${extraCls}" data-sort-col="${col}" title="Klik untuk urutkan berdasarkan ${esc(label)}" onclick="sortBTeam('${col}')">${label}${sortArrowHtml(bTeamSort, col)}</th>`;
+}
+
 function getFilteredBTeamRoster() {
   const bt = D.bTeamInfo || {};
   const list = Array.isArray(bt.roster) ? bt.roster : [];
-  if (bTeamFilter === 'PROMOTE') return list.filter(p => p.bAction === 'SIAP PROMOSI');
-  if (bTeamFilter === 'LEAK') return list.filter(p => p.zeroMin);
-  if (bTeamFilter === 'CONTRACT') return list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom);
-  if (bTeamFilter === 'FOREIGN') return list.filter(p => p.isForeign);
-  if (bTeamFilter === 'HIGHPOT') return list.filter(p => (p.gap || 0) >= 12);
-  return list;
+  let res = list;
+  if (bTeamFilter === 'PROMOTE') res = list.filter(p => p.bAction === 'SIAP PROMOSI');
+  else if (bTeamFilter === 'LEAK') res = list.filter(p => p.zeroMin);
+  else if (bTeamFilter === 'CONTRACT') res = list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom);
+  else if (bTeamFilter === 'FOREIGN') res = list.filter(p => isRosterForeign(p));
+  else if (bTeamFilter === 'LOCAL') res = list.filter(p => !isRosterForeign(p));
+  else if (bTeamFilter === 'HIGHPOT') res = list.filter(p => (p.gap || 0) >= 12);
+  return [...res].sort((a, b) => compareAuditRows(a, b, bTeamSort));
 }
 
 function renderBTeamPanel() {
@@ -673,7 +789,8 @@ function renderBTeamPanel() {
     PROMOTE: list.filter(p => p.bAction === 'SIAP PROMOSI').length,
     LEAK: list.filter(p => p.zeroMin).length,
     CONTRACT: list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom).length,
-    FOREIGN: list.filter(p => p.isForeign).length,
+    FOREIGN: list.filter(p => isRosterForeign(p)).length,
+    LOCAL: list.filter(p => !isRosterForeign(p)).length,
     HIGHPOT: list.filter(p => (p.gap || 0) >= 12).length,
   };
   const chipDefs = [
@@ -683,33 +800,35 @@ function renderBTeamPanel() {
     ['CONTRACT', `⏳ Kontrak (${counts.CONTRACT})`],
     ['HIGHPOT', `🚀 Gap ≥12 (${counts.HIGHPOT})`],
     ['FOREIGN', `🌐 Asing (${counts.FOREIGN})`],
+    ['LOCAL', `🏠 Lokal (${counts.LOCAL})`],
   ];
   barEl.innerHTML = chipDefs.map(([k, lbl]) =>
     `<button type="button" class="qchip ${bTeamFilter === k ? 'active' : ''}" onclick="setBTeamFilter('${k}')">${esc(lbl)}</button>`
   ).join('');
 
   tblEl.innerHTML = `<thead><tr>
-    <th>Pemain Tim B</th>
-    <th>Pos</th>
-    <th>F→Cap</th>
-    <th class="col-hide-mob">Usia</th>
-    <th class="col-hide-mob">Laga/Mnt</th>
-    <th>Gaji</th>
-    <th class="col-hide-mob">Kontrak</th>
-    <th>Status &amp; Aksi</th>
+    ${thSortB('name', 'Pemain Tim B')}
+    ${thSortB('pos', 'Pos')}
+    ${thSortB('force', 'Force')}
+    ${thSortB('potCap', 'PotCap')}
+    ${thSortB('age', 'Usia', 'col-hide-mob')}
+    ${thSortB('seasonMinutes', 'Laga/Mnt', 'col-hide-mob')}
+    ${thSortB('salary', 'Gaji')}
+    ${thSortB('contractDays', 'Kontrak', 'col-hide-mob')}
+    ${thSortB('bAction', 'Status &amp; Aksi')}
   </tr></thead><tbody>` + (filtered.length ? filtered.map(p => {
     const gap = Math.max(0, (p.potCap || p.force) - p.force);
     const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
     const inBCart = Boolean(typeof cartBIn !== 'undefined' && cartBIn[p.id]);
-    return `<tr>
+    const isF = isRosterForeign(p);
+    return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
-        <a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
-        ${p.isForeign ? '<span class="badge b-warn" style="font-size:9px">ASING</span>' : ''}
-        ${p.fillsHole ? '<span class="badge b-good" style="font-size:9px">LUBANG</span>' : ''}
-        ${p.injured ? `<span class="badge b-crit" style="font-size:9px">🏥${p.injuryDays}d</span>` : ''}
+        <div><a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.injured ? `<span class="badge b-crit" style="font-size:9px">🏥${p.injuryDays}d</span>` : ''}</div>
+        <div class="origin-meta">${originNoteHtml(p)}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}</div>
       </td>
       <td><b>${fmtPos(p.pos)}</b></td>
-      <td class="mono"><b>${p.force}</b>→<span class="c-green">${p.potCap}</span> <span class="c-muted">(+${gap})</span></td>
+      <td class="mono"><b>${p.force}</b></td>
+      <td class="mono"><b class="c-green">${p.potCap}</b> <span class="c-muted">(+${gap})</span></td>
       <td class="mono col-hide-mob">${p.age}th</td>
       <td class="mono col-hide-mob">${p.gamesPlayed || 0}g <span class="c-muted">(${p.seasonMinutes || 0}m · ${p.avgRating || '-'})</span></td>
       <td class="mono">${fmtM(p.salary)}</td>
@@ -721,7 +840,7 @@ function renderBTeamPanel() {
         </div>
       </td>
     </tr>`;
-  }).join('') : '<tr><td colspan="8" class="c-muted">Tidak ada pemain Tim B pada filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="9" class="c-muted">Tidak ada pemain Tim B pada filter ini.</td></tr>') + `</tbody>`;
 }
 
 function exportBTeamCsv() {

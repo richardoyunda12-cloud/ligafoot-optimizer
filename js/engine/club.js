@@ -1139,6 +1139,7 @@
     for (const p of userRoster) {
       const rIdx = rankOf[p.id];
       p.squadRank = rIdx + 1;
+      p.isForeign = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
       p.isTop5Arab = top5Ids.has(p.id) && p.age >= 26;
       const starterFloor = U.salaryCutFloorMul(false, p.age, p.salaryCuts, p.renewRefusals);
       const reserveFloor = U.salaryCutFloorMul(true, p.age, p.salaryCuts, p.renewRefusals);
@@ -2335,7 +2336,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.9.2 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.9.3 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,

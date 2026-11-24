@@ -2017,3 +2017,42 @@ th.sort-active { color: #6ee7b7 !important; }
     display: flex;
   }
 }
+
+/* v8.9.3 Audit Tim: Clickable Sort Headers & Asing/Lokal Note */
+th.th-sort {
+  cursor: pointer;
+  user-select: none;
+  transition: color .14s, background .14s;
+}
+th.th-sort:hover {
+  color: #fff;
+  background: rgba(56,189,248,.10);
+}
+th.th-sort.sort-active {
+  color: #6ee7b7 !important;
+  background: rgba(16,185,129,.10);
+}
+.sort-ico {
+  display: inline-block;
+  font-size: 10px;
+  opacity: .48;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+th.sort-active .sort-ico {
+  opacity: 1;
+  color: #6ee7b7;
+}
+.origin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+}
+.origin-note {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}

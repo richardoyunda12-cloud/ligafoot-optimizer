@@ -29,8 +29,8 @@ function matchAcadFilter(y, flt) {
 
 function acadTh(col, label, extraCls = '') {
   const act = acadSort.col === col ? 'sort-active' : '';
-  const arr = acadSort.col === col ? (acadSort.dir === -1 ? ' ▼' : ' ▲') : '';
-  return `<th class="${act} ${extraCls}" onclick="sortAcad('${col}')">${label}${arr}</th>`;
+  const arr = acadSort.col === col ? (acadSort.dir === -1 ? '▼' : '▲') : '⇅';
+  return `<th class="th-sort ${act} ${extraCls}" data-sort-col="${col}" title="Klik untuk urutkan berdasarkan ${esc(label)}" onclick="sortAcad('${col}')">${label}<span class="sort-ico">${arr}</span></th>`;
 }
 
 function renderTab5() {
@@ -75,9 +75,16 @@ function renderTab5() {
   const rows = youth
     .filter(y => matchAcadFilter(y, acadFilter))
     .sort((a, b) => {
+      if (acadSort.col === 'estPotCap') {
+        const pa = Number(a.estPotCap || a.potCap || a.force) || 0;
+        const pb = Number(b.estPotCap || b.potCap || b.force) || 0;
+        if (pa !== pb) return (pa - pb) * acadSort.dir;
+        return ((b.force || 0) - (a.force || 0)) || String(a.name || '').localeCompare(String(b.name || ''));
+      }
       const va = a[acadSort.col], vb = b[acadSort.col];
       if (typeof va === 'string') return va.localeCompare(vb) * acadSort.dir;
-      return ((va || 0) - (vb || 0)) * acadSort.dir;
+      const df = ((va || 0) - (vb || 0)) * acadSort.dir;
+      return df !== 0 ? df : ((b.force || 0) - (a.force || 0));
     });
 
   document.getElementById('t5-tbl').innerHTML = `<thead><tr>
@@ -86,7 +93,8 @@ function renderTab5() {
     ${acadTh('hash', 'Bintang')}
     ${acadTh('development', 'Dev')}
     ${acadTh('age', 'Usia', 'col-hide-mob')}
-    ${acadTh('force', 'F → Est. PotCap')}
+    ${acadTh('force', 'Force')}
+    ${acadTh('estPotCap', 'Est. PotCap')}
     <th class="col-hide-mob">Plafon +</th>
     <th class="col-hide-mob">Est. Mega Eropa</th>
     <th class="col-hide-mob">Skill Stack</th>
@@ -110,14 +118,15 @@ function renderTab5() {
       <td class="mono c-amber"><b>★${y.hash}</b></td>
       <td><div class="mini-bar-wrap"><div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${devPct}%;background:${devCol}"></div></div><span class="mono" style="font-size:11px;min-width:28px;text-align:right">${devPct}%</span></div></td>
       <td class="mono col-hide-mob ${y.age >= 20 ? 'c-amber' : ''}"><b>${y.age}</b></td>
-      <td class="mono"><b>${y.force}</b> → <b class="c-green">${y.estPotCap || y.potCap || y.force}</b>${Array.isArray(y.estPotRange) ? `<div class="c-muted" style="font-size:10px">Est ${y.estPotRange[0]}–${y.estPotRange[1]}</div>` : ''}</td>
+      <td class="mono"><b>${y.force}</b></td>
+      <td class="mono"><b class="c-green">${y.estPotCap || y.potCap || y.force}</b>${Array.isArray(y.estPotRange) ? `<div class="c-muted" style="font-size:10px">Est ${y.estPotRange[0]}–${y.estPotRange[1]}</div>` : ''}</td>
       <td class="mono c-green col-hide-mob">${y.ceilBonus ? '+' + y.ceilBonus : '-'}</td>
       <td class="mono col-hide-mob ${y.isMegaProspect ? 'c-green' : 'c-muted'}"><b>${fmtM(y.estMegaOffer || 0)}</b>${y.isMegaProspect ? ' 🔥' : ''}</td>
       <td class="col-hide-mob"><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></td>
       <td class="mono col-hide-mob"><b>${y.pipeScore}</b></td>
       <td class="col-desk-only"><span class="badge ${actCls}">${esc(y.action)}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="11" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="12" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
 
   // Panel Baru v8.3: Radar Olheiro da Base (#23984 — Bajak U-21 Rival 2.0x MV, Kuota 2/Musim)
   let ysBox = document.getElementById('t5-yscout-box');

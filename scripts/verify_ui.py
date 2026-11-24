@@ -93,6 +93,76 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
     assert wk_only_ct_hidden, 'Scope tab tab3-train (WK) tidak menyembunyikan card Training'
     page.evaluate("() => { setT3TrainScope('ALL'); }")
 
+    # 1b. Tab 3B & 3E: Audit Tim — Sortable Force/PotCap headers & Asing/Lokal Notes
+    page.evaluate("() => { goToView('t3', 't3-squad'); }")
+    page.wait_for_selector('#t4-tbl th[data-sort-col="potCap"]', timeout=5000)
+
+    def read_audit_rows(tbl_sel):
+        return page.evaluate("""(sel) => Array.from(document.querySelectorAll(sel + ' tbody tr[data-force]')).map(tr => {
+          const noteEl = tr.querySelector('.origin-note');
+          const style = noteEl ? getComputedStyle(noteEl) : null;
+          return {
+            force: Number(tr.dataset.force),
+            potCap: Number(tr.dataset.potcap),
+            foreign: tr.dataset.foreign === '1',
+            noteVisible: Boolean(noteEl && style && style.display !== 'none' && noteEl.getBoundingClientRect().width > 0),
+            noteText: noteEl ? noteEl.textContent.trim() : '',
+          };
+        })""", tbl_sel)
+
+    rows_init = read_audit_rows('#t4-tbl')
+    assert len(rows_init) >= 2, 'Tabel Audit Skuad Senior (<2 baris)'
+    assert all(
+        r['noteVisible'] and (('ASING' if r['foreign'] else 'LOKAL') in r['noteText'])
+        for r in rows_init
+    ), 'Note Asing/Lokal tidak tampil lengkap pada seluruh baris Audit Skuad Senior'
+
+    page.locator('#t4-tbl th[data-sort-col="potCap"]').click()
+    assert 'sort-active' in (page.get_attribute('#t4-tbl th[data-sort-col="potCap"]', 'class') or ''), 'Header potCap tidak aktif setelah diklik'
+    pot_desc = [r['potCap'] for r in read_audit_rows('#t4-tbl')]
+    assert pot_desc == sorted(pot_desc, reverse=True), f'Sort PotCap DESC gagal: {pot_desc[:8]}'
+
+    page.locator('#t4-tbl th[data-sort-col="potCap"]').click()
+    pot_asc = [r['potCap'] for r in read_audit_rows('#t4-tbl')]
+    assert pot_asc == sorted(pot_asc), f'Sort PotCap ASC gagal: {pot_asc[:8]}'
+
+    page.locator('#t4-tbl th[data-sort-col="force"]').click()
+    assert 'sort-active' in (page.get_attribute('#t4-tbl th[data-sort-col="force"]', 'class') or ''), 'Header force tidak aktif setelah diklik'
+    f_desc = [r['force'] for r in read_audit_rows('#t4-tbl')]
+    assert f_desc == sorted(f_desc, reverse=True), f'Sort Force DESC gagal: {f_desc[:8]}'
+
+    page.locator('#t4-tbl th[data-sort-col="force"]').click()
+    f_asc = [r['force'] for r in read_audit_rows('#t4-tbl')]
+    assert f_asc == sorted(f_asc), f'Sort Force ASC gagal: {f_asc[:8]}'
+
+    page.locator('#t4-tbl th[data-sort-col="force"]').click()
+
+    expected_counts = page.evaluate("() => ({ total: (D.roster || []).length, foreign: D.meta.foreignCountSquad || 0 })")
+    page.evaluate("() => { setRosterQuickFilter('FOREIGN'); }")
+    f_rows = read_audit_rows('#t4-tbl')
+    assert len(f_rows) == expected_counts['foreign'] and all(r['foreign'] for r in f_rows), 'Filter FOREIGN mismatch'
+    page.evaluate("() => { setRosterQuickFilter('LOCAL'); }")
+    l_rows = read_audit_rows('#t4-tbl')
+    assert len(l_rows) == (expected_counts['total'] - expected_counts['foreign']) and all(not r['foreign'] for r in l_rows), 'Filter LOCAL mismatch'
+    page.evaluate("() => { setRosterQuickFilter('ALL'); }")
+
+    page.evaluate("() => { goToView('t3', 't3-bteam'); }")
+    b_rows = read_audit_rows('#t3b-tbl')
+    if len(b_rows) >= 2:
+        assert all(
+            r['noteVisible'] and (('ASING' if r['foreign'] else 'LOKAL') in r['noteText'])
+            for r in b_rows
+        ), 'Note Asing/Lokal tidak tampil lengkap pada Audit Tim B'
+        page.locator('#t3b-tbl th[data-sort-col="potCap"]').click()
+        bp_desc = [r['potCap'] for r in read_audit_rows('#t3b-tbl')]
+        assert bp_desc == sorted(bp_desc, reverse=True), f'Tim B Sort PotCap DESC gagal: {bp_desc[:8]}'
+        page.locator('#t3b-tbl th[data-sort-col="potCap"]').click()
+        bp_asc = [r['potCap'] for r in read_audit_rows('#t3b-tbl')]
+        assert bp_asc == sorted(bp_asc), f'Tim B Sort PotCap ASC gagal: {bp_asc[:8]}'
+        page.locator('#t3b-tbl th[data-sort-col="force"]').click()
+        bf_desc = [r['force'] for r in read_audit_rows('#t3b-tbl')]
+        assert bf_desc == sorted(bf_desc, reverse=True), f'Tim B Sort Force DESC gagal: {bf_desc[:8]}'
+
     # 2. Tier 2 Controls Spot-Check
     page.evaluate("() => { goToView('t6', 't6-tel'); }")
     tel_txt = page.text_content('#t6-tel-wrap') or ''
