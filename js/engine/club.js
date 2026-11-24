@@ -2335,7 +2335,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.9.1 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.9.2 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,

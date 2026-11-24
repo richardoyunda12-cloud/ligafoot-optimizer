@@ -14,9 +14,9 @@
   const STORE_NAME = 'kv';
 
   const KEYS = {
-    STATIC_DB: 'static_db_v8',
-    STATIC_DB_META: 'static_db_meta_v8',
-    LAST_DASHBOARD: 'last_dashboard_v8',
+    STATIC_DB: 'static_db_v9',
+    STATIC_DB_META: 'static_db_meta_v9',
+    LAST_DASHBOARD: 'last_dashboard_v9',
     HISTORY: 'history_snapshots_v1',
   };
 
