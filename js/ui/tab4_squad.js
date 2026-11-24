@@ -164,9 +164,12 @@ function renderRosterActionRadar() {
     <div style="margin-top:8px;background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;padding:8px 10px;font-size:11px">
       <div class="flex-between" style="gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <b class="c-purple">🅱️ Routing Tim B: Jam Terbang Muda &amp; Legakan Kuota Asing</b>
-        <span class="badge ${bt.excessForeign > 0 ? 'b-warn' : 'b-info'} mono">
-          ${bt.hasBTeam ? `${esc(bt.bTeamName || 'Tim B')} Aktif ✓${bt.bTeamSquadCount ? ` (${bt.bTeamSquadCount} pemain)` : ''}` : `Buat Tim B: ${fmtM(bt.creationCost)}`} · Asing ${bt.curForeign}/${bt.foreignCap}
-        </span>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="badge ${bt.excessForeign > 0 ? 'b-warn' : 'b-info'} mono">
+            ${bt.hasBTeam ? `${esc(bt.bTeamName || 'Tim B')} Aktif ✓${bt.bTeamSquadCount ? ` (${bt.bTeamSquadCount} pemain)` : ''}` : `Buat Tim B: ${fmtM(bt.creationCost)}`} · Asing ${bt.curForeign}/${bt.foreignCap}
+          </span>
+          ${bt.hasBTeam ? `<button type="button" class="btn btn-sm btn-accent" onclick="goToView('t3','t3-bteam')">Buka Audit Tim B →</button>` : ''}
+        </div>
       </div>
       <div class="c-muted" style="font-size:10.5px;margin-bottom:4px">
         ${bt.excessForeign > 0
@@ -335,4 +338,163 @@ function exportRosterCsv() {
     fmtSkill(p.s1), fmtSkill(p.s2), p.stackPct, p.contractDays, p.fineSlumpPct || 0, p.salary, p.marketValue, p.estRealSale, `"${p.action}"`
   ].join(',')));
   downloadCsv('ligafoot_skuad.csv', lines.join('\n'));
+}
+
+// ==================== SUB-TAB 3E: DEEP AUDIT & PIPELINE TIM B ====================
+let bTeamFilter = 'ALL';
+
+function setBTeamFilter(f) {
+  bTeamFilter = f || 'ALL';
+  renderBTeamPanel();
+}
+
+function getFilteredBTeamRoster() {
+  const bt = D.bTeamInfo || {};
+  const list = Array.isArray(bt.roster) ? bt.roster : [];
+  if (bTeamFilter === 'PROMOTE') return list.filter(p => p.bAction === 'SIAP PROMOSI');
+  if (bTeamFilter === 'LEAK') return list.filter(p => p.zeroMin);
+  if (bTeamFilter === 'CONTRACT') return list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom);
+  if (bTeamFilter === 'FOREIGN') return list.filter(p => p.isForeign);
+  if (bTeamFilter === 'HIGHPOT') return list.filter(p => (p.gap || 0) >= 12);
+  return list;
+}
+
+function renderBTeamPanel() {
+  const bt = D.bTeamInfo || null;
+  const titleEl = document.getElementById('t3b-title');
+  const kpiEl = document.getElementById('t3b-kpis');
+  const routeEl = document.getElementById('t3b-routing');
+  const barEl = document.getElementById('t3b-filter-bar');
+  const tblEl = document.getElementById('t3b-tbl');
+  if (!kpiEl || !routeEl || !barEl || !tblEl) return;
+
+  if (!bt || !bt.hasBTeam) {
+    if (titleEl) titleEl.textContent = '🅱️ Pipeline & Pembuatan Tim B';
+    kpiEl.innerHTML = `<div class="alert-item INFO mb-8">
+      <span class="badge b-info">BELUM PUNYA TIM B</span>
+      <div>
+        Klub belum memiliki Tim B aktif. Biaya pembuatan Tim B (#24615): <b class="mono">${fmtM((bt && bt.creationCost) || 600000)}</b>.
+        Kuota pemain asing Tim Utama saat ini: <b class="mono">${(bt && bt.curForeign) || 0}/${(bt && bt.foreignCap) || 7}</b>.
+      </div>
+    </div>`;
+    const cands = (bt && Array.isArray(bt.candidates)) ? bt.candidates : [];
+    routeEl.innerHTML = cands.length ? `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:11.5px">
+        <div style="font-weight:800;margin-bottom:5px" class="c-purple">📤 Kandidat Terbaik Tim Utama → Tim B (${cands.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${cands.map(c =>
+          `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(c.id)}')"><b>${esc(c.name)}</b> <span class="mono">${fmtPos(c.pos)} ${c.age}th · F${c.force}→${c.potCap}</span>${c.isForeign ? ' <b class="c-amber">ASING</b>' : ''}</span>`
+        ).join('')}</div>
+      </div>` : '';
+    barEl.innerHTML = '';
+    tblEl.innerHTML = '<tbody><tr><td class="c-muted">Buat Tim B di menu Klub dalam game untuk membuka audit 19+ pemain cadangan secara penuh.</td></tr></tbody>';
+    return;
+  }
+
+  const list = Array.isArray(bt.roster) ? bt.roster : [];
+  const filtered = getFilteredBTeamRoster();
+  if (titleEl) {
+    titleEl.innerHTML = `🅱️ Audit Skuad ${esc(bt.bTeamName || 'Tim B')} <span class="c-muted mono" style="font-size:11px;font-weight:500">(${list.length} pemain${bt.bTeamLeague ? ' · ' + esc(bt.bTeamLeague) : ''})</span>`;
+  }
+
+  kpiEl.innerHTML = `
+    <div class="grid g4 mb-8">
+      <div class="kpi">
+        <span class="kpi-lbl">Skuad &amp; Rata2 Tim B</span>
+        <span class="kpi-val c-sky mono">${list.length} pem</span>
+        <span class="kpi-sub mono">Avg F${bt.avgForce || 0} · Usia ${bt.avgAge || 0}th · Asing ${bt.foreignCount || 0}</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-lbl">Kas &amp; Payroll Tim B</span>
+        <span class="kpi-val c-green mono">${fmtM(bt.budget || 0)}</span>
+        <span class="kpi-sub mono">Gaji ${fmtM(bt.totalPayroll || 0)}/bln · Rep ${bt.reputation || 0}</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-lbl">Gaji Bocor (0 Menit)</span>
+        <span class="kpi-val ${(bt.zeroMinLeakCount || 0) > 0 ? 'c-red' : 'c-green'} mono">${bt.zeroMinLeakCount || 0} pem</span>
+        <span class="kpi-sub mono">${fmtM(bt.zeroMinPayrollLeak || 0)}/bln belum main</span>
+      </div>
+      <div class="kpi">
+        <span class="kpi-lbl">Promosi &amp; Kontrak</span>
+        <span class="kpi-val ${(bt.readyPromoteCount || 0) > 0 ? 'c-green' : 'c-amber'} mono">${bt.readyPromoteCount || 0} promosi</span>
+        <span class="kpi-sub mono">${bt.contractAlertCount || 0} alert kontrak · Asing Utama ${bt.curForeign}/${bt.foreignCap}</span>
+      </div>
+    </div>`;
+
+  const topPromoteCands = list.filter(p => p.bAction === 'SIAP PROMOSI' || (p.gap >= 15 && p.force >= 30)).slice(0, 6);
+  const candsOut = Array.isArray(bt.candidates) ? bt.candidates : [];
+  routeEl.innerHTML = `
+    <div class="grid g2" style="gap:8px">
+      <div style="background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:8px;padding:8px 10px;font-size:11px">
+        <div style="font-weight:800;margin-bottom:4px" class="c-green">📥 Pipeline Tim B → Tim Utama (Gratis)</div>
+        ${topPromoteCands.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px">${topPromoteCands.map(p =>
+          `<span class="tl-pill" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b> <span class="mono">${fmtPos(p.pos)} ${p.age}th · F${p.force}→${p.potCap}</span>${p.fillsHole ? ' <b class="c-green">LUBANG</b>' : ''}</span>`
+        ).join('')}</div>` : '<div class="c-muted">Belum ada pemain Tim B mencapai ambang starter Tim Utama.</div>'}
+      </div>
+      <div style="background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;padding:8px 10px;font-size:11px">
+        <div style="font-weight:800;margin-bottom:4px" class="c-purple">📤 Kirim Jam Terbang: Tim Utama → Tim B (Gratis)</div>
+        ${candsOut.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px">${candsOut.map(c =>
+          `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(c.id)}')"><b>${esc(c.name)}</b> <span class="mono">${fmtPos(c.pos)} ${c.age}th · F${c.force}→${c.potCap}</span>${c.isForeign ? ' <b class="c-amber">ASING</b>' : ''}</span>`
+        ).join('')}</div>` : '<div class="c-muted">Semua prospek U-22 Tim Utama sudah masuk rotasi inti.</div>'}
+      </div>
+    </div>`;
+
+  const counts = {
+    ALL: list.length,
+    PROMOTE: list.filter(p => p.bAction === 'SIAP PROMOSI').length,
+    LEAK: list.filter(p => p.zeroMin).length,
+    CONTRACT: list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom).length,
+    FOREIGN: list.filter(p => p.isForeign).length,
+    HIGHPOT: list.filter(p => (p.gap || 0) >= 12).length,
+  };
+  const chipDefs = [
+    ['ALL', `Semua (${counts.ALL})`],
+    ['PROMOTE', `⬆ Siap Promosi (${counts.PROMOTE})`],
+    ['LEAK', `💸 0 Menit (${counts.LEAK})`],
+    ['CONTRACT', `⏳ Kontrak (${counts.CONTRACT})`],
+    ['HIGHPOT', `🚀 Gap ≥12 (${counts.HIGHPOT})`],
+    ['FOREIGN', `🌐 Asing (${counts.FOREIGN})`],
+  ];
+  barEl.innerHTML = chipDefs.map(([k, lbl]) =>
+    `<button type="button" class="qchip ${bTeamFilter === k ? 'active' : ''}" onclick="setBTeamFilter('${k}')">${esc(lbl)}</button>`
+  ).join('');
+
+  tblEl.innerHTML = `<thead><tr>
+    <th>Pemain Tim B</th>
+    <th>Pos</th>
+    <th>F→Cap</th>
+    <th class="col-hide-mob">Usia</th>
+    <th class="col-hide-mob">Laga/Mnt</th>
+    <th>Gaji</th>
+    <th class="col-hide-mob">Kontrak</th>
+    <th>Status &amp; Aksi</th>
+  </tr></thead><tbody>` + (filtered.length ? filtered.map(p => {
+    const gap = Math.max(0, (p.potCap || p.force) - p.force);
+    const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
+    return `<tr>
+      <td>
+        <a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
+        ${p.isForeign ? '<span class="badge b-warn" style="font-size:9px">ASING</span>' : ''}
+        ${p.fillsHole ? '<span class="badge b-good" style="font-size:9px">LUBANG</span>' : ''}
+        ${p.injured ? `<span class="badge b-crit" style="font-size:9px">🏥${p.injuryDays}d</span>` : ''}
+      </td>
+      <td><b>${fmtPos(p.pos)}</b></td>
+      <td class="mono"><b>${p.force}</b>→<span class="c-green">${p.potCap}</span> <span class="c-muted">(+${gap})</span></td>
+      <td class="mono col-hide-mob">${p.age}th</td>
+      <td class="mono col-hide-mob">${p.gamesPlayed || 0}g <span class="c-muted">(${p.seasonMinutes || 0}m · ${p.avgRating || '-'})</span></td>
+      <td class="mono">${fmtM(p.salary)}</td>
+      <td class="col-hide-mob"><span class="badge ${cB} mono">${p.contractDays}d</span></td>
+      <td><span class="badge ${esc(p.bCls || 'b-info')}">${esc(p.bAction || 'TAHAN')}</span></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8" class="c-muted">Tidak ada pemain Tim B pada filter ini.</td></tr>') + `</tbody>`;
+}
+
+function exportBTeamCsv() {
+  const rows = getFilteredBTeamRoster();
+  const hdr = ['Name','Pos','Age','Force','PotCap','Gap','Games','Minutes','AvgRating','Salary','ContractDays','Foreign','Action'];
+  const lines = [hdr.join(',')].concat(rows.map(p => [
+    `"${String(p.name || '').replace(/"/g,'""')}"`, fmtPos(p.pos), p.age, p.force, p.potCap, p.gap || 0,
+    p.gamesPlayed || 0, p.seasonMinutes || 0, p.avgRating || 0, p.salary || 0, p.contractDays || 0,
+    p.isForeign ? 'YES' : 'NO', `"${p.bAction || ''}"`
+  ].join(',')));
+  downloadCsv('ligafoot_tim_b.csv', lines.join('\n'));
 }

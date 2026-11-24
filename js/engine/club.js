@@ -241,7 +241,8 @@
     userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
     namingObj, sponsorsObj, ticketMul, shopAudit, memberAudit,
     holes, upcomingMatches, trainAudit, preContracts, userDiv,
-    autoGuard = null, bestXi = null, optLigaPrices = null, activeFormation = '4-3-3'
+    autoGuard = null, bestXi = null, optLigaPrices = null, activeFormation = '4-3-3',
+    bTeamInfo = null
   ) {
     const alerts = [];
     const add = (sev, cat, title, action) => alerts.push({ sev, cat, title, action });
@@ -419,6 +420,18 @@
         'Pertimbangkan rotasi atau tarik keluar di menit 60 jika sudah unggul agar tidak absen di laga penting berikutnya.');
     }
 
+    if (bTeamInfo && bTeamInfo.hasBTeam) {
+      if ((bTeamInfo.contractAlertCount || 0) > 0) {
+        add('MEDIUM', 'Tim B', `${bTeamInfo.contractAlertCount} pemain ${bTeamInfo.bTeamName || 'Tim B'} masuk Kontrak Kritis / Golden Window!`,
+          'Buka Tab 3E (Tim B) untuk cek sisa kontrak & ekspor pemain Tim B agar tidak terlewat.');
+      }
+      if ((bTeamInfo.zeroMinPayrollLeak || 0) >= 150000) {
+        const leakK = Math.round(bTeamInfo.zeroMinPayrollLeak / 1000);
+        add('MEDIUM', 'Tim B Gaji Bocor', `${bTeamInfo.zeroMinLeakCount} pemain ${bTeamInfo.bTeamName || 'Tim B'} mencatat 0 menit main (${leakK}K/bln terbuang)!`,
+          'Buka Tab 3E (Tim B) untuk audit pemain cadangan Tim B yang makan gaji tanpa bermain.');
+      }
+    }
+
     return alerts;
   }
 
@@ -537,14 +550,20 @@
       p.actionCls = actObj.cls;
     }
 
-    const bestXi = T.solveBestXi(userRoster, activeFormation, foreignCap, userCountry, null, false, repLevel);
-    const rotXi = T.solveBestXi(userRoster, activeFormation, foreignCap, userCountry, null, true, repLevel);
+    const bestXi = T.solveBestXi(userRoster, rawActiveFormation, foreignCap, userCountry, null, false, repLevel);
+    const rotXi = T.solveBestXi(userRoster, rawActiveFormation, foreignCap, userCountry, null, true, repLevel);
     const formCompare = [];
-    for (const fk of Object.keys(C.FORMATIONS)) {
+    const formCompareKeys = [...Object.keys(C.FORMATIONS)];
+    if (rawActiveFormation.includes('~') && !formCompareKeys.includes(rawActiveFormation)) {
+      formCompareKeys.push(rawActiveFormation);
+    }
+    for (const fk of formCompareKeys) {
       const res = T.solveBestXi(userRoster, fk, foreignCap, userCountry, null, false, repLevel);
-      const mods = C.FORMATION_MODS[fk] || { atkMod: 0, defMod: 0 };
+      const baseM = C.FORMATION_MODS[res.baseFormation || fk] || { atkMod: 0, defMod: 0 };
       formCompare.push({
         formation: fk,
+        baseFormation: res.baseFormation || fk,
+        isCustom: Boolean(res.isCustom),
         avgScore: res.avgScore,
         totalScore: res.totalScore,
         sectors: res.sectors,
@@ -552,8 +571,8 @@
         chemistry: res.chemistry,
         foreignCount: res.foreignCount,
         wrongFootCount: res.wrongFootCount,
-        atkMod: mods.atkMod,
-        defMod: mods.defMod,
+        atkMod: res.atkMod !== undefined ? res.atkMod : baseM.atkMod,
+        defMod: res.defMod !== undefined ? res.defMod : baseM.defMod,
         falseNine: res.falseNine,
         hasFormationBug: res.hasFormationBug,
         formationBugInfo: res.formationBugInfo,
@@ -564,7 +583,7 @@
       return b.totalScore - a.totalScore;
     });
 
-    const { holes, holePositions } = T.detectSquadHoles(userRoster, activeFormation);
+    const { holes, holePositions } = T.detectSquadHoles(userRoster, rawActiveFormation);
     const holePosSet = new Set(holePositions);
 
     // Special Training Audit (#21430 trainSlots = 3 + floor((ctLevel - 1) / 2))
@@ -880,7 +899,8 @@
     const upcomingMatches = S.extractUpcomingMatches(
       save, userId, clubsMeta, compactTeams, staticPlayers,
       bestXi, sections, fanConf, userDiv, reputation, userRoster,
-      activeFormation, foreignCap, userCountry, ticketMul, rawTmb, sdb
+      activeFormation, foreignCap, userCountry, ticketMul, rawTmb, sdb,
+      rawActiveFormation
     );
 
     prog(75, 'Memindai Global Auto-Scout Moneyball (1.185+ klub AI)...');
@@ -902,13 +922,6 @@
       players: snapPlayers,
     };
     const { deltas, updatedHistory } = computeDeltasAndHistory(historyStore, currentDate, userId, snapNow);
-
-    const alerts = buildPriorityAlerts(
-      userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
-      uTeam.naming, uTeam.sponsors, ticketMul, shopAudit, memberAudit,
-      holes, upcomingMatches, trainAudit, preContracts, userDiv,
-      autoGuard, bestXi, optLiga.prices, activeFormation
-    );
 
     const fineSlumpPlayers = userRoster
       .filter(p => (p.fineSlump || 0) > 0)
@@ -1091,19 +1104,6 @@
           const rXi = T.solveBestXi(oppPool, fk, 99, '');
           if (!oppXi || rXi.avgScore > oppXi.avgScore) oppXi = { ...rXi, formation: fk };
         }
-        const oPow = T.computeEngineSectorPower(oppXi, oppXi.formation, { isHome: !m.isHome, style: 'Balanced' });
-        let bestCombo = null;
-        for (const stTry of ['Balanced', 'Offensive', 'Counter', 'Defensive']) {
-          const uPow = T.computeEngineSectorPower(uNatBestXi, uNatBestXi.formation, { isHome: m.isHome, style: stTry });
-          for (const fcTry of ['Center', 'Wings']) {
-            const sim = T.simulateMatchExpectation(uPow, oPow, { isHome: m.isHome, style: stTry, focus: fcTry, oppStyle: 'Balanced', oppFocus: 'Center' });
-            if (!bestCombo || sim.xPts > bestCombo.sim.xPts) {
-              bestCombo = { stTry, fcTry, uPow, sim };
-            }
-          }
-        }
-        const oppStars = oppPool.slice().sort((a, b) => (b.force || 0) - (a.force || 0)).slice(0, 3)
-          .map(p => ({ name: p.name, pos: p.pos, force: p.force }));
         const Cond = LF.conditions || null;
         let natAutoCond = null;
         if (Cond && typeof Cond.matchConditions === 'function') {
@@ -1119,6 +1119,31 @@
             natAutoCond = null;
           }
         }
+        const natCondF = (typeof T.resolveMatchCondFactors === 'function')
+          ? T.resolveMatchCondFactors(natAutoCond, m.isHome, Boolean(m.neutral))
+          : { altHit: 0, missMul: 1.0, userEnergyMul: 1.0, oppEnergyMul: 1.0, userCardMul: 1.0, oppCardMul: 1.0 };
+        const oPow = T.computeEngineSectorPower(oppXi, oppXi.formation, {
+          isHome: !m.isHome, neutral: Boolean(m.neutral), style: 'Balanced',
+          altHit: natCondF.altHit, energyMul: natCondF.oppEnergyMul, cardMul: natCondF.oppCardMul,
+        });
+        let bestCombo = null;
+        for (const stTry of ['Balanced', 'Offensive', 'Counter', 'Defensive']) {
+          const uPow = T.computeEngineSectorPower(uNatBestXi, uNatBestXi.formation, {
+            isHome: m.isHome, neutral: Boolean(m.neutral), style: stTry,
+            altHit: natCondF.altHit, energyMul: natCondF.userEnergyMul, cardMul: natCondF.userCardMul,
+          });
+          for (const fcTry of ['Center', 'Wings']) {
+            const sim = T.simulateMatchExpectation(uPow, oPow, {
+              isHome: m.isHome, neutral: Boolean(m.neutral), style: stTry, focus: fcTry,
+              oppStyle: 'Balanced', oppFocus: 'Center', missMul: natCondF.missMul,
+            });
+            if (!bestCombo || sim.xPts > bestCombo.sim.xPts) {
+              bestCombo = { stTry, fcTry, uPow, sim };
+            }
+          }
+        }
+        const oppStars = oppPool.slice().sort((a, b) => (b.force || 0) - (a.force || 0)).slice(0, 3)
+          .map(p => ({ name: p.name, pos: p.pos, force: p.force }));
         matchPreviews.push({
           ...m,
           autoCond: natAutoCond,
@@ -1202,6 +1227,77 @@
       })
       .sort((a, b) => (excessForeign > 0 ? ((b.isForeign ? 1 : 0) - (a.isForeign ? 1 : 0)) : 0) || (b.gap - a.gap) || (a.force - b.force))
       .slice(0, 6);
+    let bRosterExport = [];
+    let bTeamBudget = 0;
+    let bTeamRep = 0;
+    let bTeamPayroll = 0;
+    let bTeamAvgForce = 0;
+    let bTeamAvgAge = 0;
+    let bTeamForeignCount = 0;
+    let bTeamReadyPromote = 0;
+    let bTeamZeroMinLeak = 0;
+    let bTeamZeroMinPayrollLeak = 0;
+    let bTeamContractAlerts = 0;
+    if (hasBTeam && bTeamObj) {
+      const bDiv = U.estimateDivisionFromLeague(bTeamLeague || '', worldComps);
+      const bCountry = String((bTeamObj && bTeamObj.country) || userCountry || '').toUpperCase();
+      const bExt = R.extractTeamRoster(bTeamObj, staticPlayers, true, bTeamId, bTeamName || `${userName} B`, bCountry, bDiv);
+      const rawBRoster = (bExt && Array.isArray(bExt.roster)) ? bExt.roster : [];
+      const minForcePromotion = Math.max(25, Math.round(avgTop11Force - 6));
+      bTeamBudget = Math.round(U.safeNum(bTeamObj.budget, 0));
+      bTeamRep = Math.round(U.safeNum(bTeamObj.reputation, 0));
+      bTeamPayroll = Math.round(rawBRoster.reduce((s, p) => s + (p.salary || 0), 0));
+      bTeamAvgForce = rawBRoster.length
+        ? U.roundTo(rawBRoster.reduce((s, p) => s + (p.force || 0), 0) / rawBRoster.length, 1)
+        : 0;
+      bTeamAvgAge = rawBRoster.length
+        ? U.roundTo(rawBRoster.reduce((s, p) => s + (p.age || 0), 0) / rawBRoster.length, 1)
+        : 0;
+      bRosterExport = rawBRoster.map(p => {
+        const isF = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
+        if (isF) bTeamForeignCount++;
+        const gap = Math.max(0, (p.potCap || p.force) - (p.force || 0));
+        const fillsHole = holePosSet.has(p.pos);
+        const zeroMin = (p.gamesPlayed || 0) === 0 && !p.injured;
+        const inGolden = p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX && !p.loanedFrom;
+        const critContract = p.contractDays <= 30 && !p.loanedFrom;
+        if (critContract || inGolden) bTeamContractAlerts++;
+        if (zeroMin) {
+          bTeamZeroMinLeak++;
+          bTeamZeroMinPayrollLeak += (p.salary || 0);
+        }
+        let bAction = 'TAHAN & LATIH';
+        let bCls = 'b-info';
+        if (p.force >= minForcePromotion || (fillsHole && p.force >= minForcePromotion - 2 && (!isF || excessForeign <= 0))) {
+          bAction = 'SIAP PROMOSI';
+          bCls = 'b-good';
+          bTeamReadyPromote++;
+        } else if (zeroMin && (p.age >= 21 || gap <= 5 || p.salary >= 40000)) {
+          bAction = '0 MENIT · GAJI BOCOR';
+          bCls = 'b-crit';
+        } else if (critContract) {
+          bAction = 'KONTRAK KRITIS';
+          bCls = 'b-warn';
+        } else if (inGolden) {
+          bAction = 'GOLDEN WINDOW';
+          bCls = 'b-good';
+        } else if (gap <= 1 && p.age >= 21) {
+          bAction = 'MENTOK POTCAP';
+          bCls = 'b-amber';
+        }
+        return {
+          ...p,
+          isForeign: isF,
+          gap,
+          fillsHole,
+          zeroMin,
+          bAction,
+          bCls,
+        };
+      }).sort((a, b) => (b.force - a.force) || (b.gap - a.gap));
+      bTeamZeroMinPayrollLeak = Math.round(bTeamZeroMinPayrollLeak);
+    }
+
     const bTeamInfo = {
       hasBTeam,
       bTeamId: bTeamId || null,
@@ -1213,7 +1309,59 @@
       foreignCap,
       excessForeign,
       candidates: bTeamCandidates,
+      budget: bTeamBudget,
+      reputation: bTeamRep,
+      totalPayroll: bTeamPayroll,
+      avgForce: bTeamAvgForce,
+      avgAge: bTeamAvgAge,
+      foreignCount: bTeamForeignCount,
+      readyPromoteCount: bTeamReadyPromote,
+      zeroMinLeakCount: bTeamZeroMinLeak,
+      zeroMinPayrollLeak: bTeamZeroMinPayrollLeak,
+      contractAlertCount: bTeamContractAlerts,
+      roster: bRosterExport,
     };
+
+    const alerts = buildPriorityAlerts(
+      userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
+      uTeam.naming, uTeam.sponsors, ticketMul, shopAudit, memberAudit,
+      holes, upcomingMatches, trainAudit, preContracts, userDiv,
+      autoGuard, bestXi, optLiga.prices, activeFormation, bTeamInfo
+    );
+
+    const rawLastLineup = (save.lastLineup && typeof save.lastLineup === 'object') ? save.lastLineup : null;
+    const lastStarterIds = (rawLastLineup && Array.isArray(rawLastLineup.playerIds))
+      ? rawLastLineup.playerIds.slice(0, 11).filter(Boolean)
+      : [];
+    const resolvePlayerName = (pid) => {
+      if (!pid) return null;
+      const rp = rosterById.get(pid);
+      return rp ? rp.name : String(pid);
+    };
+    const lastLineup = rawLastLineup ? {
+      formationRaw: String(rawLastLineup.formation || rawActiveFormation || activeFormation),
+      playStyle: String(rawLastLineup.playStyle || ''),
+      marking: String(rawLastLineup.marking || ''),
+      attackFocus: String(rawLastLineup.attackFocus || ''),
+      falseNine: Boolean(rawLastLineup.falseNine || rawLastLineup.falseNineId),
+      falseNineId: rawLastLineup.falseNineId || null,
+      captainId: rawLastLineup.captain || null,
+      captainName: resolvePlayerName(rawLastLineup.captain),
+      penaltyId: rawLastLineup.penaltyTaker || null,
+      penaltyName: resolvePlayerName(rawLastLineup.penaltyTaker),
+      cornerId: rawLastLineup.cornerTaker || null,
+      cornerName: resolvePlayerName(rawLastLineup.cornerTaker),
+      freeKickId: rawLastLineup.freeKickTaker || null,
+      freeKickName: resolvePlayerName(rawLastLineup.freeKickTaker),
+      starterIds: lastStarterIds,
+      starters: lastStarterIds.map(pid => {
+        const rp = rosterById.get(pid);
+        return rp ? {
+          id: rp.id, name: rp.name, pos: rp.pos, force: rp.force,
+          injured: Boolean(rp.injured), suspended: Boolean(rp.suspended), energy: rp.energy,
+        } : { id: pid, name: pid, pos: '?', force: 0, injured: false, suspended: false, energy: 100 };
+      }),
+    } : null;
 
     const standingsRows = [];
     const rawStandings = Array.isArray(save.standings) ? save.standings.slice(0, 24) : [];
@@ -1313,7 +1461,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.6.2 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.7.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,
@@ -1418,6 +1566,7 @@
       nation: nationInfo,
       matchOrdersAudit,
       bTeamInfo,
+      lastLineup,
     };
 
     prog(100, `Selesai! (${parseSec}s)`);

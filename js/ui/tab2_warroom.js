@@ -139,6 +139,7 @@ function resetWarShouts() {
 }
 
 function openFormInTab3(formKey, useRot) {
+  if (typeof ensureFormSelectOption === 'function') ensureFormSelectOption(formKey);
   const sel = document.getElementById('t3-form-select');
   if (sel) sel.value = formKey;
   setXiMode(useRot ? 'rot' : 'best');
@@ -279,13 +280,20 @@ function buildUnifiedSubPlan(benchPool) {
 function buildSimulatedFixture(opp, isHome, isKo, compKind = warSimCompKind) {
   const Eng = window.LFEngine;
   const userRoster = D.roster || [];
-  const fkActive = (D.meta && D.meta.activeFormation) || '4-3-3';
+  const fkActive = (D.meta && (D.meta.activeFormationRaw || D.meta.activeFormation)) || '4-3-3';
   const fCap = (D.meta && D.meta.foreignCap) || 7;
   const uCountry = (D.meta && D.meta.country) || '';
   const repLv = (D.meta && D.meta.repLevel) || 3;
   const k = compKind || 'league';
   const classicMeta = (typeof CFG.getClassicInfo === 'function') ? CFG.getClassicInfo(D.meta && D.meta.userId, opp.id) : null;
   const isClassic = Boolean(classicMeta);
+  const liveCond = {
+    weather: warWeather || 'clear',
+    refStyle: warRef || 'normal',
+    alt: 0,
+    altHit: 0,
+    varOn: false,
+  };
 
   // Pakai seluruh 11 starter (`xiLite`) jika tersedia agar prediksi AI #23795 & duel udara HDG 100% akurat!
   const xiArr = (Array.isArray(opp.xiLite) && opp.xiLite.length)
@@ -308,7 +316,8 @@ function buildSimulatedFixture(opp, isHome, isKo, compKind = warSimCompKind) {
   if (Eng && Eng.tactics && typeof Eng.tactics.recommendMatchupForOpponent === 'function') {
     matchup = Eng.tactics.recommendMatchupForOpponent(
       userRoster, oppXi, isHome, Boolean(isKo), isBig,
-      fCap, uCountry, fkActive, null, safeRotate, repLv
+      fCap, uCountry, fkActive, null, safeRotate, repLv,
+      liveCond, fkActive
     );
   }
 
@@ -371,6 +380,7 @@ function buildSimulatedFixture(opp, isHome, isKo, compKind = warSimCompKind) {
   const simCompNames = { league: 'Simulasi Liga', cup: 'Simulasi Piala (Copa)', continental2: 'Simulasi Kontinental 2 (AFC2/UEL)', continental1: 'Simulasi Kontinental 1 (AFC/UCL)' };
   return {
     isSim: true,
+    autoCond: liveCond,
     oppId: opp.id,
     isHome,
     compName: simCompNames[k] || 'Simulasi',
@@ -443,6 +453,261 @@ function renderXiPeekHtml(rec, fx) {
   </details>`;
 }
 
+/**
+ * Hitung ulang Win% / xG / Style Compare secara live ketika manajer meng-override
+ * Cuaca atau Wasit pada laga resmi War Room (#21365/#21366/#21367/#22073).
+ */
+function computeLiveWarSim(fx, rec, m, activeWeather, activeRef) {
+  const Eng = window.LFEngine;
+  if (!Eng || !Eng.tactics || !rec || !m || !m.oppPow) return null;
+  const Tac = Eng.tactics;
+  if (typeof Tac.resolveMatchCondFactors !== 'function' || typeof Tac.simulateMatchExpectation !== 'function') return null;
+
+  const baseAc = fx.autoCond || {};
+  const baseCondF = Tac.resolveMatchCondFactors(baseAc, fx.isHome, Boolean(fx.neutral));
+  const simCond = {
+    weather: activeWeather || baseAc.weather || 'clear',
+    refStyle: activeRef || baseAc.refStyle || 'normal',
+    alt: baseAc.alt || 0,
+    altHit: baseAc.altHit || 0,
+    varOn: Boolean(baseAc.varOn),
+  };
+  const newCondF = Tac.resolveMatchCondFactors(simCond, fx.isHome, Boolean(fx.neutral));
+
+  const redMulHeavy = (cMul) => 1.0 - Math.min(0.35, 0.045 * 1.25 * Math.max(0.5, Number(cMul) || 1.0)) * 0.14;
+  const fatMul = (eMul) => (Number(eMul) > 1.0 ? Math.max(0.95, 1.0 - 0.001 * ((Number(eMul) - 1.0) * 14.0)) : 1.0);
+  const scalePow = (pObj, r) => ({
+    ...pObj,
+    DEF: +((Number(pObj.DEF) || 0) * r).toFixed(1),
+    MID: +((Number(pObj.MID) || 0) * r).toFixed(1),
+    ATK: +((Number(pObj.ATK) || 0) * r).toFixed(1),
+    rawATK: +((Number(pObj.rawATK || pObj.ATK) || 0) * r).toFixed(1),
+    atkCenter: +((Number(pObj.atkCenter || pObj.ATK) || 0) * r).toFixed(1),
+    atkWings: +((Number(pObj.atkWings || pObj.ATK) || 0) * r).toFixed(1),
+  });
+
+  const oppRatio = (redMulHeavy(newCondF.oppCardMul) / redMulHeavy(baseCondF.oppCardMul))
+    * (fatMul(newCondF.oppEnergyMul) / fatMul(baseCondF.oppEnergyMul));
+  const oPowLive = Math.abs(oppRatio - 1.0) > 1e-5 ? scalePow(m.oppPow, oppRatio) : m.oppPow;
+
+  const exIds = (fx.safeRotate && Array.isArray(fx.yellowRisks) && fx.yellowRisks.length)
+    ? new Set(fx.yellowRisks.map(y => (findRosterPlayerByName(y.name) || {}).id).filter(Boolean))
+    : null;
+  const uXiObj = Tac.solveBestXi(
+    D.roster || [],
+    rec.formation,
+    (D.meta && D.meta.foreignCap) || 7,
+    (D.meta && D.meta.country) || '',
+    exIds,
+    Boolean(fx.safeRotate),
+    (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3
+  );
+
+  const liveMarking = (m.refereePlan && m.refereePlan[activeRef] && m.refereePlan[activeRef].marking) || m.marking || 'Heavy';
+  const oppFocus = (m.aiInfo && m.aiInfo.aiFocus) || fx.aiFocus || 'Center';
+  const oppStyle = (m.aiInfo && m.aiInfo.aiStyle) || fx.aiStyle || 'Balanced';
+  const recFocus = m.attackFocus || rec.optFocus || 'Center';
+  const f9Id = (m.falseNine && m.falseNineTarget) ? m.falseNineTarget.id : null;
+  const uCondOpts = { altHit: newCondF.altHit, energyMul: newCondF.userEnergyMul, cardMul: newCondF.userCardMul };
+
+  const styleSims = {};
+  for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
+    const pTry = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
+      isHome: fx.isHome, crowdOver70: true, style: stTry, marking: liveMarking, ...uCondOpts,
+    });
+    styleSims[stTry] = Tac.simulateMatchExpectation(pTry, oPowLive, {
+      isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: stTry, oppStyle, missMul: newCondF.missMul,
+    });
+  }
+
+  let liveStyle = 'Balanced';
+  let bestPts = styleSims.Balanced.xPts;
+  for (const stOpt of ['Offensive', 'Counter-Attack', 'Defensive']) {
+    if (styleSims[stOpt].xPts >= bestPts + 0.012) {
+      liveStyle = stOpt;
+      bestPts = styleSims[stOpt].xPts;
+    }
+  }
+
+  const finalPowRaw = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
+    isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id, ...uCondOpts,
+  });
+  const finalSim = f9Id
+    ? Tac.simulateMatchExpectation(finalPowRaw, oPowLive, {
+        isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: newCondF.missMul,
+      })
+    : styleSims[liveStyle];
+
+  const enginePow = { ...finalPowRaw, ATK: finalSim.effAtkUser, atkMod: rec.atkMod || 0, defMod: rec.defMod || 0 };
+  const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'].map(stName => ({
+    ...styleSims[stName],
+    style: stName,
+    isRec: stName === liveStyle,
+  }));
+
+  const oCleanRatio = (redMulHeavy(1.0) / redMulHeavy(baseCondF.oppCardMul))
+    * (fatMul(1.0) / fatMul(baseCondF.oppEnergyMul));
+  const oPowClean = scalePow(m.oppPow, oCleanRatio);
+  const uPowClean = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
+    isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id,
+  });
+  const cleanSim = Tac.simulateMatchExpectation(uPowClean, oPowClean, {
+    isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: 1.0,
+  });
+
+  return {
+    winPct: finalSim.winPct,
+    drawPct: finalSim.drawPct,
+    lossPct: finalSim.lossPct,
+    xPts: finalSim.xPts,
+    xGF: finalSim.xGF,
+    xGA: finalSim.xGA,
+    possPct: finalSim.possPct,
+    uShots: finalSim.uShots,
+    oShots: finalSim.oShots,
+    playStyle: liveStyle,
+    styleCompare,
+    enginePow,
+    oppPow: oPowLive,
+    condDelta: {
+      deltaWin: +(finalSim.winPct - cleanSim.winPct).toFixed(1),
+      deltaPts: +(finalSim.xPts - cleanSim.xPts).toFixed(3),
+      missMul: newCondF.missMul,
+      userEnergyMul: newCondF.userEnergyMul,
+      userCardMul: newCondF.userCardMul,
+    },
+  };
+}
+
+/**
+ * Checklist Diff Pra-Laga (#save.lastLineup vs Rencana War Room):
+ * Menampilkan perbedaan konkrit sebelum menekan Kickoff di game.
+ */
+function renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, activeStyle) {
+  if (!fx || fx.isSim || !D.lastLineup || !m || !rec) return '';
+  const ll = D.lastLineup;
+
+  const normStyle = s => {
+    const k = String(s || '').toLowerCase();
+    if (k.includes('off')) return 'offensive';
+    if (k.includes('def')) return 'defensive';
+    if (k.includes('counter')) return 'counter';
+    return 'balanced';
+  };
+  const normFocus = s => (String(s || '').toLowerCase().includes('wing') ? 'wings' : 'center');
+  const normMark = s => {
+    const k = String(s || '').toLowerCase();
+    if (k.includes('very')) return 'very';
+    if (k.includes('heavy')) return 'heavy';
+    return 'light';
+  };
+  const stripParen = s => String(s || '').replace(/\s*\([^)]*\)\s*/g, '').replace(/\s*\[[^\]]*\]\s*/g, '').trim();
+
+  const items = [];
+  const recForm = String(rec.formation || '');
+  const curForm = String(ll.formationRaw || '');
+  if (recForm && curForm !== recForm) {
+    items.push({ lbl: 'Formasi', cur: fmtForm(curForm), target: fmtForm(recForm), diff: true });
+  } else {
+    items.push({ lbl: 'Formasi', cur: fmtForm(curForm), target: fmtForm(recForm), diff: false });
+  }
+
+  const curStyle = ll.playStyle || '-';
+  const recSt = activeStyle || m.playStyle || 'Balanced';
+  items.push({
+    lbl: 'Gaya Main',
+    cur: curStyle,
+    target: recSt,
+    diff: normStyle(curStyle) !== normStyle(recSt),
+  });
+
+  const curFocus = ll.attackFocus || '-';
+  const recFc = m.attackFocus || 'Center';
+  items.push({
+    lbl: 'Fokus Serang',
+    cur: curFocus,
+    target: recFc,
+    diff: normFocus(curFocus) !== normFocus(recFc),
+  });
+
+  const curMark = ll.marking || '-';
+  const recMk = refObj ? String(refObj.marking || '').split(' (')[0] : (m.marking || 'Heavy').split(' (')[0];
+  items.push({
+    lbl: 'Marking',
+    cur: curMark,
+    target: recMk,
+    diff: normMark(curMark) !== normMark(recMk),
+  });
+
+  if (Boolean(ll.falseNine) !== Boolean(m.falseNine)) {
+    items.push({
+      lbl: 'False Nine',
+      cur: ll.falseNine ? 'ON' : 'OFF',
+      target: m.falseNine && m.falseNineTarget ? `ON (${m.falseNineTarget.name})` : 'OFF',
+      diff: true,
+    });
+  }
+
+  const sp = (rec && rec.setPieces) || (D.bestXi && D.bestXi.setPieces) || {};
+  const spChecks = [
+    ['Kapten', ll.captainName, stripParen(sp.captain)],
+    ['Penalti', ll.penaltyName, stripParen(sp.penalty)],
+    ['Corner', ll.cornerName, stripParen(sp.corner)],
+    ['Free Kick', ll.freeKickName, stripParen(sp.freeKick)],
+  ];
+  const spDiffs = spChecks.filter(([, a, b]) => b && b !== '-' && String(a || '').toLowerCase() !== String(b || '').toLowerCase());
+
+  const lastIds = new Set((ll.starterIds || []).filter(Boolean));
+  const recXiList = Array.isArray(rec.xi) ? rec.xi : [];
+  const recIds = new Set(recXiList.map(x => x.id));
+  const xiOut = (ll.starters || []).filter(s => !recIds.has(s.id));
+  const xiIn = recXiList.filter(x => !lastIds.has(x.id));
+
+  const changeCount = items.filter(x => x.diff).length + (xiIn.length > 0 || xiOut.length > 0 ? 1 : 0) + (spDiffs.length > 0 ? 1 : 0);
+  const xiDiffHtml = (xiOut.length || xiIn.length) ? `
+    <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:11px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px">
+      <div>
+        <b class="c-red">⬇ Keluar XI (${xiOut.length}):</b>
+        <div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px">${xiOut.map(s => {
+          const tag = s.suspended ? ' 🟥SKORS' : (s.injured ? ' 🏥CED' : (fx.safeRotate ? ' 🔄ROT' : ''));
+          return `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(s.id)}')"><b>${esc(s.name)}</b> <span class="mono">${fmtPos(s.pos)} F${s.force}</span>${tag ? `<b class="c-red">${tag}</b>` : ''}</span>`;
+        }).join('') || '<span class="c-muted">-</span>'}</div>
+      </div>
+      <div>
+        <b class="c-green">⬆ Masuk XI (${xiIn.length}):</b>
+        <div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px">${xiIn.map(x =>
+          `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(x.id)}')"><b>${esc(x.name)}</b> <span class="mono">${fmtPos(x.slot || x.pos)} F${x.force}</span></span>`
+        ).join('') || '<span class="c-muted">-</span>'}</div>
+      </div>
+    </div>` : '';
+
+  const spDiffHtml = spDiffs.length ? `
+    <div style="margin-top:6px;font-size:11px;color:var(--amber)">
+      <b>🎯 Set-Piece Berubah:</b> ${spDiffs.map(([lbl, curV, tgtV]) => `${lbl}: <span class="c-muted">${esc(curV || '-')}</span> → <b class="c-green">${esc(tgtV)}</b>`).join(' · ')}
+    </div>` : '';
+
+  return `
+    <details id="wr-prematch-diff" class="glossary-inline mb-8" ${isFirstOfficial ? 'open' : ''}>
+      <summary style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <span>✅ <b>Checklist Pre-Match Diff</b> <span class="c-muted">(Lineup Terakhir vs War Room)</span></span>
+        <span class="badge ${changeCount === 0 ? 'b-good' : 'b-warn'}">${changeCount === 0 ? '✓ Siap Kickoff (0 beda)' : `⚠ ${changeCount} Penyesuaian Sebelum Kickoff`}</span>
+      </summary>
+      <div style="margin-top:8px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:11px">
+          ${items.map(it => it.diff
+            ? `<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:7px;padding:4px 8px">
+                 <span class="c-amber"><b>${esc(it.lbl)}:</b></span> <span class="c-muted">${esc(it.cur)}</span> → <b class="c-green">${esc(it.target)}</b>
+               </div>`
+            : `<div style="background:var(--card);border:1px solid var(--border);border-radius:7px;padding:4px 8px">
+                 <span class="c-muted">${esc(it.lbl)}:</span> <b class="c-green">${esc(it.target)} ✓</b>
+               </div>`).join('')}
+        </div>
+        ${xiDiffHtml}
+        ${spDiffHtml}
+      </div>
+    </details>`;
+}
+
 function renderWarRoomMatchCard(fx, isFirstOfficial) {
   const m = fx.matchup;
   const rec = m ? m.recommended : null;
@@ -458,6 +723,23 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
   const refTitle = `${rMeta.ico} ${rMeta.lbl}${(!isManualRef && ac) ? ` (${ac.refCountry}${ac.refName ? ' · ' + ac.refName : ''})` : ''}`;
   const ourCardMul = warRef === 'strict' ? 1.2 : (warRef === 'lenient' ? 0.82 : (warRef === 'home' ? (fx.isHome ? 0.85 : 1.2) : 1.0));
   const altExtraPct = ac && ac.altHit > 0 ? Math.round(35 * ac.altHit) : 0;
+
+  const liveSim = (!fx.isSim && (isManualRef || isManualWeather))
+    ? computeLiveWarSim(fx, rec, m, warWeather, warRef)
+    : null;
+  const viewWin = liveSim ? liveSim.winPct : (rec ? rec.winPct : undefined);
+  const viewDraw = liveSim ? liveSim.drawPct : (rec ? rec.drawPct : undefined);
+  const viewLoss = liveSim ? liveSim.lossPct : (rec ? rec.lossPct : undefined);
+  const viewXGF = liveSim ? liveSim.xGF : (rec ? rec.xGF : undefined);
+  const viewXGA = liveSim ? liveSim.xGA : (rec ? rec.xGA : undefined);
+  const viewPoss = liveSim ? liveSim.possPct : (rec ? rec.possPct : undefined);
+  const viewUShots = liveSim ? liveSim.uShots : (rec ? rec.uShots : undefined);
+  const viewOShots = liveSim ? liveSim.oShots : (rec ? rec.oShots : undefined);
+  const viewStyle = liveSim ? liveSim.playStyle : (m ? m.playStyle : '-');
+  const viewStyleCompare = liveSim ? liveSim.styleCompare : (m ? m.styleCompare : []);
+  const viewEnginePow = liveSim ? liveSim.enginePow : (rec ? rec.enginePow : null);
+  const viewOppPow = liveSim ? liveSim.oppPow : (m ? m.oppPow : null);
+
   const aiFocus = fx.aiFocus || (m && m.aiInfo ? m.aiInfo.aiFocus : 'Mixed');
   const oppSt = findOppStanding(fx.oppId, fx.oppName);
   const oppRankBadge = oppSt
@@ -468,7 +750,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
   // 0. STRIP CONTEKAN 5 DETIK + QUICK JUMP PILLS
   const tkt = fx.ticketRec;
   const tktCompact = tkt ? `${tkt.prices.geral}·${tkt.prices.arquibancada}·${tkt.prices.cadeiras}·${tkt.prices.camarotes}` : '';
-  const shortStyle = m ? String(m.playStyle || '').split(' (')[0] : '-';
+  const shortStyle = String(viewStyle || '').split(' (')[0] || '-';
   const shortMark = refObj ? String(refObj.marking || '').split(' (')[0] : '-';
   const cheatStrip = `
     <div class="wr-cheat-strip">
@@ -482,7 +764,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
       <div class="wr-cheat-chips">
         ${rec ? `<span class="badge b-good mono" style="font-size:11px">⚽ ${esc(fmtForm(rec.formation))}</span>` : ''}
-        ${rec && rec.winPct !== undefined ? `<span class="badge ${rec.winPct >= rec.lossPct ? 'b-good' : 'b-warn'} mono" style="font-size:11px">📊 ${rec.winPct}% W · ${rec.drawPct}% D · ${rec.lossPct}% L</span>` : ''}
+        ${viewWin !== undefined ? `<span id="wr-cheat-win" class="badge ${viewWin >= viewLoss ? 'b-good' : 'b-warn'} mono" style="font-size:11px">📊 ${viewWin}% W · ${viewDraw}% D · ${viewLoss}% L</span>` : ''}
         <span class="badge b-info" style="font-size:11px">${esc(shortStyle)}</span>
         <span class="badge ${refObj ? refObj.badge : 'b-muted'}" style="font-size:11px">Marking: ${esc(shortMark)}</span>
         <span class="badge ${isManualWeather ? 'b-warn' : 'b-info'}" style="font-size:11px">${wMeta.ico} ${wMeta.lbl}</span>
@@ -501,29 +783,49 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
     </div>`;
 
+  const preMatchDiffHtml = renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, viewStyle);
+
   // H2H Visual Bar + Peluang Menang (#48031)
-  const simBar = (rec && rec.winPct !== undefined) ? `
+  const simBar = (rec && viewWin !== undefined) ? `
     <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
       <div class="flex-between" style="font-size:10.5px;margin-bottom:4px;gap:6px;flex-wrap:wrap">
-        <span><b>📊 Peluang Hasil (#48031)</b> · <span class="c-muted">Ball ${rec.possPct}% · Shot ${rec.uShots} vs ${rec.oShots} · xG ${rec.xGF}–${rec.xGA}</span></span>
-        <span class="mono"><b class="c-green">${rec.winPct}%</b> / <b class="c-amber">${rec.drawPct}%</b> / <b class="c-red">${rec.lossPct}%</b></span>
+        <span><b>📊 Peluang Hasil (#48031)</b> · <span class="c-muted">Ball ${viewPoss}% · Shot ${viewUShots} vs ${viewOShots} · xG ${viewXGF}–${viewXGA}</span></span>
+        <span class="mono"><b class="c-green">${viewWin}%</b> / <b class="c-amber">${viewDraw}%</b> / <b class="c-red">${viewLoss}%</b></span>
       </div>
       <div style="display:flex;height:7px;border-radius:99px;overflow:hidden;background:var(--card)">
-        <div style="width:${rec.winPct}%;background:var(--green)"></div>
-        <div style="width:${rec.drawPct}%;background:var(--amber)"></div>
-        <div style="width:${rec.lossPct}%;background:var(--red)"></div>
+        <div style="width:${viewWin}%;background:var(--green)"></div>
+        <div style="width:${viewDraw}%;background:var(--amber)"></div>
+        <div style="width:${viewLoss}%;background:var(--red)"></div>
       </div>
     </div>` : '';
 
-  const h2hBlock = (m && rec) ? `
+  const h2hBlock = (m && rec && viewEnginePow && viewOppPow) ? `
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:10px 11px;margin-bottom:10px">
       <div class="flex-between mb-8">
         <span class="kpi-lbl">⚔️ Duel H2H (${esc(fmtForm(rec.formation))} vs ${esc(fmtForm(fx.oppFormation))})</span>
         <span class="mono c-muted" style="font-size:11px">Kita <b class="c-sky">${rec.avgScore}</b> vs Lawan <b>${fx.oppAvg}</b> (${effEdge >= 0 ? '+' : ''}${effEdge})</span>
       </div>
-      ${renderH2HBars(rec.enginePow, m.oppPow)}
+      ${renderH2HBars(viewEnginePow, viewOppPow)}
       ${simBar}
     </div>` : '';
+
+  const customRecHtml = (m && m.customRec) ? (() => {
+    const cr = m.customRec;
+    const isAlready = Boolean(cr.alreadyActive || cr.customKey === rec.formation);
+    const badge = cr.alreadyActive
+      ? '<span class="badge b-good">✓ SUDAH AKTIF DI SAVE</span>'
+      : `<span class="badge b-accent">✨ UPGRADE +${cr.deltaWin}% Win · +${cr.deltaPts} xPts</span>`;
+    return `<div style="background:var(--card);border:1px solid rgba(168,85,247,.38);border-radius:8px;padding:7px 9px;margin-bottom:8px;font-size:11px">
+      <div class="flex-between" style="gap:6px;flex-wrap:wrap;margin-bottom:3px">
+        <div>
+          <b>🔧 Custom Slot Optimizer:</b> <span class="mono c-purple"><b>${esc(cr.customKey)}</b></span>
+          ${badge}
+        </div>
+        <button type="button" class="btn btn-sm" onclick="openFormInTab3('${escJs(cr.customKey)}', ${fx.safeRotate ? 'true' : 'false'})">${isAlready ? '⚽ Cek Custom XI' : '✨ Pakai Custom XI'}</button>
+      </div>
+      <div class="c-muted mono">Slot: <b>${esc(cr.label)}</b> · FB-WF: <b class="${cr.wrongFootCount ? 'c-amber' : 'c-green'}">${cr.wrongFootCount}</b>${cr.wfSaved > 0 ? ` (hemat -${cr.wfSaved})` : ''} · Win <b class="c-green">${cr.winPct}%</b> (A${fmtMod(cr.atkMod)}/D${fmtMod(cr.defMod)})</div>
+    </div>`;
+  })() : '';
 
   // Kartu 1: Formasi Rekomendasi + Intip 11 XI + Top 3 (5 kolom pas 360px + tombol XI)
   const formBlock = (m && rec) ? `
@@ -534,13 +836,14 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
           <div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-size:19px;font-weight:900" class="mono c-green">${esc(fmtForm(rec.formation))}</span>
             <span class="badge ${m.keepActive ? 'b-good' : 'b-info'}">${m.keepActive ? '✓ PERTAHANKAN' : `🔄 GANTI (+${m.scoreGain}% W)`}</span>
-            ${rec.winPct !== undefined ? `<span class="badge b-good mono">${rec.winPct}% Win</span>` : ''}
+            ${viewWin !== undefined ? `<span class="badge b-good mono">${viewWin}% Win</span>` : ''}
             ${m.falseNine && m.falseNineTarget ? `<span class="badge b-accent">⚡ F9: ${esc(m.falseNineTarget.name)}</span>` : ''}
           </div>
         </div>
         <button type="button" class="btn btn-sm btn-green" onclick="openFormInTab3('${escJs(rec.formation)}', ${fx.safeRotate ? 'true' : 'false'})">⚽ Lihat XI</button>
       </div>
       <div style="font-size:11px;margin-bottom:8px">${(m.reasons || []).map(r => `<div>• ${esc(r)}</div>`).join('')}</div>
+      ${customRecHtml}
       ${renderXiPeekHtml(rec, fx)}
       <div class="tbl-wrap"><table class="wr-top3-tbl"><thead><tr>
         <th>Top 3</th><th class="col-hide-mob">Fokus</th><th>MID</th><th>ATK</th><th>DEF</th><th class="col-hide-mob">FB-WF</th><th>Win%</th><th>XI</th>
@@ -559,11 +862,11 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </tbody></table></div>
     </div>` : '';
 
-  const styleCmpRows = (m && Array.isArray(m.styleCompare) && m.styleCompare.length) ? `
+  const styleCmpRows = (Array.isArray(viewStyleCompare) && viewStyleCompare.length) ? `
     <div class="tbl-wrap" style="margin-top:5px;margin-bottom:6px">
       <table style="font-size:10px">
         <thead><tr><th>Gaya (#48031)</th><th>W / D / L</th><th>xPts</th><th>xG (Ball)</th></tr></thead>
-        <tbody>${m.styleCompare.map(sc => `<tr class="${sc.isRec ? 'hl-user' : ''}">
+        <tbody>${viewStyleCompare.map(sc => `<tr class="${sc.isRec ? 'hl-user' : ''}">
           <td><b>${esc(sc.style === 'Counter-Attack' ? 'Counter' : sc.style)}</b>${sc.isRec ? ' <span class="badge b-good">✓</span>' : ''}</td>
           <td class="mono"><b class="c-green">${sc.winPct}</b>/<span class="c-amber">${sc.drawPct}</span>/<span class="c-red">${sc.lossPct}%</span></td>
           <td class="mono"><b>${sc.xPts}</b></td>
@@ -573,15 +876,21 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
     </div>` : '';
 
   // Kartu 2: Taktik, Intel AI #23795, Wasit & Cuaca
+  const condDeltaObj = (liveSim && liveSim.condDelta) || (m && m.condBaseline) || null;
+  const condImpactHtml = (condDeltaObj && (Math.abs(condDeltaObj.deltaWin) >= 0.1 || Math.abs(condDeltaObj.deltaPts) >= 0.002))
+    ? `<div style="margin-top:3px">Dampak Kondisi vs Normal: <b class="mono ${condDeltaObj.deltaWin >= 0 ? 'c-green' : 'c-amber'}">${condDeltaObj.deltaWin >= 0 ? '+' : ''}${condDeltaObj.deltaWin}% Win · ${condDeltaObj.deltaPts >= 0 ? '+' : ''}${condDeltaObj.deltaPts} xPts</b>${condDeltaObj.missMul > 1.0 ? ` <span class="c-muted">(miss ×${condDeltaObj.missMul})</span>` : ''}${condDeltaObj.userEnergyMul > 1.0 ? ` <span class="c-muted">(stamina ×${condDeltaObj.userEnergyMul})</span>` : ''}</div>`
+    : '';
+
   const autoCondBanner = ac ? `
     <div class="mb-8" style="background:var(--card);border:1px solid ${(isManualRef || isManualWeather) ? 'rgba(245,158,11,.45)' : 'rgba(16,185,129,.4)'};padding:7px 9px;border-radius:8px;font-size:11px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:3px">
         <span><b>⚡ Kondisi Laga Engine (v1.2.0)</b> <span class="mono c-muted">${esc(ac.dateStr)} · 🕒 ${esc(ac.ko || '-')}</span></span>
-        <span class="badge ${(isManualRef || isManualWeather) ? 'b-warn' : 'b-good'}">${(isManualRef || isManualWeather) ? '✏️ Manual Override' : '⚡ Auto-Engine'}</span>
+        <span class="badge ${(isManualRef || isManualWeather) ? 'b-warn' : 'b-good'}">${(isManualRef || isManualWeather) ? '✏️ Live Simulasi Override' : '⚡ Auto-Engine'}</span>
       </div>
       <div class="mono" style="line-height:1.5">
         Cuaca: <b>${wMeta.ico} ${wMeta.lbl}</b> · Wasit: <b>${esc(rMeta.ico + ' ' + rMeta.lbl)}</b> [${esc(ac.refCountry)}${ac.refName ? ' · ' + esc(ac.refName) : ''}, kartu kita <b>${ourCardMul.toFixed(2)}x</b>] · VAR: <b class="${ac.varOn ? 'c-green' : 'c-muted'}">${ac.varOn ? 'ON' : 'OFF'}</b>${ac.alt >= 2000 ? ` · ⛰️ Alt <b>${ac.alt}m</b>${altExtraPct ? ` (+${altExtraPct}% stamina tandang)` : ''}` : ''}
       </div>
+      ${condImpactHtml}
     </div>` : '';
 
   const tacticBlock = (m && refObj && wObj) ? `
@@ -592,8 +901,8 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
         <b>🤖 Prediksi AI Lawan:</b> <span class="badge b-warn">${esc(fx.aiStyle)}</span>
         <span class="badge b-accent">Fokus: ${esc(aiFocus)}</span>
       </div>
-      <div class="mb-8"><b>Gaya Main:</b> <span class="badge b-good">${esc(m.playStyle)}</span>
-        <div class="c-muted" style="margin-top:2px">${esc(m.playReason)}</div>
+      <div class="mb-8"><b>Gaya Main:</b> <span class="badge b-good">${esc(viewStyle)}</span>
+        <div class="c-muted" style="margin-top:2px">${esc(liveSim ? `Live simulasi kondisi ${wMeta.lbl} & wasit ${rMeta.lbl} menghasilkan xPts tertinggi pada ${viewStyle}.` : m.playReason)}</div>
         ${styleCmpRows}
       </div>
       <div class="mb-8"><b>Fokus Serang:</b> <span class="badge b-info">${esc(m.attackFocus)}</span>
@@ -695,6 +1004,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
 
   return `
     ${cheatStrip}
+    ${preMatchDiffHtml}
     ${h2hBlock}
     <div class="grid g2" style="gap:10px">
       ${formBlock}

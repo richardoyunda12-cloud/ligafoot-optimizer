@@ -1,11 +1,18 @@
 // ==================== RENDER TAB 3: LAPANGAN, DUAL XI & RUANG GANTI (v8.2.2) ====================
 function initTab3() {
   const sel = document.getElementById('t3-form-select');
+  const rawAct = (D.meta && D.meta.isCustomFormation && D.meta.activeFormationRaw) ? D.meta.activeFormationRaw : null;
+  const initFk = rawAct || (D.meta && D.meta.activeFormation) || '4-3-3';
   if (sel) {
-    sel.innerHTML = Object.keys(D.formations || {}).map(f => {
-      const md = FORMATION_MODS[f];
+    const keys = [...Object.keys(D.formations || {})];
+    if (rawAct && !keys.includes(rawAct)) keys.unshift(rawAct);
+    sel.innerHTML = keys.map(f => {
+      const sp = (window.LFEngine && LFEngine.tactics && LFEngine.tactics.resolveFormationSpec)
+        ? LFEngine.tactics.resolveFormationSpec(f)
+        : null;
+      const md = sp ? { atkMod: sp.atkMod, defMod: sp.defMod } : FORMATION_MODS[f];
       const mStr = md ? ` (A${fmtMod(md.atkMod)}/D${fmtMod(md.defMod)})` : '';
-      return `<option value="${f}" ${f === D.meta.activeFormation ? 'selected' : ''}>${fmtForm(f)}${mStr}</option>`;
+      return `<option value="${esc(f)}" ${f === initFk ? 'selected' : ''}>${esc(fmtForm(f))}${mStr}</option>`;
     }).join('');
   }
   renderTab3Pitch();
@@ -21,6 +28,22 @@ function initTab3() {
         const scTxt = hasScore ? `${m.gf} - ${m.ga}` : (m.rev > 0 ? fmtM(m.rev) : (m.att ? m.att.toLocaleString('id-ID') + ' org' : '-'));
         return `<tr><td class="mono">${esc(m.date)}</td><td><b>${esc(m.opp)}</b> <span class="c-muted" style="font-size:10px">(${esc(m.comp)})</span></td><td><span class="badge ${cls} mono">${scTxt}</span></td><td>${m.home ? '🏠 Kandang' : '✈️ Tandang'}</td></tr>`;
       }).join('') : '<tr><td colspan="4" class="c-muted">Belum ada catatan laga.</td></tr>') + `</tbody>`;
+  }
+}
+
+function ensureFormSelectOption(fk) {
+  const sel = document.getElementById('t3-form-select');
+  const key = String(fk || '').trim();
+  if (!sel || !key) return;
+  if (!Array.from(sel.options).some(o => o.value === key)) {
+    const sp = (window.LFEngine && LFEngine.tactics && LFEngine.tactics.resolveFormationSpec)
+      ? LFEngine.tactics.resolveFormationSpec(key)
+      : null;
+    const mStr = sp ? ` (A${fmtMod(sp.atkMod)}/D${fmtMod(sp.defMod)})` : '';
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = `${fmtForm(key)}${mStr}`;
+    sel.insertBefore(opt, sel.firstChild);
   }
 }
 
@@ -40,6 +63,7 @@ function onFormationChange() {
 }
 
 function selectFormationFromTable(fk) {
+  ensureFormSelectOption(fk);
   const sel = document.getElementById('t3-form-select');
   if (sel) sel.value = fk;
   renderTab3Pitch();
@@ -52,12 +76,19 @@ function selectFormationFromTable(fk) {
 }
 
 function computeLiveFormCompare(rotMode) {
-  const keys = Object.keys(D.formations || {});
+  const keys = [...Object.keys(D.formations || {})];
+  const rawAct = (D.meta && D.meta.isCustomFormation && D.meta.activeFormationRaw) ? D.meta.activeFormationRaw : null;
+  if (rawAct && !keys.includes(rawAct)) keys.push(rawAct);
+  const sel = document.getElementById('t3-form-select');
+  const curSel = sel ? sel.value : '';
+  if (curSel && curSel.includes('~') && !keys.includes(curSel)) keys.push(curSel);
   const rows = keys.map(fk => {
     const res = solveBestXiJS(fk, rotMode);
-    const md = FORMATION_MODS[fk] || { atkMod: 0, defMod: 0 };
+    const md = (res.atkMod !== undefined) ? { atkMod: res.atkMod, defMod: res.defMod } : (FORMATION_MODS[res.baseFormation || fk] || { atkMod: 0, defMod: 0 });
     return {
       formation: fk,
+      baseFormation: res.baseFormation || fk.split('~')[0],
+      isCustom: Boolean(res.isCustom || String(fk).includes('~')),
       avgScore: res.avg,
       totalScore: res.tot,
       sectors: res.sectors || { GK: 0, DEF: 0, MID: 0, ATK: 0 },
@@ -84,8 +115,9 @@ function renderFormCompareTable() {
   if (!tbl) return;
   const isRot = xiMode === 'rot';
   const sel = document.getElementById('t3-form-select');
-  const curFk = sel ? sel.value : D.meta.activeFormation;
-  const rows = isRot ? computeLiveFormCompare(true) : (D.formCompare && D.formCompare.length ? D.formCompare : computeLiveFormCompare(false));
+  const clubActiveFk = (D.meta && D.meta.isCustomFormation && D.meta.activeFormationRaw) ? D.meta.activeFormationRaw : D.meta.activeFormation;
+  const curFk = sel ? sel.value : clubActiveFk;
+  const rows = isRot ? computeLiveFormCompare(true) : ((D.formCompare && D.formCompare.length && (!curFk.includes('~') || D.formCompare.some(x => x.formation === curFk))) ? D.formCompare : computeLiveFormCompare(false));
 
   // Tombol 1-ketuk "✨ Pakai #1" jika formasi aktif bukan yang terkuat
   const bestSlot = document.getElementById('t3-best-form-slot');
@@ -100,20 +132,22 @@ function renderFormCompareTable() {
 
   const modeLbl = isRot ? 'Rotation XI' : 'Best XI';
   const hdrEl = document.getElementById('t3-form-title');
-  if (hdrEl) hdrEl.textContent = `📊 15 Formasi Resmi (#3575/#21891 • Mode ${modeLbl})`;
+  if (hdrEl) hdrEl.textContent = `📊 ${rows.length} Formasi (#3575/#21891 • Mode ${modeLbl})`;
 
   tbl.innerHTML = `<thead><tr>
-    <th>15 Formasi (Klik → Pitch)</th><th>Avg</th><th>Chem</th><th>DEF</th><th>MID</th><th>ATK</th><th>Asing</th><th>FB-WF</th>
+    <th>Formasi (Klik → Pitch)</th><th>Avg</th><th>Chem</th><th>DEF</th><th>MID</th><th>ATK</th><th>Asing</th><th>FB-WF</th>
   </tr></thead><tbody>` +
     rows.map((f, idx) => {
       const isCur = f.formation === curFk;
-      const isClub = f.formation === D.meta.activeFormation;
+      const isClub = f.formation === clubActiveFk;
+      const isCust = Boolean(f.isCustom || String(f.formation).includes('~'));
       const bugTag = f.hasFormationBug
         ? `<span class="badge b-crit" style="margin-left:3px" title="${esc(tipFor('BUG343'))}">⚠ BUG -33% ATK</span>`
         : '';
       return `<tr class="${isCur ? 'hl-user' : ''}" style="cursor:pointer" onclick="selectFormationFromTable('${escJs(f.formation)}')">
         <td>
           <b>${idx === 0 ? '🏆 ' : ''}${esc(fmtForm(f.formation))}</b>
+          ${isCust ? '<span class="badge b-accent" style="margin-left:3px">CUSTOM</span>' : ''}
           ${isClub ? '<span class="badge b-info" style="margin-left:3px">Klub</span>' : ''}
           ${f.falseNine ? '<span class="badge b-accent" style="margin-left:3px">F9</span>' : ''}
           ${bugTag}
@@ -206,11 +240,12 @@ function renderMoodTable() {
 
 function renderTab3Pitch() {
   const sel = document.getElementById('t3-form-select');
-  const fk = sel ? sel.value : D.meta.activeFormation;
+  const clubActiveFk = (D.meta && D.meta.isCustomFormation && D.meta.activeFormationRaw) ? D.meta.activeFormationRaw : D.meta.activeFormation;
+  const fk = sel ? sel.value : clubActiveFk;
   const isRot = (xiMode === 'rot');
   const res = solveBestXiJS(fk, isRot);
   const bestRef = isRot ? solveBestXiJS(fk, false) : res;
-  const md = FORMATION_MODS[fk] || { atkMod: 0, defMod: 0 };
+  const md = (res.atkMod !== undefined) ? { atkMod: res.atkMod, defMod: res.defMod } : (FORMATION_MODS[res.baseFormation || fk] || { atkMod: 0, defMod: 0 });
 
   const bestIds = new Set(bestRef.xi.map(a => a.p.id));
   const rotIds = new Set(res.xi.map(a => a.p.id));
@@ -250,6 +285,7 @@ function renderTab3Pitch() {
       `Avg XI: <b class="c-green">${res.avg}</b> · ` +
       `Chem <b class="c-sky">${chemVal}%</b> · ` +
       `Asing <b>${res.fCnt}/${D.meta.foreignCap}</b> · FB-WF <b class="${res.wfCnt ? 'c-amber' : 'c-green'}">${res.wfCnt}</b>` +
+      (res.isCustom ? ` <span class="badge b-accent">★ CUSTOM</span>` : '') +
       (res.falseNine ? ` <span class="badge b-accent">⚡ F9</span>` : '') +
       (res.hasFormationBug ? ` <span class="badge b-crit">⚠ BUG -33% ATK</span>` : '');
   }
@@ -257,8 +293,8 @@ function renderTab3Pitch() {
   const pitch = document.getElementById('t3-pitch');
   pitch.querySelectorAll('.p-node').forEach(n => n.remove());
 
-  // v8.3 Dynamic Row-Band Pitch Engine (mendukung penuh 13 kode posisi C.FORMATIONS + RULE_SLOTS)
-  const fkStr = String(fk || '');
+  // v8.3 Dynamic Row-Band Pitch Engine (mendukung penuh 13 kode posisi C.FORMATIONS + custom ROLE_SLOTS)
+  const fkStr = String(res.baseFormation || fk || '').split('~')[0];
   const defSlots = res.xi.filter(a => ['LE', 'LD', 'Z', 'ZE', 'ZD', 'ZAG', 'LAT'].includes(a.slot));
   const isFiveBack = defSlots.length >= 5;
   const is433 = fkStr.startsWith('4-3-3') || fkStr === '3-4-3' || fkStr === '4-2-4';
@@ -273,7 +309,7 @@ function renderTab3Pitch() {
     else if (['V', 'VOL'].includes(sl)) bands[3].push(a);
     else if (['ME', 'MC', 'MD'].includes(sl)) bands[4].push(a);
     else if (['MO', 'MA', 'SA'].includes(sl)) bands[sl === 'SA' ? 6 : 5].push(a);
-    else if (['PE', 'PD'].includes(sl)) bands[is433 ? 6 : (isMidWings ? 4 : 5)].push(a);
+    else if (['PE', 'PD'].includes(sl)) bands[(a.sectorCode === 'A') ? 6 : (isMidWings ? 4 : (is433 ? 6 : 5))].push(a);
     else bands[6].push(a);
   });
 

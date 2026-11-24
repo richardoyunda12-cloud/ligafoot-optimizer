@@ -187,6 +187,15 @@
     '3-4-3':        { D: 3, M: 4, A: 2, X: 1, width: 'WIDE' }, // slot 11 jatuh ke X (#34992)
   };
 
+  // Custom Formation Role Overrides (Bytecode #2999 / #19552–#19560 / #22023)
+  const CUSTOM_MID_ROLES = ['VOL', 'MC', 'MA', 'PD', 'PE'];
+  const CUSTOM_ATK_ROLES = ['ATA', 'SA', 'PD', 'PE'];
+  const CUSTOM_MID_OFF = { VOL: 0, MC: 1, MA: 2, PD: 2, PE: 2 };
+  const CUSTOM_ATK_OFF = { SA: 1, ATA: 2, PD: 2, PE: 2 };
+  const CUSTOM_DELTA_CAP = 3;
+  const CUSTOM_MID_RULE_ID = { VOL: 6, MC: 8, MA: 12, PD: 11, PE: 14 };
+  const CUSTOM_ATK_RULE_ID = { ATA: 16, SA: 15, PD: 15, PE: 15 };
+
   // Usia mulai regresi spesifik per posisi (v1.2.0 #21447 declineStartAge)
   const DECLINE_START_AGE = {
     // #21370 declineStartAge: ATA/SA/PD/PE/MA=31, ZD/ZE=33, G=34, SISANYA=32 (termasuk MO, ZAG, Z)
@@ -781,6 +790,13 @@
       FORMATIONS,
       FORMATION_MODS,
       FORMATION_SHAPE,
+      CUSTOM_MID_ROLES,
+      CUSTOM_ATK_ROLES,
+      CUSTOM_MID_OFF,
+      CUSTOM_ATK_OFF,
+      CUSTOM_DELTA_CAP,
+      CUSTOM_MID_RULE_ID,
+      CUSTOM_ATK_RULE_ID,
       DECLINE_START_AGE,
       DECLINE_AGE_BY_CAT,
       SELL_WARN_AGE_BY_CAT,

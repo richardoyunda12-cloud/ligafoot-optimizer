@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
-<title>LigaFoot Optimizer v8.6.2 — Web App &amp; PWA</title>
+<title>LigaFoot Optimizer v8.7.0 — Web App &amp; PWA</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="brand-ico">⚽</div>
         <div>
-          <h1>LigaFoot Optimizer <span class="c-green">v8.6.2 PWA</span></h1>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.7.0 PWA</span></h1>
           <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 (Bytecode v9) • Tanpa Upload</div>
         </div>
       </div>
@@ -165,7 +165,7 @@
         <div class="brand">
           <div class="brand-ico">⚽</div>
           <div>
-            <h1 id="hdr-title">LigaFoot Optimizer v8.6.2</h1>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.7.0</h1>
             <div class="sub" id="hdr-sub">Memuat data...</div>
           </div>
         </div>
@@ -175,7 +175,7 @@
           <button type="button" class="btn" onclick="openSearch()" title="Cari Cepat (Ctrl+K)">🔍<span class="btn-lbl-mob-hide"> Cari</span></button>
           <button type="button" class="btn" onclick="openGlossary()" title="Kamus Istilah">📖<span class="btn-lbl-mob-hide"> Kamus</span></button>
           <button class="btn" id="btn-density" onclick="toggleDensity()" title="Ganti kepadatan tampilan tabel &amp; kartu">↕️ Mode: Lega</button>
-          <span class="badge b-good" id="hdr-badge">v8.6.2 PWA</span>
+          <span class="badge b-good" id="hdr-badge">v8.7.0 PWA</span>
         </div>
       </div>
       <nav class="tabs" id="nav-tabs">
@@ -289,6 +289,7 @@
       <button type="button" class="subtab" data-sub="t3-squad" onclick="goToView('t3','t3-squad')">🧾 Audit Skuad Senior</button>
       <button type="button" class="subtab" data-sub="t3-train" onclick="goToView('t3','t3-train')">🏋️ Training &amp; Ruang Ganti</button>
       <button type="button" class="subtab" data-sub="t3-acad" onclick="goToView('t3','t3-acad')">🌱 Akademi</button>
+      <button type="button" class="subtab" data-sub="t3-bteam" onclick="goToView('t3','t3-bteam')">🅱️ Tim B</button>
     </div>
 
     <!-- Sub-tab 3A: Lapangan & Dual XI -->
@@ -380,6 +381,20 @@
         <div id="t5-holes" class="mb-8" style="font-size:12px"></div>
         <div id="t5-quick-chips" class="quick-chips-bar"></div>
         <div class="tbl-wrap tbl-sticky"><table id="t5-tbl"></table></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab 3E: Audit & Pipeline Tim B -->
+    <div id="sub-t3-bteam" class="subpanel">
+      <div class="card">
+        <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+          <h2 id="t3b-title" style="margin:0">🅱️ Audit &amp; Pipeline Tim B</h2>
+          <button type="button" class="btn btn-sm btn-green" onclick="exportBTeamCsv()">⬇ CSV Tim B</button>
+        </div>
+        <div id="t3b-kpis"></div>
+        <div id="t3b-routing" class="mb-8"></div>
+        <div id="t3b-filter-bar" class="quick-chips-bar"></div>
+        <div class="tbl-wrap tbl-sticky"><table id="t3b-tbl"></table></div>
       </div>
     </div>
   </section>

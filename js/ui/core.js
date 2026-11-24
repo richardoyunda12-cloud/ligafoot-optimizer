@@ -59,7 +59,23 @@ function fmtPos(c) { return POS_EN[c] || c || '-'; }
 function fmtFoot(c) { return FOOT_EN[c] || c || '-'; }
 function fmtSkill(c) { return SKILL_EN[c] || c || ''; }
 function fmtSkills(s1, s2) { return [fmtSkill(s1), fmtSkill(s2)].filter(Boolean).join('/') || '-'; }
-function fmtForm(fk) { return FORM_EN[fk] || fk || '-'; }
+function fmtForm(fk) {
+  const s = String(fk || '-');
+  if (s.includes('~')) {
+    const parts = s.split('~');
+    const base = FORM_EN[parts[0]] || parts[0];
+    return `${base} ★(${parts.slice(1).join('·')})`;
+  }
+  return FORM_EN[s] || s || '-';
+}
+function fmtFormShort(fk) {
+  const s = String(fk || '-');
+  if (s.includes('~')) {
+    const base = s.split('~')[0];
+    return `${FORM_EN[base] || base} ★`;
+  }
+  return FORM_EN[s] || s || '-';
+}
 function fmtMod(v) { const n = Number(v) || 0; return n > 0 ? '+' + n : String(n); }
 
 function esc(s) {
@@ -207,7 +223,11 @@ function slotScoreJS(p, sl, rotMode, ruleId = null) {
 }
 
 function solveBestXiJS(formKey, rotMode) {
-  const fk = (D.formations && formKey in D.formations) ? formKey : ((D.meta && D.meta.activeFormation) || '4-3-3');
+  const rawK = String(formKey || '').trim();
+  const isCustom = rawK.includes('~');
+  const fk = (isCustom || (D.formations && rawK in D.formations))
+    ? rawK
+    : ((D.meta && (D.meta.activeFormationRaw || D.meta.activeFormation)) || '4-3-3');
   if (window.LFEngine && LFEngine.tactics && typeof LFEngine.tactics.solveBestXi === 'function') {
     const repLv = (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3;
     const res = LFEngine.tactics.solveBestXi(
@@ -226,6 +246,11 @@ function solveBestXiJS(formKey, rotMode) {
       wf: a.wrongFoot,
     }));
     return {
+      formation: res.formation || fk,
+      baseFormation: res.baseFormation || fk.split('~')[0],
+      isCustom: Boolean(res.isCustom || isCustom),
+      atkMod: res.atkMod,
+      defMod: res.defMod,
       xi,
       bench: res.bench || [],
       tot: res.totalScore,
@@ -699,6 +724,55 @@ function openPlayerDrawer(kind, id) {
         <button class="btn ${inC ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}', ${r[15] <= 180 ? 'true' : 'false'});openPlayerDrawer('scout','${pidJs}')">${inC ? (cartInBosman[r[19]] ? '✓ Bosman 0€' : '✓ Di Cart Beli') : (r[15] <= 180 ? '🆓 + Bosman 0€' : '+ Beli Saja')}</button>
         ${sw ? `<button class="btn" style="flex:1;border-color:rgba(56,189,248,.6)" onclick="swapToCart('${pidJs}','${repIdJs}');openPlayerDrawer('scout','${pidJs}')">⇄ Swap</button>` : ''}
       </div>`;
+  } else if (kind === 'bteam') {
+    const bt = D.bTeamInfo || {};
+    const p = (bt.roster || []).find(x => x.id === id);
+    if (!p) return;
+    const gap = Math.max(0, (p.potCap || p.force) - p.force);
+    const curFill = Math.min(100, Math.round((p.force / Math.max(1, p.potCap || p.force)) * 100));
+    const toGolden = Math.max(0, (p.contractDays || 0) - 120);
+    body.innerHTML = `
+      <div class="flex-between mb-8">
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <span class="badge b-accent">🅱️ ${esc(bt.bTeamName || 'TIM B')}</span>
+          ${p.fillsHole ? '<span class="badge b-good">★ ISI LUBANG UTAMA</span>' : ''}
+          ${p.isForeign ? '<span class="badge b-warn">🌐 ASING</span>' : ''}
+        </div>
+        <button class="btn btn-sm" onclick="closePlayerDrawer()">Tutup (ESC)</button>
+      </div>
+      <div style="font-size:19px;font-weight:900;margin-bottom:3px">
+        ${esc(p.name)} ${p.top ? '👑' : (p.star ? '⭐' : '')}
+      </div>
+      <div class="c-muted" style="font-size:12px;margin-bottom:10px">
+        <b>${fmtPos(p.pos)}</b> • ${p.age} thn (turun @${p.declineAge}) • Kaki <b>${fmtFoot(p.foot)}</b> • ${esc(p.nationality || '-')}
+      </div>
+      <div class="pill-row">
+        <span class="badge ${esc(p.bCls || 'b-info')}">${esc(p.bAction || 'TAHAN & LATIH')}</span>
+        ${p.injured ? `<span class="badge b-crit">🏥 Cedera ${p.injuryDays}d</span>` : ''}
+        ${p.zeroMin ? '<span class="badge b-crit">0 Menit Main</span>' : ''}
+      </div>
+      <div class="drawer-sec">
+        <h3>📊 Kekuatan, PotCap &amp; Pertumbuhan</h3>
+        <div class="drawer-kv"><span>Force → PotCap (Plafon Asli)</span><b class="mono"><span style="font-size:15px">${p.force}</span> → <span class="c-green">${p.potCap}</span> <span class="c-muted">(+${gap} ruang)</span></b></div>
+        <div class="mini-bar-bg" style="height:9px;margin:5px 0 8px"><div class="mini-bar-fill" style="width:${curFill}%;background:linear-gradient(90deg,var(--purple),var(--green))"></div></div>
+        <div class="drawer-kv"><span>Progress GrowthFrac</span>${growthBarHtml(p.growthFrac, p.nearDrop)}</div>
+        <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${p.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct}%)</span></div>
+      </div>
+      <div class="drawer-sec">
+        <h3>⏱ Jam Terbang &amp; Performa Tim B</h3>
+        <div class="drawer-kv"><span>Energi / Stamina</span>${energyPillHtml(p.energy)}</div>
+        <div class="drawer-kv"><span>Statistik Musim Ini</span><span class="mono"><b>${p.gamesPlayed || 0}</b> laga (${p.seasonMinutes || 0} mnt) · Avg <b>${p.avgRating || '-'}</b></span></div>
+        <div class="drawer-kv"><span>Gol / Asis</span><b class="mono">${p.goals || 0} gol · ${p.assists || 0} asis</b></div>
+      </div>
+      <div class="drawer-sec">
+        <h3>💰 Kontrak &amp; Nilai Transfer</h3>
+        <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${p.contractDays <= 10 ? 'c-red' : (p.contractDays < 60 ? 'c-amber' : (p.contractDays <= 120 ? 'c-green' : ''))}">${p.contractDays} hari</b></div>
+        <div class="drawer-kv"><span>Status Diskon 3Th (-12%)</span><span class="mono">${p.contractDays <= 10 ? '<b class="c-red">Zona Jebakan ≤10d</b>' : (p.contractDays < 60 ? '<b class="c-amber">Minta naik +5–15%</b>' : (p.contractDays <= 120 ? '<b class="c-green">GOLDEN WINDOW AKTIF!</b>' : `Bisa diskon (Golden dlm ~${toGolden}d)`))}</span></div>
+        <div class="drawer-kv"><span>Gaji Bulanan</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
+        <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)}</span></div>
+        <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +40%: ${fmtM(p.estCounter40)}</span></b></div>
+      </div>
+      <div class="c-muted mt-12" style="font-size:11px">Routing Tim B ↔ Tim Utama <b>100% gratis</b> di menu Skuad game. Memindahkan pemain asing ke Tim B juga membebaskan 1 slot kuota asing di Tim Utama!</div>`;
   }
   bg.classList.add('open');
 }

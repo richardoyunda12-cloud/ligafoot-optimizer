@@ -324,6 +324,9 @@
       if (playerPos === 'G') {
         return 0.70;
       }
+      if (Array.isArray(ri.exact) && ri.exact.includes(playerPos)) {
+        return 1.00;
+      }
       const pCat4 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
       const pRuleCat = pCat4 === 0 ? 0 : (pCat4 <= 2 ? 1 : (pCat4 === 3 ? 2 : 3));
       return pRuleCat === ri.cat ? 1.00 : 0.70;
@@ -537,13 +540,122 @@
    * Solver Best XI / Rotation XI untuk formasi tertentu dengan RULE_SLOTS bytecode (#3575/#3576),
    * kuota pemain asing lapangan, filter skorsing/cedera, dan perhitungan Team Chemistry (#21998).
    */
+  /**
+   * Bytecode #19558 parseVariantKey: Memecah key custom formation (mis. '3-5-2~4MC~7MC~10PD')
+   * menjadi `{ base, overrides, overrideList, key, isCustom }`.
+   */
+  function parseFormationKey(formKey) {
+    const raw = String(formKey || '4-3-3').trim();
+    const parts = raw.split('~');
+    const rawBase = String(parts[0] || '4-3-3').trim();
+    const base = (rawBase in C.FORMATIONS) ? rawBase : '4-3-3';
+    const overrides = {};
+    const rx = /^(\d{1,2})(VOL|MC|MA|PD|PE|SA|ATA)$/;
+    for (let i = 1; i < parts.length; i++) {
+      const m = rx.exec(String(parts[i] || '').trim().toUpperCase());
+      if (!m) continue;
+      const idx = Number(m[1]);
+      if (Number.isInteger(idx) && idx >= 0 && idx < 11) {
+        overrides[idx] = m[2];
+      }
+    }
+    const overrideList = Object.keys(overrides)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map(idx => ({ idx, role: overrides[idx] }));
+    const key = overrideList.length
+      ? `${base}~${overrideList.map(o => `${o.idx}${o.role}`).join('~')}`
+      : base;
+    return { base, overrides, overrideList, key, isCustom: overrideList.length > 0 };
+  }
+
+  /**
+   * Bytecode #22023 resolveVariant & #19555 buildRoles: Memetakan slots, ruleSlots, shape,
+   * serta delta atkMod/defMod dari formasi standar maupun custom (`~4MC~7MC~10PD`).
+   */
+  function resolveFormationSpec(formKey) {
+    const parsed = parseFormationKey(formKey);
+    const base = parsed.base;
+    const baseSlots = C.FORMATIONS[base] || C.FORMATIONS['4-3-3'];
+    const baseRules = (C.FORMATION_RULE_SLOTS && C.FORMATION_RULE_SLOTS[base]) || [0, 1, 2, 3, 5, 6, 8, 12, 15, 16, 15];
+    const baseMods = (C.FORMATION_MODS && C.FORMATION_MODS[base]) || { atkMod: 0, defMod: 0 };
+
+    const slots = [...baseSlots];
+    const ruleSlots = [...baseRules];
+    const midRoles = C.CUSTOM_MID_ROLES || ['VOL', 'MC', 'MA', 'PD', 'PE'];
+    const atkRoles = C.CUSTOM_ATK_ROLES || ['ATA', 'SA', 'PD', 'PE'];
+    const midOff = C.CUSTOM_MID_OFF || { VOL: 0, MC: 1, MA: 2, PD: 2, PE: 2 };
+    const atkOff = C.CUSTOM_ATK_OFF || { SA: 1, ATA: 2, PD: 2, PE: 2 };
+    const midRuleMap = C.CUSTOM_MID_RULE_ID || { VOL: 6, MC: 8, MA: 12, PD: 11, PE: 14 };
+    const atkRuleMap = C.CUSTOM_ATK_RULE_ID || { ATA: 16, SA: 15, PD: 15, PE: 15 };
+    const deltaCap = C.CUSTOM_DELTA_CAP !== undefined ? C.CUSTOM_DELTA_CAP : 3;
+
+    let deltaSum = 0;
+    const appliedList = [];
+    const appliedMap = {};
+    for (const { idx, role } of parsed.overrideList) {
+      const bRule = baseRules[idx];
+      const ri = (C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[bRule]) || null;
+      const bSlot = baseSlots[idx];
+      if (!ri || role === bSlot) continue;
+      if (ri.sec === 'M' && midRoles.includes(role)) {
+        slots[idx] = role;
+        ruleSlots[idx] = midRuleMap[role] !== undefined ? midRuleMap[role] : bRule;
+        deltaSum += (midOff[role] ?? 1) - (midOff[bSlot] ?? 1);
+        appliedMap[idx] = role;
+        appliedList.push({ idx, from: bSlot, role, sec: 'M' });
+      } else if (ri.sec === 'A' && atkRoles.includes(role)) {
+        slots[idx] = role;
+        ruleSlots[idx] = atkRuleMap[role] !== undefined ? atkRuleMap[role] : bRule;
+        deltaSum += (atkOff[role] ?? 2) - (atkOff[bSlot] ?? 2);
+        appliedMap[idx] = role;
+        appliedList.push({ idx, from: bSlot, role, sec: 'A' });
+      }
+    }
+
+    const delta = U.clamp(deltaSum, -deltaCap, deltaCap);
+    const shape = { D: 0, M: 0, A: 0, X: 0 };
+    let hasBug = false;
+    for (let i = 1; i < ruleSlots.length; i++) {
+      const ri = C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[ruleSlots[i]];
+      const sec = ri ? ri.sec : 'M';
+      if (sec === 'D') shape.D++;
+      else if (sec === 'M') shape.M++;
+      else if (sec === 'A') shape.A++;
+      else if (sec === 'X') { shape.X++; hasBug = true; }
+    }
+    const baseShape = (C.FORMATION_SHAPE && C.FORMATION_SHAPE[base]) || { width: 'NARROW' };
+    shape.width = baseShape.width;
+
+    const key = appliedList.length
+      ? `${base}~${appliedList.map(o => `${o.idx}${o.role}`).join('~')}`
+      : base;
+
+    return {
+      key,
+      base,
+      isCustom: appliedList.length > 0,
+      overrides: appliedMap,
+      overrideList: appliedList,
+      slots,
+      ruleSlots,
+      delta,
+      atkMod: baseMods.atkMod + delta,
+      defMod: baseMods.defMod - delta,
+      shape,
+      hasBug,
+      bugInfo: hasBug && C.FORMATION_BUGS ? (C.FORMATION_BUGS[base] || null) : null,
+    };
+  }
+
   function solveBestXi(
     roster, formationKey = '4-3-3', foreignCap = 7, userCountry = '',
     excludeIds = null, rotationMode = false, repLevel = 3
   ) {
-    const fk = (formationKey in C.FORMATIONS) ? formationKey : '4-3-3';
-    const slots = C.FORMATIONS[fk];
-    const ruleSlots = (C.FORMATION_RULE_SLOTS && C.FORMATION_RULE_SLOTS[fk]) || [0, 1, 2, 3, 5, 6, 8, 12, 15, 16, 15];
+    const spec = resolveFormationSpec(formationKey);
+    const fk = spec.key;
+    const slots = spec.slots;
+    const ruleSlots = spec.ruleSlots;
     const exSet = excludeIds ? new Set(excludeIds) : new Set();
 
     let avail = (roster || []).filter(p => !p.injured && !p.suspended && !exSet.has(p.id));
@@ -708,10 +820,14 @@
 
     const chem = teamChemistry(xiPlayers);
     const chemMul = chemistryMul(chem);
-    const bugInfo = (C.FORMATION_BUGS && C.FORMATION_BUGS[fk]) || null;
+    const bugInfo = spec.bugInfo;
 
     return {
       formation: fk,
+      baseFormation: spec.base,
+      isCustom: spec.isCustom,
+      atkMod: spec.atkMod,
+      defMod: spec.defMod,
       xi: xiClean,
       bench: bench.slice(0, 12),
       totalScore: U.roundTo(totalScore, 2),
@@ -730,7 +846,7 @@
       },
       chemistry: chem,
       chemMul: U.roundTo(chemMul, 4),
-      hasFormationBug: Boolean(bugInfo && bugInfo.hasBug),
+      hasFormationBug: spec.hasBug,
       formationBugInfo: bugInfo,
       foreignCount: foreignUsed,
       hasLeader,
@@ -749,10 +865,12 @@
    * Pada 3-4-3, slot ke-11 (rule 18) jatuh ke sektor 'X' sehingga tidak terhitung di ATK.
    */
   function computeEngineSectorPower(xiObj, formationKey = null, opts = {}) {
-    const fk = formationKey || (xiObj && xiObj.formation) || '4-3-3';
-    const ruleSlots = (C.FORMATION_RULE_SLOTS && C.FORMATION_RULE_SLOTS[fk]) || [0, 1, 2, 3, 5, 6, 8, 12, 15, 16, 15];
+    const spec = resolveFormationSpec(formationKey || (xiObj && xiObj.formation) || '4-3-3');
+    const fk = spec.key;
+    const ruleSlots = spec.ruleSlots;
 
     const isHome = opts.isHome !== undefined ? Boolean(opts.isHome) : true;
+    const neutral = Boolean(opts.neutral);
     const crowdOver70 = opts.crowdOver70 !== undefined ? Boolean(opts.crowdOver70) : true;
     const style = String(opts.style || 'Balanced').toLowerCase();
     const marking = String(opts.marking || 'Light').toLowerCase();
@@ -790,7 +908,7 @@
       });
     } else {
       const sec = (xiObj && xiObj.sectors) || {};
-      const shape = (C.FORMATION_SHAPE && C.FORMATION_SHAPE[fk]) || { D: 4, M: 3, A: 3 };
+      const shape = spec.shape || { D: 4, M: 3, A: 3 };
       sumG = U.safeNum(sec.GK, 15); cntG = 1;
       sumD = U.safeNum(sec.DEF, 15) * shape.D; cntD = shape.D;
       sumM = U.safeNum(sec.MID, 15) * shape.M; cntM = shape.M;
@@ -801,9 +919,13 @@
     const lockerMul = Math.max(0.96, 1.0 - lockerHitPct / 100.0);
     const chem = (xiObj && xiObj.chemistry !== undefined) ? xiObj.chemistry : 100;
     const chemMul = chemistryMul(chem);
-    const outfieldGlobalMul = lockerMul * chemMul;
+    const altHitSide = (!neutral && !isHome) ? Math.max(0, U.safeNum(opts.altHit, 0)) : 0.0;
+    const altMul = altHitSide > 0 ? Math.max(0.85, 1.0 - 0.12 * altHitSide) : 1.00; // #22073 altSector=0.12
+    const condEnergyMul = U.safeNum(opts.energyMul, 1.0);
+    const condFatigueMul = condEnergyMul > 1.0 ? Math.max(0.95, 1.0 - 0.001 * ((condEnergyMul - 1.0) * 14.0)) : 1.0;
+    const outfieldGlobalMul = lockerMul * chemMul * altMul * condFatigueMul;
 
-    // #21822: Denominator tetap /5, /5, /3; lockerMul & chemMul hanya berlaku pada DEF, MID, ATK (bukan GK)
+    // #21822: Denominator tetap /5, /5, /3; lockerMul, chemMul & cond hanya berlaku pada DEF, MID, ATK (bukan GK)
     const baseGk = (cntG > 0 ? sumG / cntG : 15.0);
     const baseDef = (sumD / 5.0);
     const baseMid = (sumM / 5.0);
@@ -840,14 +962,25 @@
 
     let cardRiskLabel = 'Rendah';
     let staminaDrainLabel = 'Normal';
+    let markCardMul = 1.0;
     if (marking.includes('very') || marking.includes('sangat')) {
       rawDef *= 1.08;
+      markCardMul = 1.65;
       cardRiskLabel = 'Tinggi (+65% kartu, waspada penalti!)';
       staminaDrainLabel = 'Cepat (-35% stamina)';
     } else if (marking.includes('heavy') || marking.includes('ketat')) {
       rawDef *= 1.04;
+      markCardMul = 1.25;
       cardRiskLabel = 'Sedang (+25% kartu)';
       staminaDrainLabel = 'Agak Cepat (-18% stamina)';
+    }
+    if (opts.cardMul !== undefined && opts.cardMul !== null) {
+      // Dampak ekspektasi risiko kartu kuning kedua/kartu merah (#21365 cardMul + #22095 manUp)
+      const redProb = Math.min(0.35, 0.045 * markCardMul * Math.max(0.5, U.safeNum(opts.cardMul, 1.0)));
+      const redMul = 1.0 - redProb * 0.14;
+      rawDef *= redMul;
+      rawMid *= redMul;
+      rawAtk *= redMul;
     }
 
     if (shout.includes('praise') || shout.includes('elogiar') || shout.includes('encourage')) {
@@ -957,12 +1090,69 @@
   }
 
   /**
+   * Resolusi faktor kondisi laga (#21362/#21365/#21366/#21367/#22073):
+   * Menghasilkan missMul, energyMul & cardMul untuk masing-masing sisi (User vs Opponent)
+   * dari objek `autoCond` maupun override manual UI (cuaca/wasit).
+   */
+  function resolveMatchCondFactors(cond, isHome, neutral = false) {
+    const c = (cond && typeof cond === 'object') ? cond : {};
+    const weather = String(c.weather || c.weatherKey || 'clear').toLowerCase();
+    const refStyle = String(c.refStyle || c.refKey || 'normal').toLowerCase();
+    const altHit = neutral ? 0 : Math.max(0, U.safeNum(c.altHit, 0));
+    const alt = neutral ? 0 : Math.max(0, U.safeNum(c.alt, 0));
+    const varOn = Boolean(c.varOn);
+
+    const Cond = LF.conditions || null;
+    const missMul = (c.missMul !== undefined)
+      ? Math.max(0.8, U.safeNum(c.missMul, 1.0))
+      : (Cond && typeof Cond.condMissMul === 'function'
+        ? Cond.condMissMul(weather)
+        : (weather === 'rain' ? 1.12 : (weather === 'snow' ? 1.18 : 1.0)));
+
+    const energyFromWeatherAlt = (side) => {
+      if (Cond && typeof Cond.condEnergyMul === 'function') {
+        return Cond.condEnergyMul(weather, altHit, side);
+      }
+      const wm = weather === 'heat' ? 1.12 : (weather === 'snow' ? 1.05 : 1.0);
+      const am = (side === 'away' && altHit > 0) ? (1 + 0.35 * altHit) : 1.0;
+      return wm * am;
+    };
+    const cardFromRef = (side) => {
+      if (Cond && typeof Cond.condCardMul === 'function') {
+        return Cond.condCardMul(refStyle, side);
+      }
+      if (refStyle === 'strict') return 1.2;
+      if (refStyle === 'lenient') return 0.82;
+      if (refStyle === 'home') return side === 'home' ? 0.85 : 1.2;
+      return 1.0;
+    };
+
+    const eHome = (c.energyMulHome !== undefined) ? U.safeNum(c.energyMulHome, 1.0) : energyFromWeatherAlt('home');
+    const eAway = (c.energyMulAway !== undefined) ? U.safeNum(c.energyMulAway, 1.0) : energyFromWeatherAlt('away');
+    const kHome = (c.cardMulHome !== undefined) ? U.safeNum(c.cardMulHome, 1.0) : cardFromRef('home');
+    const kAway = (c.cardMulAway !== undefined) ? U.safeNum(c.cardMulAway, 1.0) : cardFromRef('away');
+
+    return {
+      weather,
+      refStyle,
+      alt,
+      altHit,
+      varOn,
+      missMul: U.roundTo(missMul, 3),
+      userEnergyMul: U.roundTo(isHome ? eHome : eAway, 3),
+      oppEnergyMul: U.roundTo(isHome ? eAway : eHome, 3),
+      userCardMul: U.roundTo(isHome ? kHome : kAway, 3),
+      oppCardMul: U.roundTo(isHome ? kAway : kHome, 3),
+    };
+  }
+
+  /**
    * Model Markov Analitik #21813 + #21822 + #48031 (_loop5):
    * Menghitung peluang menang/seri/kalah, ekspektasi gol (xG), penguasaan bola, dan jumlah tembakan
    * sesuai formula bytecode asli:
    *   1) Duel MID: (55 * pAtt) / (55 * pAtt + 45 * pDef) dengan div=8 & homeBonus=+0.3
    *   2) Shot Attempt (jika menang MID): sAtt / (sAtt + sDef)
-   *   3) Goal vs GK Save vs Miss: gkVal - shooterVal (base 35.55 / 40.55 + 15 miss vs 5.5 / 4.5 / 3.0)
+   *   3) Goal vs GK Save vs Miss: gkVal - shooterVal (base 35.55 / 40.55 + 15 * missMul vs 5.5 / 4.5 / 3.0)
    */
   function simulateMatchExpectation(uPow, oPow, opts = {}) {
     const isHome = Boolean(opts.isHome);
@@ -971,6 +1161,8 @@
     const oFocus = String(opts.oppFocus || 'Center').toLowerCase();
     const uStyle = String(opts.style || 'Balanced').toLowerCase();
     const oStyle = String(opts.oppStyle || 'Balanced').toLowerCase();
+    const condRef = (opts.autoCond || opts.cond) ? resolveMatchCondFactors(opts.autoCond || opts.cond, isHome, neutral) : null;
+    const missMul = Math.max(0.8, U.safeNum(opts.missMul, condRef ? condRef.missMul : 1.0));
 
     const uAtk = focus.includes('wing')
       ? U.safeNum(uPow.atkWings, uPow.ATK)
@@ -1022,8 +1214,9 @@
       const gkF = Math.max(0.2, 1 + dampGk / 8 + sideHomeAdj) * defGkSaveMul;
       const missF = Math.max(0.2, 1 - dampGk / 8 + sideHomeAdj);
 
-      const conv0 = (5.5 * convMul) / (5.5 * convMul + 35.55 * gkF + 15 * missF);
-      const conv2 = (4.5 * convMul) / (4.5 * convMul + 40.55 * gkF + 15 * missF);
+      // #49145: 15 * missF * condMissMul (rain=1.12, snow=1.18)
+      const conv0 = (5.5 * convMul) / (5.5 * convMul + 35.55 * gkF + 15 * missF * missMul);
+      const conv2 = (4.5 * convMul) / (4.5 * convMul + 40.55 * gkF + 15 * missF * missMul);
       return { duelProb, shotProb: duelProb * shotGivenDuel, conv0, conv2 };
     }
 
@@ -1078,6 +1271,10 @@
       oShots: U.roundTo(nPerSide * rO.shotProb, 1),
       effAtkUser: U.roundTo(uAtk, 1),
       effAtkOpp: U.roundTo(oAtk, 1),
+      missMul: U.roundTo(missMul, 3),
+      condApplied: condRef
+        ? { weather: condRef.weather, refStyle: condRef.refStyle, altHit: condRef.altHit }
+        : (missMul !== 1.0 ? { missMul: U.roundTo(missMul, 3) } : null),
     };
   }
 
@@ -1177,10 +1374,164 @@
    * - Attack Focus: Wings | Center (TIDAK ADA Mixed)
    * - Marking: Light (0%) | Heavy (+4% DEF) | Very Heavy (+8% DEF) (TIDAK ADA Normal)
    */
+  /**
+   * Auto Custom-Slot Optimizer (#19555/#19558/#22023):
+   * Menguji hingga <=10 varian custom slot berdampak tertinggi pada formasi dasar `baseFk`
+   * (mengubah slot MID wildcard/wrong-foot ke MC/MA/role alami & menyelaraskan slot ATK ke PD/PE/SA)
+   * untuk mencari kombinasi xPts tertinggi dengan penalti salah kaki minimal.
+   */
+  function optimizeCustomSlots(baseFk, userRoster, oppPow, opts = {}) {
+    const baseSpec = resolveFormationSpec(baseFk);
+    const canonBase = baseSpec.base;
+    const baseSlots = C.FORMATIONS[canonBase] || C.FORMATIONS['4-3-3'];
+    const baseRules = (C.FORMATION_RULE_SLOTS && C.FORMATION_RULE_SLOTS[canonBase]) || [];
+    const midRoles = C.CUSTOM_MID_ROLES || ['VOL', 'MC', 'MA', 'PD', 'PE'];
+    const atkRoles = C.CUSTOM_ATK_ROLES || ['ATA', 'SA', 'PD', 'PE'];
+
+    const isHome = Boolean(opts.isHome);
+    const foreignCap = opts.foreignCap !== undefined ? opts.foreignCap : 7;
+    const userCountry = opts.userCountry || '';
+    const excludeIds = opts.excludeIds || null;
+    const rotationMode = Boolean(opts.rotationMode);
+    const repLevel = opts.repLevel !== undefined ? opts.repLevel : 3;
+    const style = opts.style || 'Balanced';
+    const marking = opts.marking || 'Heavy';
+    const oppFocus = opts.oppFocus || 'Center';
+    const oppStyle = opts.oppStyle || 'Balanced';
+    const missMul = U.safeNum(opts.missMul, 1.0);
+    const uCondOpts = {
+      altHit: U.safeNum(opts.altHit, 0),
+      energyMul: U.safeNum(opts.energyMul, 1.0),
+      cardMul: opts.cardMul,
+    };
+
+    function evalKey(fk) {
+      const res = solveBestXi(userRoster, fk, foreignCap, userCountry, excludeIds, rotationMode, repLevel);
+      const uPow = computeEngineSectorPower(res, fk, {
+        isHome, crowdOver70: true, style, marking, ...uCondOpts,
+      });
+      const simC = simulateMatchExpectation(uPow, oppPow, {
+        isHome, neutral: false, focus: 'Center', oppFocus, style, oppStyle, missMul,
+      });
+      const simW = simulateMatchExpectation(uPow, oppPow, {
+        isHome, neutral: false, focus: 'Wings', oppFocus, style, oppStyle, missMul,
+      });
+      const optFocus = simC.xPts >= simW.xPts ? 'Center' : 'Wings';
+      const sim = optFocus === 'Center' ? simC : simW;
+      const spec = resolveFormationSpec(fk);
+      const score = sim.xPts * 40.0 + res.avgScore * 0.05 - res.wrongFootCount * 0.45 - (res.hasFormationBug ? 18.0 : 0.0);
+      return {
+        key: spec.key,
+        base: spec.base,
+        isCustom: spec.isCustom,
+        overrides: spec.overrideList,
+        atkMod: spec.atkMod,
+        defMod: spec.defMod,
+        res,
+        uPow: { ...uPow, ATK: sim.effAtkUser, atkMod: spec.atkMod, defMod: spec.defMod },
+        sim,
+        optFocus,
+        score: U.roundTo(score, 2),
+      };
+    }
+
+    const baseEval = evalKey(canonBase);
+    const candKeys = new Set();
+    const pushKey = (k) => {
+      if (candKeys.size >= 10) return;
+      const sp = resolveFormationSpec(k);
+      if (sp.isCustom && sp.key !== canonBase) candKeys.add(sp.key);
+    };
+
+    if (opts.activeFormationRaw) {
+      const actSp = resolveFormationSpec(opts.activeFormationRaw);
+      if (actSp.base === canonBase && actSp.isCustom) pushKey(actSp.key);
+    }
+
+    const naturalTokens = [];
+    const wfMcTokens = [];
+    const wfMaTokens = [];
+    const atkNaturalTokens = [];
+    for (let i = 1; i < baseSlots.length; i++) {
+      const assign = (baseEval.res.xi || []).find(a => a.slotIdx === i) || baseEval.res.xi[i];
+      if (!assign || !assign.player) continue;
+      const bRole = baseSlots[i];
+      const ri = C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[baseRules[i]];
+      if (!ri) continue;
+      const pPos = assign.player.pos;
+      const isWild = baseRules[i] === 10 || baseRules[i] === 17;
+      if (ri.sec === 'M') {
+        if (midRoles.includes(pPos) && pPos !== bRole) {
+          naturalTokens.push(`${i}${pPos}`);
+        }
+        if (assign.wrongFoot || isWild || assign.compat < 0.99) {
+          if (bRole !== 'MC') wfMcTokens.push(`${i}MC`);
+          if (bRole !== 'MA') wfMaTokens.push(`${i}MA`);
+          if (pPos === 'PD' || pPos === 'PE') pushKey(`${canonBase}~${i}${pPos}`);
+          else if (bRole !== 'MC') pushKey(`${canonBase}~${i}MC`);
+        }
+      } else if (ri.sec === 'A') {
+        if (atkRoles.includes(pPos) && pPos !== bRole) {
+          atkNaturalTokens.push(`${i}${pPos}`);
+          pushKey(`${canonBase}~${i}${pPos}`);
+        }
+      }
+    }
+
+    if (wfMcTokens.length) pushKey(`${canonBase}~${wfMcTokens.join('~')}`);
+    if (wfMaTokens.length) pushKey(`${canonBase}~${wfMaTokens.join('~')}`);
+    if (naturalTokens.length) pushKey(`${canonBase}~${naturalTokens.join('~')}`);
+    if (wfMcTokens.length && atkNaturalTokens.length) {
+      pushKey(`${canonBase}~${[...wfMcTokens, ...atkNaturalTokens].join('~')}`);
+    }
+    if (naturalTokens.length && atkNaturalTokens.length) {
+      pushKey(`${canonBase}~${[...naturalTokens, ...atkNaturalTokens].join('~')}`);
+    }
+
+    let bestCustom = null;
+    for (const ck of candKeys) {
+      const ev = evalKey(ck);
+      if (!bestCustom || ev.score > bestCustom.score) {
+        bestCustom = ev;
+      }
+    }
+
+    if (!bestCustom) return null;
+    const deltaPts = U.roundTo(bestCustom.sim.xPts - baseEval.sim.xPts, 3);
+    const deltaWin = U.roundTo(bestCustom.sim.winPct - baseEval.sim.winPct, 1);
+    const wfSaved = baseEval.res.wrongFootCount - bestCustom.res.wrongFootCount;
+    const isUpgrade = (deltaPts >= 0.002) || (wfSaved > 0 && deltaPts >= -0.002) || (bestCustom.score > baseEval.score + 0.05);
+    if (!isUpgrade) return null;
+
+    return {
+      baseKey: canonBase,
+      customKey: bestCustom.key,
+      label: bestCustom.overrides.map(o => `#${o.idx + 1} ${o.from}→${o.role}`).join(' · '),
+      overrides: bestCustom.overrides,
+      winPct: bestCustom.sim.winPct,
+      drawPct: bestCustom.sim.drawPct,
+      lossPct: bestCustom.sim.lossPct,
+      xPts: bestCustom.sim.xPts,
+      xGF: bestCustom.sim.xGF,
+      xGA: bestCustom.sim.xGA,
+      possPct: bestCustom.sim.possPct,
+      optFocus: bestCustom.optFocus,
+      wrongFootCount: bestCustom.res.wrongFootCount,
+      wfSaved,
+      atkMod: bestCustom.atkMod,
+      defMod: bestCustom.defMod,
+      deltaPts,
+      deltaWin,
+      avgScore: bestCustom.res.avgScore,
+      uPow: bestCustom.uPow,
+    };
+  }
+
   function recommendMatchupForOpponent(
     userRoster, oppXi, isHome, isKnockout, isBig,
     foreignCap = 7, userCountry = '', activeFormation = '4-3-3',
-    yellowIds = null, safeRotate = false, repLevel = 3
+    yellowIds = null, safeRotate = false, repLevel = 3,
+    autoCond = null, activeFormationRaw = null
   ) {
     const oppAvg = U.safeNum(oppXi && oppXi.avgScore, 20.0);
     const oppXiPlayers = (oppXi && Array.isArray(oppXi.xi)) ? oppXi.xi.map(x => x.player || x) : [];
@@ -1194,7 +1545,29 @@
       }
     }
 
-    const oppAi = predictAiTacticsDetail(oppAvg, oppAvg, !isHome, oppXiPlayers);
+    const rawActiveKey = activeFormationRaw || activeFormation || '4-3-3';
+    const actSpec = resolveFormationSpec(rawActiveKey);
+    const condF = resolveMatchCondFactors(autoCond, isHome, false);
+    const uCondOpts = {
+      altHit: condF.altHit,
+      energyMul: condF.userEnergyMul,
+      cardMul: condF.userCardMul,
+    };
+    const oCondOpts = {
+      altHit: condF.altHit,
+      energyMul: condF.oppEnergyMul,
+      cardMul: condF.oppCardMul,
+    };
+
+    const healthySorted = (userRoster || [])
+      .filter(p => !p.injured && !p.suspended && (!excludeForRec || !excludeForRec.has(p.id)))
+      .sort((a, b) => (b.force || 0) - (a.force || 0));
+    const top11Pool = healthySorted.length >= 11 ? healthySorted.slice(0, 11) : (userRoster || []).slice(0, 11);
+    const userTop11Avg = top11Pool.length
+      ? U.roundTo(top11Pool.reduce((s, p) => s + (p.force || 0), 0) / top11Pool.length, 1)
+      : oppAvg;
+
+    const oppAi = predictAiTacticsDetail(oppAvg, userTop11Avg, !isHome, oppXiPlayers);
     const oppStyle = oppAi.aiStyle;
     const oppFocus = oppAi.aiFocus || 'Center';
     const oppPow = computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
@@ -1202,30 +1575,35 @@
       crowdOver70: true,
       style: oppStyle,
       marking: 'Heavy',
+      ...oCondOpts,
     });
 
-    const candidates = [];
-    for (const fk of Object.keys(C.FORMATIONS)) {
-      const res = solveBestXi(userRoster, fk, foreignCap, userCountry, excludeForRec, safeRotate, repLevel);
+    function evaluateFormationCandidate(fk) {
+      const spec = resolveFormationSpec(fk);
+      const res = solveBestXi(userRoster, spec.key, foreignCap, userCountry, excludeForRec, safeRotate, repLevel);
       const avgEdge = res.avgScore - oppAvg;
       let trialStyle = 'Balanced';
       if (avgEdge >= 2.0) trialStyle = 'Offensive';
       else if (avgEdge <= -1.5 || oppStyle === 'Offensive') trialStyle = 'Counter-Attack';
 
-      const trialMark = (avgEdge >= 4.0 && !isKnockout && !isBig) ? 'Light' : 'Heavy';
-      const uPow = computeEngineSectorPower(res, fk, {
+      let trialMark = (avgEdge >= 4.0 && !isKnockout && !isBig) ? 'Light' : 'Heavy';
+      if (condF.userCardMul >= 1.15 && !(isKnockout && avgEdge <= -1.5)) trialMark = 'Light';
+      else if (condF.userCardMul <= 0.88 && (isKnockout || isBig || avgEdge <= 1.0)) trialMark = 'Very Heavy';
+
+      const uPow = computeEngineSectorPower(res, spec.key, {
         isHome,
         crowdOver70: true,
         style: trialStyle,
         marking: trialMark,
+        ...uCondOpts,
       });
 
       // Evaluasi kedua opsi Attack Focus (#21822): Center (0.8*ATK + 0.2*MID) vs Wings (+2%/crosser)
       const simC = simulateMatchExpectation(uPow, oppPow, {
-        isHome, neutral: false, focus: 'Center', oppFocus, style: trialStyle, oppStyle,
+        isHome, neutral: false, focus: 'Center', oppFocus, style: trialStyle, oppStyle, missMul: condF.missMul,
       });
       const simW = simulateMatchExpectation(uPow, oppPow, {
-        isHome, neutral: false, focus: 'Wings', oppFocus, style: trialStyle, oppStyle,
+        isHome, neutral: false, focus: 'Wings', oppFocus, style: trialStyle, oppStyle, missMul: condF.missMul,
       });
       const optFocus = simC.xPts >= simW.xPts ? 'Center' : 'Wings';
       const sim = optFocus === 'Center' ? simC : simW;
@@ -1240,25 +1618,26 @@
       const wfPenalty = res.wrongFootCount * 0.45;
       const h2hScore = sim.xPts * 40.0 + res.avgScore * 0.05 - wfPenalty + bugPenalty;
 
-      const mods = (C.FORMATION_MODS && C.FORMATION_MODS[fk]) || { atkMod: 0, defMod: 0 };
       const enginePow = {
         ...uPow,
         ATK: effAtk,
-        atkMod: mods.atkMod,
-        defMod: mods.defMod,
+        atkMod: spec.atkMod,
+        defMod: spec.defMod,
       };
       const xiSummary = res.xi.map(a => `${a.slot}:${a.player.name}`);
 
-      candidates.push({
-        formation: fk,
+      return {
+        formation: spec.key,
+        baseFormation: spec.base,
+        isCustom: spec.isCustom,
         h2hScore: U.roundTo(h2hScore, 2),
         avgScore: res.avgScore,
         totalScore: res.totalScore,
         sectors: res.sectors,
         uPow: enginePow,
         enginePow,
-        atkMod: mods.atkMod,
-        defMod: mods.defMod,
+        atkMod: spec.atkMod,
+        defMod: spec.defMod,
         atkVsDef: U.roundTo(atkVsDef, 1),
         midVsMid: U.roundTo(midVsMid, 1),
         defVsAtk: U.roundTo(defVsAtk, 1),
@@ -1307,27 +1686,75 @@
           starAwarded: a.player.starAwarded,
         })),
         bench: res.bench,
-      });
+      };
+    }
+
+    const candidates = [];
+    for (const fk of Object.keys(C.FORMATIONS)) {
+      candidates.push(evaluateFormationCandidate(fk));
+    }
+
+    // Jika formasi aktif adalah custom formation (mis. '3-5-2~4MC~7MC~10PD'), ikut dievaluasi akurat
+    if (actSpec.isCustom && !candidates.some(c => c.formation === actSpec.key)) {
+      candidates.push(evaluateFormationCandidate(actSpec.key));
     }
 
     candidates.sort((a, b) => b.h2hScore - a.h2hScore);
     const best = candidates[0];
-    const activeComp = candidates.find(c => c.formation === activeFormation) || best;
+    const activeComp = candidates.find(c => c.formation === actSpec.key)
+      || candidates.find(c => c.formation === actSpec.base)
+      || best;
 
     const finalAi = predictAiTacticsDetail(oppAvg, best.avgScore, !isHome, oppXiPlayers);
+    const effectiveOppPow = (finalAi.aiStyle !== oppStyle)
+      ? computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
+          isHome: !isHome,
+          crowdOver70: true,
+          style: finalAi.aiStyle,
+          marking: 'Heavy',
+          ...oCondOpts,
+        })
+      : oppPow;
     const recEdge = U.roundTo(best.avgScore - oppAvg, 1);
     const activeEdge = U.roundTo(activeComp.avgScore - oppAvg, 1);
 
-    // Uji 4 Play Style resmi (#21959) pada formasi terbaik via Markov #48031
+    // Uji 4 Play Style resmi (#21959) pada formasi terbaik via Markov #48031 + autoCond
     const bestXiObj = solveBestXi(userRoster, best.formation, foreignCap, userCountry, excludeForRec, safeRotate, repLevel);
-    const bestMark = (recEdge >= 4.0 && !isKnockout && !isBig) ? 'Light' : 'Heavy';
+
+    let bestMark = 'Heavy (+4% DEF)';
+    let recMarkingWhy = '';
+    if (condF.userCardMul >= 1.15 && !(isKnockout && recEdge <= -1.5)) {
+      bestMark = 'Light (0%)';
+      recMarkingWhy = condF.refStyle === 'home' && !isHome
+        ? `Wasit Pro-Kandang saat kita TANDANG (cardMul ${condF.userCardMul}×) → turunkan ke Light (0%) + Order Stay Calm untuk hindari kartu merah.`
+        : `Wasit Ketat (cardMul ${condF.userCardMul}×) → gunakan Light (0%) untuk menekan risiko kartu kuning/merah (#21365).`;
+    } else if (condF.userCardMul <= 0.88 && (isKnockout || isBig || recEdge <= 1.0)) {
+      bestMark = 'Very Heavy (+8% DEF)';
+      recMarkingWhy = condF.refStyle === 'home' && isHome
+        ? `Wasit Pro-Kandang di markas sendiri (cardMul ${condF.userCardMul}×) → manfaatkan untuk menekan ke Very Heavy (+8% DEF)!`
+        : `Wasit Longgar (cardMul ${condF.userCardMul}×) → aman menaikkan agresivitas ke Very Heavy (+8% DEF)!`;
+    } else if (safeRotate && recEdge >= 4.0) {
+      bestMark = 'Light (0%)';
+      recMarkingWhy = `Unggul jauh (+${recEdge.toFixed(1)} Force) di laga rotasi → gunakan Light untuk menghemat stamina dan menghindari kartu kuning.`;
+    } else if ((isKnockout || isBig) && recEdge <= -1.5) {
+      bestMark = 'Very Heavy (+8% DEF)';
+      recMarkingWhy = `Laga hidup-mati melawan tim lebih kuat (${recEdge.toFixed(1)} Force) → Very Heavy memberi +8% DEF ekstra (waspada kartu kuning: siapkan shout Calm Down!).`;
+    } else if (ySet.size >= 2 && !isKnockout) {
+      bestMark = 'Light (0%)';
+      recMarkingWhy = `Ada ${ySet.size} pemain berisiko akumulasi kartu kuning → gunakan Light (0%) agar tidak kehilangan starter di laga berikutnya.`;
+    } else {
+      bestMark = 'Heavy (+4% DEF)';
+      recMarkingWhy = `Sweet-spot v1.2.0: memberi +4% DEF gratis dengan risiko kartu & kuras stamina yang masih terkendali.`;
+    }
+    const recMarking = bestMark;
+
     const styleSims = {};
     for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
       const pTry = computeEngineSectorPower(bestXiObj, best.formation, {
-        isHome, crowdOver70: true, style: stTry, marking: bestMark,
+        isHome, crowdOver70: true, style: stTry, marking: bestMark, ...uCondOpts,
       });
-      styleSims[stTry] = simulateMatchExpectation(pTry, oppPow, {
-        isHome, neutral: false, focus: best.optFocus, oppFocus, style: stTry, oppStyle: finalAi.aiStyle,
+      styleSims[stTry] = simulateMatchExpectation(pTry, effectiveOppPow, {
+        isHome, neutral: false, focus: best.optFocus, oppFocus, style: stTry, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
       });
     }
 
@@ -1381,10 +1808,10 @@
         const p = it.player;
         const isPm = (p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM');
         const pF9 = computeEngineSectorPower(bestXiObj, best.formation, {
-          isHome, crowdOver70: true, style: recStyle, marking: bestMark, falseNineId: p.id,
+          isHome, crowdOver70: true, style: recStyle, marking: bestMark, falseNineId: p.id, ...uCondOpts,
         });
-        const simF9 = simulateMatchExpectation(pF9, oppPow, {
-          isHome, neutral: false, focus: best.optFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle,
+        const simF9 = simulateMatchExpectation(pF9, effectiveOppPow, {
+          isHome, neutral: false, focus: best.optFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
         });
         if (!bestF9Pick || simF9.xPts > bestF9Pick.sim.xPts) {
           bestF9Pick = { player: p, isPlaymaker: isPm, sim: simF9 };
@@ -1393,6 +1820,58 @@
     }
 
     const useFalseNine = Boolean(bestF9Pick && bestF9Pick.sim.xPts >= baseStyleSim.xPts + 0.005);
+
+    const finalRecPow = computeEngineSectorPower(bestXiObj, best.formation, {
+      isHome,
+      crowdOver70: true,
+      style: recStyle,
+      marking: recMarking,
+      falseNineId: (useFalseNine && bestF9Pick) ? bestF9Pick.player.id : null,
+      ...uCondOpts,
+    });
+    const finalRecSim = (useFalseNine && bestF9Pick) ? bestF9Pick.sim : baseStyleSim;
+    best.winPct = finalRecSim.winPct;
+    best.drawPct = finalRecSim.drawPct;
+    best.lossPct = finalRecSim.lossPct;
+    best.xPts = finalRecSim.xPts;
+    best.xGF = finalRecSim.xGF;
+    best.xGA = finalRecSim.xGA;
+    best.possPct = finalRecSim.possPct;
+    best.uShots = finalRecSim.uShots;
+    best.oShots = finalRecSim.oShots;
+    best.optStyle = recStyle;
+    best.matchupScore = U.roundTo(finalRecSim.winPct - finalRecSim.lossPct, 1);
+    best.atkVsDef = U.roundTo(finalRecSim.effAtkUser - effectiveOppPow.DEF, 1);
+    best.midVsMid = U.roundTo(finalRecPow.MID - effectiveOppPow.MID, 1);
+    best.defVsAtk = U.roundTo(finalRecPow.DEF - effectiveOppPow.ATK, 1);
+    best.dMid = best.midVsMid;
+    best.dAtk = best.atkVsDef;
+    best.dDef = best.defVsAtk;
+    best.uPow = { ...finalRecPow, ATK: finalRecSim.effAtkUser, atkMod: best.atkMod, defMod: best.defMod };
+    best.enginePow = best.uPow;
+    if (activeComp === best || activeComp.formation === best.formation) {
+      Object.assign(activeComp, {
+        winPct: best.winPct,
+        drawPct: best.drawPct,
+        lossPct: best.lossPct,
+        xPts: best.xPts,
+        xGF: best.xGF,
+        xGA: best.xGA,
+        possPct: best.possPct,
+        uShots: best.uShots,
+        oShots: best.oShots,
+        optStyle: best.optStyle,
+        matchupScore: best.matchupScore,
+        atkVsDef: best.atkVsDef,
+        midVsMid: best.midVsMid,
+        defVsAtk: best.defVsAtk,
+        dMid: best.dMid,
+        dAtk: best.dAtk,
+        dDef: best.dDef,
+        uPow: best.uPow,
+        enginePow: best.enginePow,
+      });
+    }
     const falseNineTarget = useFalseNine ? {
       id: bestF9Pick.player.id,
       name: bestF9Pick.player.name,
@@ -1423,21 +1902,52 @@
       recFocusWhy = `Wings lebih unggul (ATK efektif ${best.uPow.atkWings} dengan ${best.uPow.wingCrossers} crosser CRU vs Center ${best.uPow.atkCenter} yang tertarik turun oleh MID ${best.uPow.MID}).`;
     }
 
-    // Marking (#3492: HANYA Light (0%), Heavy (+4% DEF), Very Heavy (+8% DEF))
-    let recMarking = 'Heavy (+4% DEF)';
-    let recMarkingWhy = '';
-    if (safeRotate && recEdge >= 4.0) {
-      recMarking = 'Light (0%)';
-      recMarkingWhy = `Unggul jauh (+${recEdge.toFixed(1)} Force) di laga rotasi → gunakan Light untuk menghemat stamina dan menghindari kartu kuning.`;
-    } else if ((isKnockout || isBig) && recEdge <= -1.5) {
-      recMarking = 'Very Heavy (+8% DEF)';
-      recMarkingWhy = `Laga hidup-mati melawan tim lebih kuat (${recEdge.toFixed(1)} Force) → Very Heavy memberi +8% DEF ekstra (waspada kartu kuning: siapkan shout Calm Down!).`;
-    } else if (ySet.size >= 2 && !isKnockout) {
-      recMarking = 'Light (0%)';
-      recMarkingWhy = `Ada ${ySet.size} pemain berisiko akumulasi kartu kuning → gunakan Light (0%) agar tidak kehilangan starter di laga berikutnya.`;
-    } else {
-      recMarking = 'Heavy (+4% DEF)';
-      recMarkingWhy = `Sweet-spot v1.2.0: memberi +4% DEF gratis dengan risiko kartu & kuras stamina yang masih terkendali.`;
+    const customRec = optimizeCustomSlots(best.baseFormation || best.formation, userRoster, effectiveOppPow, {
+      isHome,
+      foreignCap,
+      userCountry,
+      excludeIds: excludeForRec,
+      rotationMode: safeRotate,
+      repLevel,
+      style: recStyle,
+      marking: recMarking,
+      oppFocus,
+      oppStyle: finalAi.aiStyle,
+      missMul: condF.missMul,
+      activeFormationRaw: actSpec.key,
+      ...uCondOpts,
+    });
+    if (customRec) {
+      customRec.alreadyActive = customRec.customKey === actSpec.key;
+    }
+
+    let condBaseline = null;
+    if (condF.missMul !== 1.0 || condF.altHit > 0 || condF.userEnergyMul !== 1.0 || condF.oppEnergyMul !== 1.0 || condF.userCardMul !== 1.0 || condF.oppCardMul !== 1.0) {
+      const uPowClean = computeEngineSectorPower(bestXiObj, best.formation, {
+        isHome, crowdOver70: true, style: recStyle, marking: recMarking,
+        falseNineId: useFalseNine && bestF9Pick ? bestF9Pick.player.id : null,
+      });
+      const oPowClean = computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
+        isHome: !isHome, crowdOver70: true, style: finalAi.aiStyle, marking: 'Heavy',
+      });
+      const cleanSim = simulateMatchExpectation(uPowClean, oPowClean, {
+        isHome, neutral: false, focus: recFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle, missMul: 1.0,
+      });
+      condBaseline = {
+        cleanWinPct: cleanSim.winPct,
+        cleanXPts: cleanSim.xPts,
+        deltaWin: U.roundTo(finalRecSim.winPct - cleanSim.winPct, 1),
+        deltaPts: U.roundTo(finalRecSim.xPts - cleanSim.xPts, 3),
+        deltaXgf: U.roundTo(finalRecSim.xGF - cleanSim.xGF, 2),
+        deltaXga: U.roundTo(finalRecSim.xGA - cleanSim.xGA, 2),
+        weather: condF.weather,
+        refStyle: condF.refStyle,
+        alt: condF.alt,
+        altHit: condF.altHit,
+        missMul: condF.missMul,
+        userEnergyMul: condF.userEnergyMul,
+        userCardMul: condF.userCardMul,
+      };
     }
 
     const shoutPlan = [
@@ -1460,7 +1970,7 @@
       },
     ];
 
-    const keepActive = best.formation === activeFormation;
+    const keepActive = best.formation === actSpec.key || (!actSpec.isCustom && best.formation === actSpec.base);
     const scoreGain = U.roundTo(Math.max(0, best.winPct - activeComp.winPct), 1);
     const ptsGain = U.roundTo(Math.max(0, best.xPts - activeComp.xPts), 2);
     const reasons = [
@@ -1531,6 +2041,8 @@
 
     const top3List = candidates.slice(0, 3).map(c => ({
       formation: c.formation,
+      baseFormation: c.baseFormation,
+      isCustom: c.isCustom,
       h2hScore: c.h2hScore,
       matchupScore: c.matchupScore,
       winPct: c.winPct,
@@ -1564,8 +2076,13 @@
       reasons,
       top3: top3List,
       top3Formations: top3List,
+      customRec,
+      condFactors: condF,
+      condBaseline,
       allCandidates: candidates.map(c => ({
         formation: c.formation,
+        baseFormation: c.baseFormation,
+        isCustom: c.isCustom,
         winPct: c.winPct,
         drawPct: c.drawPct,
         lossPct: c.lossPct,
@@ -1582,7 +2099,7 @@
         wrongFootCount: c.wrongFootCount,
         hasFormationBug: c.hasFormationBug,
       })),
-      oppPow,
+      oppPow: effectiveOppPow,
       aiInfo: finalAi,
       recEdge,
       activeEdge,
@@ -1607,8 +2124,8 @@
   }
 
   function detectSquadHoles(roster, activeFormation = '4-3-3') {
-    const fk = (activeFormation in C.FORMATIONS) ? activeFormation : '4-3-3';
-    const slots = C.FORMATIONS[fk];
+    const spec = resolveFormationSpec(activeFormation);
+    const slots = spec.slots;
     const avail = (roster || []).filter(p => !p.injured);
     if (!avail.length) return { holes: [], holePositions: [] };
 
@@ -1975,9 +2492,13 @@
     isPlayerStar,
     evalPlayerForSlot,
     auditSetPieces,
+    parseFormationKey,
+    resolveFormationSpec,
+    resolveMatchCondFactors,
     solveBestXi,
     computeEngineSectorPower,
     simulateMatchExpectation,
+    optimizeCustomSlots,
     predictAiTacticsDetail,
     predictAiTactics,
     recommendMatchupForOpponent,
