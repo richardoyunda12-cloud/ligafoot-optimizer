@@ -784,6 +784,23 @@
     return legacyBal > 0 ? Math.floor(legacyBal * 0.03) : 0;
   }
 
+  /**
+   * Simulasi rencana cicilan transfer resmi (OTA TRANSFER_INSTALLMENTS):
+   * DP 25% + bunga { 6 bln: 3%, 12 bln: 8%, 24 bln: 18% }.
+   */
+  function computeInstallmentPlan(price, months = 24) {
+    const p = Math.max(0, Math.round(U.safeNum(price, 0)));
+    const m = [6, 12, 24].includes(Number(months)) ? Number(months) : 24;
+    const rates = { 6: 0.03, 12: 0.08, 24: 0.18 };
+    const rate = rates[m] ?? 0.18;
+    const dp = Math.round(p * 0.25);
+    const principal = Math.max(0, p - dp);
+    const totalFinanced = Math.round(principal * (1 + rate));
+    const interestCost = totalFinanced - principal;
+    const monthly = m > 0 ? Math.ceil(totalFinanced / m) : totalFinanced;
+    return { months: m, rate, dp, principal, interestCost, totalFinanced, monthly, totalPay: dp + totalFinanced };
+  }
+
   function computeLoanLimit(country = 'OTHER', division = 1, repLvl = 3) {
     const ref = U.payrollRef(country, division, repLvl);
     return Math.max(250000, Math.floor((ref * 0.25) / 250000) * 250000);
@@ -920,15 +937,28 @@
     const youthCost = youthCoachMonthly(country, userDiv, ycLv);
 
     const bankLoanParcel = computeMonthlyLoanDue(uTeam);
-    const transferDebtParcel = Array.isArray(uTeam && uTeam.transferDebt)
-      ? uTeam.transferDebt.reduce((s, d) => {
-          if (!d || typeof d !== 'object') return s;
-          if (U.safeInt(d.left, 0) <= 0) return s;
-          const parcel = U.safeNum(d.parcel, 0);
-          const rest = d.rest !== undefined ? U.safeNum(d.rest, parcel) : parcel;
-          return s + Math.min(parcel, rest);
-        }, 0)
-      : 0;
+    const transferDebtItems = [];
+    let transferDebtParcel = 0;
+    let transferDebtTotal = 0;
+    if (Array.isArray(uTeam && uTeam.transferDebt)) {
+      for (const d of uTeam.transferDebt) {
+        if (!d || typeof d !== 'object') continue;
+        const left = U.safeInt(d.left, 0);
+        if (left <= 0) continue;
+        const parcel = U.safeNum(d.parcel, 0);
+        const rest = d.rest !== undefined ? U.safeNum(d.rest, parcel * left) : parcel * left;
+        if (rest <= 0) continue;
+        const due = Math.round(Math.min(parcel, rest));
+        transferDebtParcel += due;
+        transferDebtTotal += Math.round(rest);
+        transferDebtItems.push({
+          who: String(d.who || d.name || 'Pemain'),
+          parcel: Math.round(parcel),
+          rest: Math.round(rest),
+          left,
+        });
+      }
+    }
 
     const estMonthlyRev = Math.round(estTickets + estSponsors + estNaming + estShop + estMember);
     const estMonthlyExp = Math.round(combinedPayroll + stadiumOps + ctCost + youthCost + bankLoanParcel + transferDebtParcel);
@@ -958,6 +988,10 @@
       ctCost,
       youthCost,
       bankLoanParcel,
+      transferDebtParcel,
+      transferDebtTotal,
+      transferDebtCount: transferDebtItems.length,
+      transferDebtItems,
       estMonthlyRev,
       estMonthlyExp,
       estProjectedNet,
@@ -983,6 +1017,7 @@
         ctCost,
         youthCost,
         bankLoanParcel,
+        transferDebtParcel,
       },
     };
   }
@@ -1003,6 +1038,7 @@
     ctUpkeepMonthly,
     youthCoachMonthly,
     computeMonthlyLoanDue,
+    computeInstallmentPlan,
     computeLoanLimit,
     computeCashflow3m,
     buildCashflowPayload,

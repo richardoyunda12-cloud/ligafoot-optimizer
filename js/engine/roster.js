@@ -58,6 +58,7 @@
     const star = Boolean((('star' in dyn) ? dyn.star : stat.star) || starAwarded);
     const top = Boolean(dyn.top);
     const forSale = Boolean(dyn.forSale);
+    const freeSigned = Boolean(dyn.freeSigned);
     const loanable = Boolean(dyn.loanable);
     const loanedFrom = dyn.loanedFrom || null;
     const loanDays = U.safeInt(dyn.loanDays, 0);
@@ -194,6 +195,7 @@
       starAwarded,
       top,
       forSale,
+      freeSigned,
       loanable,
       loanedFrom,
       loanDays,

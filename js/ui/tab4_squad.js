@@ -152,13 +152,34 @@ function renderRosterActionRadar() {
     .sort((a, b) => b.saveMo - a.saveMo)
     .slice(0, 5);
 
-  if (!harvest.length && !cutList.length) {
+  const bt = D.bTeamInfo || null;
+  const btCands = (bt && Array.isArray(bt.candidates)) ? bt.candidates : [];
+
+  if (!harvest.length && !cutList.length && !btCands.length) {
     box.innerHTML = '';
     return;
   }
 
+  const btHtml = btCands.length ? `
+    <div style="margin-top:8px;background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;padding:8px 10px;font-size:11px">
+      <div class="flex-between" style="gap:6px;flex-wrap:wrap;margin-bottom:4px">
+        <b class="c-purple">🅱️ Routing Tim B: Jam Terbang Muda &amp; Legakan Kuota Asing</b>
+        <span class="badge ${bt.excessForeign > 0 ? 'b-warn' : 'b-info'} mono">
+          ${bt.hasBTeam ? 'Tim B Aktif ✓' : `Buat Tim B: ${fmtM(bt.creationCost)}`} · Asing ${bt.curForeign}/${bt.foreignCap}
+        </span>
+      </div>
+      <div class="c-muted" style="font-size:10.5px;margin-bottom:4px">
+        ${bt.excessForeign > 0
+          ? `Kuota asing berlebih <b>+${bt.excessForeign}</b>! Memindahkan pemain asing muda (gap ≥10) ke Tim B <b>gratis</b> &amp; keluar dari kuota aktif Tim Utama.`
+          : 'Pindah Tim Utama ↔ Tim B gratis tanpa biaya transfer; cocok untuk pemain muda pot tinggi yang belum masuk starter.'}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${btCands.map(c =>
+        `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(c.id)}')"><b>${esc(c.name)}</b> <span class="mono">${fmtPos(c.pos)} ${c.age}th · F${c.force}→${c.potCap}</span>${c.isForeign ? ' <b class="c-amber">ASING</b>' : ''}</span>`
+      ).join('')}</div>
+    </div>` : '';
+
   box.innerHTML = `<details class="glossary-inline" style="margin:6px 0 8px" open>
-    <summary>🎯 <b>Radar Keputusan Cepat:</b> Panen Jual Puncak (${harvest.length}) &amp; Prioritas Potong Gaji (${cutList.length})</summary>
+    <summary>🎯 <b>Radar Keputusan Cepat:</b> Panen Jual (${harvest.length}) · Potong Gaji (${cutList.length}) · Routing Tim B (${btCands.length})</summary>
     <div class="grid g2" style="gap:8px;margin-top:6px">
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px">
         <div style="font-weight:800;margin-bottom:5px" class="c-gold">🌾 Radar Panen / Jual di Puncak Harga</div>
@@ -190,6 +211,7 @@ function renderRosterActionRadar() {
         }).join('') : '<div class="c-muted">Semua pemain bergaji besar sudah dipakai kuota potong gajinya.</div>'}
       </div>
     </div>
+    ${btHtml}
   </details>`;
 }
 

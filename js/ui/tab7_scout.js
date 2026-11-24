@@ -245,8 +245,9 @@ function enrichScoutRow(r, cm) {
   const remCash = cm.projBudget;
   const netCostIfSwap = swap ? swap.netCost : estBuy;
   const dp25 = isBosman ? 0 : Math.round(estBuy * 0.25);
-  const inst12 = isBosman ? 0 : Math.round((estBuy - dp25) / 12);
-  const inst24 = isBosman ? 0 : Math.round((estBuy - dp25) / 24);
+  const ecoPlanFn = (window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeInstallmentPlan);
+  const inst12 = isBosman ? 0 : (ecoPlanFn ? ecoPlanFn(estBuy, 12).monthly : Math.round((estBuy - dp25) * 1.08 / 12));
+  const inst24 = isBosman ? 0 : (ecoPlanFn ? ecoPlanFn(estBuy, 24).monthly : Math.round((estBuy - dp25) * 1.18 / 24));
   const instCap = Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30));
 
   let affordCode = 'EXP';
@@ -634,6 +635,80 @@ function renderScoutBlueprint() {
         </div>
       </div>`;
     }
+
+    // 3) Swap & Sell Strategy Planner (Jual mentok/asing kalah pot -> Ganti ke Pot >=60 !REFUSE_DIST)
+    const hcSwap = (D.meta && D.meta.country) || '';
+    const gkCount = (D.roster || []).filter(p => p.pos === 'G').length;
+    const fExcess = Math.max(0, (cm.curForeign || 0) - ((D.meta && D.meta.foreignCap) || 7));
+    const sellPlanCands = (D.roster || [])
+      .filter(p => !p.injured && !p.loanedFrom && !cartOut[p.id])
+      .map(p => {
+        const isF = Boolean(hcSwap && p.nationality && p.nationality !== hcSwap);
+        const gap = (p.potCap || p.force) - (p.force || 0);
+        let prio = 0;
+        if (fExcess > 0 && isF && p.potCap < 58) prio += 30 + (58 - p.potCap);
+        if (gap <= 3 && (p.marketValue >= 3000000 || p.age >= (p.sellWarnAge || 27))) prio += 20 + (p.marketValue / 2000000);
+        if (p.age >= (p.sellWarnAge || 28)) prio += 10;
+        if (gap >= 12) prio -= 25;
+        return { p, isF, gap, prio };
+      })
+      .filter(x => x.prio > 12)
+      .sort((a, b) => b.prio - a.prio)
+      .slice(0, 4);
+
+    const highPotReplacements = cleanPool
+      .filter(x => x.r[2] <= 23 && x.r[7] >= 60 && (x.affordCode !== 'EXP' || x.isBosman || fExcess >= 0))
+      .sort((a, b) => (b.r[20] === 1 ? 1 : 0) - (a.r[20] === 1 ? 1 : 0) || (b.r[7] - a.r[7]) || (a.estBuy - b.estBuy));
+
+    const usedRepIds = new Set();
+    const swapPlanRows = [];
+    for (const spItem of sellPlanCands) {
+      const p = spItem.p;
+      const samePos = highPotReplacements.filter(x => !usedRepIds.has(x.r[19]) && x.r[1] === p.pos).slice(0, 2);
+      const reps = samePos.length
+        ? samePos
+        : highPotReplacements.filter(x => !usedRepIds.has(x.r[19])).slice(0, 2);
+      if (!reps.length) continue;
+      usedRepIds.add(reps[0].r[19]);
+      const mv = Number(p.marketValue) || 0;
+      const lockedFree = Boolean(p.freeSigned);
+      const lockedGk = p.pos === 'G' && gkCount <= 1;
+      let sellAdvice = `Auction <b>${fmtM(mv * 0.55)}–${fmtM(mv * 0.70)}</b> · Fixed <b>${fmtM(mv * 0.70)}</b> <span class="c-muted">(Hindari Sell Now 10–15%)</span>`;
+      if (lockedFree) sellAdvice = '<span class="c-amber">⚠ Terkunci freeNoSale (baru rekrut gratis — tunggu masa tunggu)</span>';
+      else if (lockedGk) sellAdvice = '<span class="c-amber">⚠ Terkunci squadMinGk (beli kiper cadangan dulu sebelum jual)</span>';
+      swapPlanRows.push({ spItem, reps, sellAdvice, locked: lockedFree || lockedGk });
+    }
+
+    if (swapPlanRows.length) {
+      extraSmartHtml += `<div style="margin-top:10px;padding:10px 11px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:11px;font-size:11.5px">
+        <div style="font-weight:800;margin-bottom:4px" class="c-sky">🔄 Swap &amp; Sell Strategy Planner (Jual Mentok/Asing → Rekrut Pot ≥60)</div>
+        <div class="c-muted" style="font-size:10.5px;margin-bottom:8px">Jual pemain mentok/kelebihan asing via Auction 55–70% atau Fixed 70% MV, lalu tukar 1-klik ke wonderkid bebas Refuse.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:8px">
+          ${swapPlanRows.map(({ spItem, reps, sellAdvice, locked }) => {
+            const p = spItem.p;
+            const topR = reps[0];
+            return `<div style="padding:8px 10px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
+              <div class="flex-between" style="gap:6px">
+                <div>Jual <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> <span class="mono c-muted">(${fmtPos(p.pos)}·${p.age}th·F${p.force}/${p.potCap})</span>${spItem.isF ? ' <span class="badge b-warn">ASING</span>' : ''}</div>
+                <span class="mono c-amber">MV ${fmtM(p.marketValue)}</span>
+              </div>
+              <div style="font-size:10.5px;margin:3px 0 6px">${sellAdvice}</div>
+              ${reps.map(cr => {
+                const r = cr.r;
+                return `<div class="flex-between" style="gap:5px;padding-top:4px;border-top:1px dashed rgba(255,255,255,.07);margin-top:4px">
+                  <div style="min-width:0">
+                    <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(r[19])}')"><b>${esc(r[0])}</b></a> ${r[20] === 1 ? '⭐' : ''}
+                    <span class="mono c-green">(${fmtPos(r[1])}·${r[2]}th·F${r[5]}→<b>Pot ${r[7]}</b>)</span>
+                    <div class="c-muted mono" style="font-size:10px">${cr.isBosman ? '🆓 Bosman 0€' : fmtM(cr.estBuy)} · ${esc(r[16])}</div>
+                  </div>
+                  <button type="button" class="btn btn-sm ${locked ? '' : 'btn-green'}" onclick="swapToCart('${escJs(r[19])}','${escJs(p.id)}',${cr.isBosman ? 'true' : 'false'})">${topR === cr ? '⇄ Swap' : '+Pilih'}</button>
+                </div>`;
+              }).join('')}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
   }
 
   if (!picks.length && !moneyballHtml && !extraSmartHtml) {
@@ -800,11 +875,20 @@ function loadMoreScout() {
   renderScout();
 }
 
+function toggleScoutReachQuick() {
+  const el = document.getElementById('s-only-reach');
+  if (el) el.checked = !el.checked;
+  resetScoutLimitAndRender();
+}
+
 function renderScoutPresetChips() {
   const el = document.getElementById('t4-preset-chips');
   if (!el) return;
+  const reachOn = Boolean((document.getElementById('s-only-reach') || { checked: true }).checked);
   const defs = [
     ['ALL', 'Semua'],
+    ['STAR', '⭐ Emas (Star)'],
+    ['POT60', '🚀 Muda Pot ≥60'],
     ['MONEYBALL', '💎 +Win%'],
     ['HOLES', '🎯 Lubang'],
     ['BOSMAN', '🆓 Bosman ≤180d'],
@@ -815,9 +899,11 @@ function renderScoutPresetChips() {
     ['LOCAL', '🇮🇩 Lokal'],
     ['SHORTLIST', '⭐ Shortlist'],
   ];
-  el.innerHTML = defs.map(([k, lbl]) =>
+  const chipsHtml = defs.map(([k, lbl]) =>
     `<button type="button" class="qchip ${scoutPreset === k ? 'active' : ''}" onclick="applyScoutPreset('${k}')">${lbl}</button>`
   ).join('');
+  const reachChip = `<button type="button" class="qchip ${reachOn ? 'active' : ''}" onclick="toggleScoutReachQuick()" title="Sembunyikan pemain yang menolak pindah (REFUSE_DIST/REFUSE_LVL)">${reachOn ? '✓ Mau Gabung' : '🌐 +Refuse'}</button>`;
+  el.innerHTML = chipsHtml + reachChip;
 }
 
 function updateScoutFilterSummary() {
@@ -855,12 +941,13 @@ function applyScoutPreset(preset) {
   setVal('s-pos', '');
   scoutPosSet.clear();
   setVal('s-foot', '');
-  setVal('s-max-age', preset === 'FLIP' ? '21' : '');
+  setVal('s-max-age', preset === 'FLIP' ? '21' : (preset === 'POT60' ? '23' : ''));
   setVal('s-min-f', '');
   setVal('s-max-price', '');
   setChk('s-only-stack', preset === 'FLIP');
   setChk('s-hide-trap', true);
-  setVal('s-sort', preset === 'MONEYBALL' ? 'WINPCT' : (preset === 'FLIP' ? 'ROI' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART')));
+  if (preset === 'STAR' || preset === 'POT60') setChk('s-only-reach', true);
+  setVal('s-sort', preset === 'MONEYBALL' ? 'WINPCT' : (preset === 'FLIP' ? 'ROI' : (preset === 'POT60' ? 'POT' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART'))));
   syncScoutDesktopToMob();
   renderScout();
   showToast('Preset Scout: ' + preset);
@@ -901,6 +988,8 @@ function getFilteredScout() {
     if (hideTrap && flags.includes('TRAP')) continue;
     if (hideInj && flags.includes('INJ')) continue;
 
+    if (scoutPreset === 'STAR' && r[20] !== 1) continue;
+    if (scoutPreset === 'POT60' && (r[7] < 60 || r[2] > 23)) continue;
     if (scoutPreset === 'HOLES' && !holesSet.has(r[1])) continue;
     if (scoutPreset === 'FLIP' && (r[2] > 21 || r[17] < 30)) continue;
     if (scoutPreset === 'BOSMAN' && !isBosmanTarget(r)) continue;
@@ -1181,12 +1270,15 @@ function renderCart() {
     const extraForeignWarn = (projForeign > D.meta.foreignCap)
       ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual 1 pemain asing lama</span>`
       : `<span class="badge b-good">✓ Komposisi Asing &amp; Kas Sehat</span>`;
-    const dp25Tot = Math.round(cashOut * 0.25);
-    const inst24Tot = Math.round((cashOut - dp25Tot) / 24);
-    const instCapTot = Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30));
+    const ecoPlan = (window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeInstallmentPlan);
+    const p6 = ecoPlan ? ecoPlan(cashOut, 6) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.03 / 6) };
+    const p12 = ecoPlan ? ecoPlan(cashOut, 12) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.08 / 12) };
+    const p24 = ecoPlan ? ecoPlan(cashOut, 24) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.18 / 24) };
+    const existingDebtMo = (D.cashflow && Number(D.cashflow.transferDebtParcel)) || 0;
+    const instCapTot = Math.max(0, Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30)) - existingDebtMo);
     const estSurplus = (D.cashflow && typeof D.cashflow.estProjectedNet === 'number') ? D.cashflow.estProjectedNet : null;
     const instHtml = cashOut > 0
-      ? `<span class="badge ${inst24Tot <= instCapTot ? 'b-info' : 'b-warn'} mono" title="Simulasi TRANSFER_INSTALLMENTS (DP 25% + 24 bln)">💳 Cicil DP 25%: ${fmtM(dp25Tot)} + ${fmtM(inst24Tot)}/bln${estSurplus !== null ? ` (Sisa Net/bln: ${fmtM(estSurplus - inst24Tot - salDelta)})` : ''}</span>`
+      ? `<span class="badge ${p24.monthly <= instCapTot ? 'b-info' : 'b-warn'} mono" title="Simulasi OTA TRANSFER_INSTALLMENTS (DP 25% + bunga 6b +3% / 12b +8% / 24b +18%)">💳 Cicil DP 25% (${fmtM(p24.dp)}): 6b ${fmtM(p6.monthly)} · 12b ${fmtM(p12.monthly)} · 24b ${fmtM(p24.monthly)}/bln${estSurplus !== null ? ` (Sisa Net/bln: ${fmtM(estSurplus - p24.monthly - salDelta)})` : ''}</span>`
       : '';
 
     let matchImpactHtml = '';

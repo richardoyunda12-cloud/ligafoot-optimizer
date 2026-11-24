@@ -43,7 +43,8 @@ function renderTab5() {
         <div class="t3-mini-card"><div class="kpi-lbl">Siap Promosi</div><div class="kpi-val mono c-green">${promoCnt}</div><div class="kpi-sub">Dev ≥90 atau 20th+</div></div>
         <div class="t3-mini-card"><div class="kpi-lbl">Tambal Lubang</div><div class="kpi-val mono c-purple">${holeCnt}</div><div class="kpi-sub">Cocok lubang senior</div></div>
         <div class="t3-mini-card"><div class="kpi-lbl">Usia 20+ (Puncak)</div><div class="kpi-val mono ${age20Cnt ? 'c-amber' : 'c-muted'}">${age20Cnt}</div><div class="kpi-sub">Rate 0.35 @20, stop @21+</div></div>
-      </div>`;
+      </div>
+      <div class="c-muted" style="font-size:11px;margin-top:6px">💡 <b>Alur Akademi → Tim B:</b> Matangkan di Akademi sampai Dev ≥90% (maks usia 20, stop tumbuh @21+) → Promosi → Jika Force masih jauh di bawah XI atau berlebih kuota asing, kirim gratis ke <b>Tim B</b>.</div>`;
   }
 
   document.getElementById('t5-holes').innerHTML = (D.holes && D.holes.length)

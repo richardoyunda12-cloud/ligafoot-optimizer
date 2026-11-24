@@ -968,14 +968,184 @@
         }
       }
       natMatches.sort((a, b) => a.day - b.day);
+
+      // Mini War Room Timnas: 1-pass pool index dari userRoster + scoutPool (terisolasi penuh dari War Room Klub)
+      const natMap = new Map();
+      for (const p of parsedLineup) {
+        if (p && p.id) natMap.set(p.id, p);
+      }
+      const needIsos = new Set([natIso, ...natMatches.slice(0, 3).map(m => m.oppIso)]);
+      const byIsoMap = new Map();
+      const pushIsoPlayer = (isoKey, pObj) => {
+        if (!isoKey || !needIsos.has(isoKey)) return;
+        let mIso = byIsoMap.get(isoKey);
+        if (!mIso) { mIso = new Map(); byIsoMap.set(isoKey, mIso); }
+        if (!mIso.has(pObj.id)) mIso.set(pObj.id, pObj);
+      };
+      for (const p of parsedLineup) pushIsoPlayer(natIso, p);
+      for (const p of userRoster) {
+        const pi = String(p.nationality || '').toUpperCase();
+        if (needIsos.has(pi)) pushIsoPlayer(pi, p);
+      }
+      for (const r of scoutPool) {
+        const pi = String(r[4] || '').toUpperCase();
+        if (!needIsos.has(pi)) continue;
+        const pos = r[1] || 'MC';
+        pushIsoPlayer(pi, {
+          id: r[19],
+          name: r[0],
+          pos,
+          age: r[2] || 22,
+          foot: r[3] || 'D',
+          nationality: pi,
+          force: r[5] || 20,
+          effForce: r[5] || 20,
+          s1: r[8] || '',
+          s2: r[9] || '',
+          stackPct: r[10] || 0,
+          nonStack: Boolean(r[11]),
+          energy: 100,
+          injured: false,
+        });
+      }
+      const natBestPool = Array.from((byIsoMap.get(natIso) || new Map()).values());
+      const natForms = ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2', '4-1-2-1-2']
+        .filter(f => (f in C.FORMATIONS) && !(C.FORMATION_BUGS && (f in C.FORMATION_BUGS)));
+      let uNatBestXi = null;
+      if (natBestPool.length >= 11) {
+        for (const fk of natForms) {
+          const rXi = T.solveBestXi(natBestPool, fk, 99, '');
+          if (!uNatBestXi || rXi.avgScore > uNatBestXi.avgScore) uNatBestXi = { ...rXi, formation: fk };
+        }
+      }
+      const oppForms = ['4-3-3', '4-2-3-1', '4-4-2', '3-5-2'].filter(f => f in C.FORMATIONS);
+      const matchPreviews = [];
+      for (const m of natMatches.slice(0, 3)) {
+        const oppPool = Array.from((byIsoMap.get(m.oppIso) || new Map()).values());
+        if (!uNatBestXi || oppPool.length < 11) {
+          matchPreviews.push(null);
+          continue;
+        }
+        let oppXi = null;
+        for (const fk of oppForms) {
+          const rXi = T.solveBestXi(oppPool, fk, 99, '');
+          if (!oppXi || rXi.avgScore > oppXi.avgScore) oppXi = { ...rXi, formation: fk };
+        }
+        const oPow = T.computeEngineSectorPower(oppXi, oppXi.formation, { isHome: !m.isHome, style: 'Balanced' });
+        let bestCombo = null;
+        for (const stTry of ['Balanced', 'Offensive', 'Counter', 'Defensive']) {
+          const uPow = T.computeEngineSectorPower(uNatBestXi, uNatBestXi.formation, { isHome: m.isHome, style: stTry });
+          for (const fcTry of ['Center', 'Wings']) {
+            const sim = T.simulateMatchExpectation(uPow, oPow, { isHome: m.isHome, style: stTry, focus: fcTry, oppStyle: 'Balanced', oppFocus: 'Center' });
+            if (!bestCombo || sim.xPts > bestCombo.sim.xPts) {
+              bestCombo = { stTry, fcTry, uPow, sim };
+            }
+          }
+        }
+        const oppStars = oppPool.slice().sort((a, b) => (b.force || 0) - (a.force || 0)).slice(0, 3)
+          .map(p => ({ name: p.name, pos: p.pos, force: p.force }));
+        matchPreviews.push({
+          ...m,
+          uAvg: uNatBestXi.avgScore,
+          oAvg: oppXi.avgScore,
+          uForm: uNatBestXi.formation,
+          oForm: oppXi.formation,
+          uPow: bestCombo.uPow,
+          oPow,
+          winPct: bestCombo.sim.winPct,
+          drawPct: bestCombo.sim.drawPct,
+          lossPct: bestCombo.sim.lossPct,
+          recStyle: bestCombo.stTry,
+          recFocus: bestCombo.fcTry,
+          oppStars,
+        });
+      }
+
       nationInfo = {
         iso: natIso,
         squadCount: rawLineup.length,
         tactics: save.nationalTeamTactics || {},
         lineup: parsedLineup,
         upcomingMatches: natMatches.slice(0, 6),
+        matchPreviews: matchPreviews.filter(Boolean),
       };
     }
+
+    // Audit Match Orders (OTA 01a20a9f)
+    const rawOrders = Array.isArray(save.matchOrders)
+      ? save.matchOrders
+      : (save.matchOrders && Array.isArray(save.matchOrders[userId])
+          ? save.matchOrders[userId]
+          : (Array.isArray(uTeam.matchOrders) ? uTeam.matchOrders : []));
+    const rosterById = new Map(userRoster.map(p => [p.id, p]));
+    const bestXiIds = new Set((bestXi.xi || []).map(a => a.player.id));
+    let activeOrderCnt = 0;
+    let hasTiredSubOrder = false;
+    const orderIssues = [];
+    for (const ord of rawOrders) {
+      if (!ord || typeof ord !== 'object' || ord.on === false) continue;
+      activeOrderCnt++;
+      const oName = String(ord.name || 'Order #' + activeOrderCnt);
+      const when = ord.when || {};
+      const does = Array.isArray(ord.does) ? ord.does : [];
+      if ((when.redUs || when.redThem) && does.some(a => a && a.kind === 'formation')) {
+        orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Ubah Formasi Diblokir Kartu Merah`, detail: 'Aksi ganti formasi otomatis gagal (formationBlocked) saat kondisi redUs/redThem aktif. Hapus aksi formasi pada order ini.' });
+      }
+      for (const act of does) {
+        if (!act || act.kind !== 'sub') continue;
+        if (act.out && act.out.mode === 'tired') hasTiredSubOrder = true;
+        if (act.out && act.out.mode === 'player' && act.out.id) {
+          const po = rosterById.get(act.out.id);
+          if (!po) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Keluar Hilang`, detail: 'Pemain target substitusi keluar sudah tidak ada di skuad — ubah ke mode "The most tired".' });
+          else if (po.injured || po.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${po.name} Cedera/Skorsing`, detail: 'Pemain tidak akan berada di lapangan; pertimbangkan pakai mode "The most tired".' });
+          else if (!bestXiIds.has(po.id)) orderIssues.push({ severity: 'INFO', title: `Order "${oName}": ${po.name} Tidak di Best XI`, detail: 'Sub hanya berjalan jika pemain ini menjadi starter.' });
+        }
+        if (act.in && act.in.mode === 'player' && act.in.id) {
+          const pi = rosterById.get(act.in.id);
+          if (!pi) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Masuk Hilang`, detail: 'Pemain pengganti sudah tidak ada di skuad — ubah ke mode "Best sub / Same slot".' });
+          else if (pi.injured || pi.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Cedera/Skorsing`, detail: 'Pemain pengganti tidak tersedia untuk masuk.' });
+          else if (bestXiIds.has(pi.id)) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Sudah Starter`, detail: 'Starter tidak bisa masuk dari bangku cadangan — ubah ke "Same slot".' });
+        }
+      }
+    }
+    const matchOrdersAudit = {
+      count: rawOrders.length,
+      activeCount: activeOrderCnt,
+      hasTiredSub: hasTiredSubOrder,
+      issues: orderIssues,
+    };
+
+    // Info & Routing Tim B (eqb / checkCreateB #24615)
+    const hasBTeam = Boolean(uTeam.bTeamId || save.bTeamId || (compactTeams && compactTeams[userId + '_b']));
+    const bTeamCost = Math.min(2000000, Math.max(100000, Math.round(U.safeNum(userTeamLevel, 3) * 600000)));
+    const excessForeign = Math.max(0, foreignCountSquad - foreignCap);
+    const bTeamCandidates = userRoster
+      .filter(p => !p.loanedFrom && !p.injured && p.age <= 22 && (p.potCap - p.force) >= 10 && (!bestXiIds.has(p.id) || p.force <= (bestXi.avgScore - 8)))
+      .map(p => {
+        const isF = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
+        return {
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          age: p.age,
+          nationality: p.nationality,
+          isForeign: isF,
+          force: p.force,
+          potCap: p.potCap,
+          gap: p.potCap - p.force,
+          star: Boolean(p.star),
+        };
+      })
+      .sort((a, b) => (excessForeign > 0 ? ((b.isForeign ? 1 : 0) - (a.isForeign ? 1 : 0)) : 0) || (b.gap - a.gap) || (a.force - b.force))
+      .slice(0, 6);
+    const bTeamInfo = {
+      hasBTeam,
+      creationCost: bTeamCost,
+      curForeign: foreignCountSquad,
+      foreignCap,
+      excessForeign,
+      candidates: bTeamCandidates,
+    };
 
     const standingsRows = [];
     const rawStandings = Array.isArray(save.standings) ? save.standings.slice(0, 24) : [];
@@ -1176,6 +1346,8 @@
       standings: standingsRows,
       scoutPool,
       nation: nationInfo,
+      matchOrdersAudit,
+      bTeamInfo,
     };
 
     prog(100, `Selesai! (${parseSec}s)`);

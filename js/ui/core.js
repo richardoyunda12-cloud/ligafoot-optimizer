@@ -584,6 +584,13 @@ function openPlayerDrawer(kind, id) {
         ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan (#24160)</span><b class="mono c-sky">Cadangan -12% floor → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)} ${p.injured ? `<b class="c-red">(Diskon cedera ${Math.round((p.injurySaleMul || 1) * 100)}%)</b>` : ''}</span></div>
         <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +39%: ${fmtM(p.estCounter39)} · +40%: ${fmtM(p.estCounter40)}</span></b></div>
+        ${(() => {
+          const gkCnt = (D.roster || []).filter(x => x.pos === 'G').length;
+          let stTxt = `Auction <b>${fmtM(p.marketValue * 0.55)}–${fmtM(p.marketValue * 0.70)}</b> · Fixed <b>${fmtM(p.marketValue * 0.70)}</b> <span class="c-muted">(Hindari Sell Now 10–15%)</span>`;
+          if (p.freeSigned) stTxt = '<b class="c-amber">⚠ Terkunci freeNoSale (rekrut gratis)</b>';
+          else if (p.pos === 'G' && gkCnt <= 1) stTxt = '<b class="c-amber">⚠ Terkunci squadMinGk (kiper tunggal)</b>';
+          return `<div class="drawer-kv"><span>🏷️ Strategi Jual (OTA)</span><span class="mono">${stTxt}</span></div>`;
+        })()}
         <div class="drawer-kv"><span>Biaya Putus Kontrak (${Math.round((p.termFeeRate || 0.5) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
         ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (2.5x–3.0x × 1.39x)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
       </div>
@@ -667,7 +674,14 @@ function openPlayerDrawer(kind, id) {
         <h3>💸 Estimasi Harga &amp; Flip ROI</h3>
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(r[13])}</span></div>
         <div class="drawer-kv"><span>Estimasi Beli Riil</span><b class="mono c-amber">${fmtM(r[14])}</b></div>
-        ${r[14] > 0 && r[15] > 180 ? `<div class="drawer-kv"><span>Opsi Cicilan DP 25% (OTA)</span><span class="mono c-sky">DP <b>${fmtM(Math.round(r[14] * 0.25))}</b> · ${fmtM(Math.round(r[14] * 0.75 / 24))}/bln (24b)</span></div>` : ''}
+        ${(() => {
+          if (!(r[14] > 0 && r[15] > 180)) return '';
+          const ecoFn = window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeInstallmentPlan;
+          const p6 = ecoFn ? ecoFn(r[14], 6) : { dp: Math.round(r[14] * 0.25), monthly: Math.ceil(r[14] * 0.75 * 1.03 / 6) };
+          const p12 = ecoFn ? ecoFn(r[14], 12) : { dp: Math.round(r[14] * 0.25), monthly: Math.ceil(r[14] * 0.75 * 1.08 / 12) };
+          const p24 = ecoFn ? ecoFn(r[14], 24) : { dp: Math.round(r[14] * 0.25), monthly: Math.ceil(r[14] * 0.75 * 1.18 / 24) };
+          return `<div class="drawer-kv"><span>Opsi Cicilan DP 25% (${fmtM(p24.dp)})</span><span class="mono c-sky">6b(+3%): <b>${fmtM(p6.monthly)}</b> · 12b(+8%): <b>${fmtM(p12.monthly)}</b> · 24b(+18%): <b>${fmtM(p24.monthly)}</b>/bln</span></div>`;
+        })()}
         <div class="drawer-kv"><span>Gaji Kontrak 3 Tahun (-5%)</span><b class="mono">${fmtM(Math.round(r[12] * 0.95))}/bln</b></div>
         ${it ? `
         <div class="drawer-kv"><span>Proyeksi Jual (1–2 Musim)</span><b class="mono c-green">${fmtM(it.estResale)} (+${it.projGain}F)</b></div>

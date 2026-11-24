@@ -627,7 +627,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
     </div>`;
 }
 
-function renderWarLiveShouts() {
+function renderWarLiveShouts(activeFx = null) {
   const lc = D.liveCoach || { shouts: [], orders: [] };
   const shEl = document.getElementById('t2-shouts');
   const pref = `${warSimMode ? 'sim_' + warSimOppId : 'fx_' + activeMatchIdx}_`;
@@ -648,9 +648,66 @@ function renderWarLiveShouts() {
   }
   const orEl = document.getElementById('t2-orders');
   if (orEl) {
-    orEl.innerHTML = (lc.orders || []).map(o => `
+    const mo = D.matchOrdersAudit || { count: 0, activeCount: 0, hasTiredSub: false, issues: [] };
+    const subMin = warWeather === 'heat' ? 56 : 62;
+    const recFocus = (activeFx && activeFx.matchup && activeFx.matchup.attackFocus) || 'Center';
+    const presets = [
+      {
+        name: '1. Segarkan Skuad',
+        when: `Min ${subMin} · Babak 2 · Any score`,
+        does: 'Sub: The most tired (Any ≠ GK) → Best sub (Same slot)',
+        why: 'Jaga effectiveForce tetap segar di babak kedua tanpa rawan gagal.',
+      },
+      {
+        name: '2. Kunci Skor',
+        when: 'Min 70 · Babak 2 · Winning (1+)',
+        does: 'Style: Defensive (+8% DEF) · Marking: Light · Sub tired → Same slot',
+        why: 'Amankan keunggulan sambil menekan risiko kartu merah menit akhir.',
+      },
+      {
+        name: '3. Kejar Gol',
+        when: 'Min 65 · Babak 2 · Losing (1+)',
+        does: `Style: Offensive (+8% ATK) · Focus: ${recFocus} · Sub tired → Forwards/Mid`,
+        why: 'Dorong gol balasan dengan fokus terkuat skuad vs lawan ini.',
+      },
+      {
+        name: '4. Darurat Kartu Merah Kita',
+        when: 'Min 1 · Any · I have a player sent off',
+        does: 'Style: Counter-attack (+7% konversi) · Marking: Light',
+        why: '⚠ Jangan isi ganti Formasi (otomatis diblokir aturan formationBlocked).',
+      },
+      {
+        name: '5. Hajar Lawan 10 Pemain',
+        when: 'Min 1 · Any · Opponent sent off',
+        does: 'Style: Offensive (+8% ATK)',
+        why: 'Manfaatkan keunggulan jumlah pemain sejak kartu merah keluar.',
+      },
+    ];
+    const auditStrip = `
+      <div class="alert-item ${mo.issues.length ? 'WARN' : ''}" style="margin-bottom:6px">
+        <span class="badge ${mo.issues.length ? 'b-warn' : (mo.activeCount > 0 ? 'b-good' : 'b-info')}">
+          ${mo.activeCount > 0 ? `OTA ORDERS: ${mo.activeCount} AKTIF` : 'BELUM ADA ORDER DI SAVE'}
+        </span>
+        <div>
+          ${mo.issues.length
+            ? mo.issues.map(iss => `<div><b>${esc(iss.title)}</b> — <span class="c-muted">${esc(iss.detail)}</span></div>`).join('')
+            : (mo.activeCount > 0
+                ? 'Semua Match Orders di save bersih & siap jalan 1x/laga!'
+                : 'Game baru merilis fitur <b>Match Orders</b> (OTA 01a20a9f). Pasang 5 preset di bawah agar taktik & pergantian berjalan otomatis saat main/Quick Play.')}
+        </div>
+      </div>`;
+    const presetsHtml = `
+      <div style="margin-bottom:8px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:9px;font-size:11px">
+        <div style="font-weight:800;margin-bottom:5px" class="c-sky">🤖 5 Preset Match Orders Siap Pasang di Game (Disimpan per Klub)</div>
+        ${presets.map(pr => `<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+          <div><b>${esc(pr.name)}</b> <span class="badge b-info">${esc(pr.when)}</span></div>
+          <div class="c-green mono" style="font-size:10.5px;margin-top:2px">→ ${esc(pr.does)}</div>
+          <div class="c-muted" style="font-size:10.5px">${esc(pr.why)}</div>
+        </div>`).join('')}
+      </div>`;
+    orEl.innerHTML = auditStrip + presetsHtml + (lc.orders || []).map(o => `
       <div class="alert-item">
-        <span class="badge b-info">ORDER</span>
+        <span class="badge b-info">LIVE RULE</span>
         <div><b>${esc(o.cond)}</b> → <span class="c-green">${esc(o.order)}</span><div class="c-muted" style="font-size:11px">${esc(o.note)}</div></div>
       </div>`).join('');
   }
@@ -758,5 +815,5 @@ function renderTab2() {
         <div>• ${esc(htPlan.win)}<br/>• ${esc(htPlan.draw)}<br/>• ${esc(htPlan.lose)}</div>
       </div>`;
   }
-  renderWarLiveShouts();
+  renderWarLiveShouts(activeFx);
 }

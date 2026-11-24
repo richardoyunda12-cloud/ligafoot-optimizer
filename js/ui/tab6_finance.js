@@ -41,6 +41,8 @@ function renderTab6() {
     const wageCls = wageRatio <= 65 ? 'b-good' : (wageRatio <= 85 ? 'b-warn' : 'b-crit');
     const wageLbl = wageRatio <= 65 ? 'Sehat' : (wageRatio <= 85 ? 'Wajar' : 'Ketat');
     const loan = Number(D.meta.bankLoan) || 0;
+    const tdParcel = Number(b.transferDebtParcel) || 0;
+    const tdTotal = Number(cf.transferDebtTotal) || 0;
     const runwayTxt = net >= 0
       ? '<span class="c-green"><b>Surplus ✓</b></span>'
       : `<span class="c-amber"><b>~${Math.max(0, Math.floor((D.meta.budget || 0) / Math.max(1, Math.abs(net))))} bln</b></span>`;
@@ -48,7 +50,8 @@ function renderTab6() {
     cfEl.innerHTML = `
       <div class="cf-health-strip mono">
         <span>Gaji/Income: <span class="badge ${wageCls}">${wageRatio}% (${wageLbl})</span></span>
-        <span>Hutang: <b class="${loan > 0 ? 'c-red' : 'c-green'}">${fmtM(loan)}</b></span>
+        <span>Hutang Bank: <b class="${loan > 0 ? 'c-red' : 'c-green'}">${fmtM(loan)}</b></span>
+        ${tdTotal > 0 ? `<span>Cicilan Transfer: <b class="c-amber">${fmtM(tdTotal)}</b> (${fmtM(tdParcel)}/bln)</span>` : ''}
         <span>Runway: ${runwayTxt}</span>
       </div>
       <div class="flex-between mono" style="font-size:11px">
@@ -79,6 +82,7 @@ function renderTab6() {
           <div class="mono">• Maint. CT (#21495): <b>${fmtM(b.ctCost || 0)}</b></div>
           <div class="mono">• Pelatih Akademi: <b>${fmtM(b.youthCost || 0)}</b></div>
           ${b.bankLoanParcel ? `<div class="mono">• Cicilan Bank: <b>${fmtM(b.bankLoanParcel)}</b></div>` : ''}
+          ${b.transferDebtParcel ? `<div class="mono c-amber">• Cicilan Transfer (#21511): <b>${fmtM(b.transferDebtParcel)}</b></div>` : ''}
           <div class="c-muted" style="font-size:10.5px;margin-top:6px;padding-top:5px;border-top:1px solid var(--border)">
             Sponsor Jersey <i>Upfront (Luvas)</i> sudah cair di awal musim &amp; tidak dihitung ganda.
           </div>
@@ -88,8 +92,9 @@ function renderTab6() {
         const pay = (D.meta && D.meta.payroll) || 0;
         const bud = (D.meta && D.meta.budget) || 0;
         const plafonGame = Math.max(500000, Math.round(pay * 0.30));
-        const safeMo = Math.max(0, Math.min(plafonGame, Math.round(net * 0.70)));
-        const maxBuy24 = Math.round((safeMo * 24) / 0.75);
+        const remPlafon = Math.max(0, plafonGame - tdParcel);
+        const safeMo = Math.max(0, Math.min(remPlafon, Math.round(net * 0.70)));
+        const maxBuy24 = Math.round((safeMo * 24) / (0.75 * 1.18));
         const dp25Cap = Math.round(maxBuy24 * 0.25);
         const ctLv = (D.meta && D.meta.ctLevel) || 1;
         const ctNext = D.ctUpgrade || null;
@@ -105,9 +110,9 @@ function renderTab6() {
             <span class="badge ${safeMo > 0 ? 'b-info' : 'b-warn'} mono">Plafon Aman: ${fmtM(safeMo)}/bln</span>
           </div>
           <div class="mono c-muted" style="font-size:11px">
-            Batas cicilan game: <b>${fmtM(plafonGame)}/bln</b> · Daya beli cicilan 24 bln: <b class="c-green">${fmtM(maxBuy24)}</b> (DP 25%: <b>${fmtM(dp25Cap)}</b> vs Kas <b>${fmtM(bud)}</b>)
+            Batas cicilan game: <b>${fmtM(remPlafon)}/bln</b>${tdParcel > 0 ? ` (terpakai ${fmtM(tdParcel)}/bln)` : ''} · Daya beli cicilan 24 bln: <b class="c-green">${fmtM(maxBuy24)}</b> (DP 25%: <b>${fmtM(dp25Cap)}</b> vs Kas <b>${fmtM(bud)}</b>)
           </div>
-          <div class="c-muted" style="font-size:10.5px;margin-top:3px">${esc(invTip)}</div>
+          <div class="c-muted" style="font-size:10.5px;margin-top:3px">Bunga OTA: 6b +3% · 12b +8% · 24b +18%. ${esc(invTip)}</div>
         </div>`;
       })()}`;
   }
