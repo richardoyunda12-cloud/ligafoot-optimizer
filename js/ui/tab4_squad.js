@@ -165,7 +165,7 @@ function renderRosterActionRadar() {
       <div class="flex-between" style="gap:6px;flex-wrap:wrap;margin-bottom:4px">
         <b class="c-purple">🅱️ Routing Tim B: Jam Terbang Muda &amp; Legakan Kuota Asing</b>
         <span class="badge ${bt.excessForeign > 0 ? 'b-warn' : 'b-info'} mono">
-          ${bt.hasBTeam ? 'Tim B Aktif ✓' : `Buat Tim B: ${fmtM(bt.creationCost)}`} · Asing ${bt.curForeign}/${bt.foreignCap}
+          ${bt.hasBTeam ? `${esc(bt.bTeamName || 'Tim B')} Aktif ✓${bt.bTeamSquadCount ? ` (${bt.bTeamSquadCount} pemain)` : ''}` : `Buat Tim B: ${fmtM(bt.creationCost)}`} · Asing ${bt.curForeign}/${bt.foreignCap}
         </span>
       </div>
       <div class="c-muted" style="font-size:10.5px;margin-bottom:4px">

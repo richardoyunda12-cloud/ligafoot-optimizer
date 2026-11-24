@@ -268,6 +268,9 @@
   const EXPENSE_CATEGORIES = new Set([
     'salaries', 'purchases', 'stadium', 'ct', 'termination', 'loans', 'loanInterest', 'interest', 'youthCoach', 'misc',
   ]);
+  const CAPEX_CATEGORIES = new Set([
+    'purchases', 'termination', 'sales', 'misc',
+  ]);
 
   const STMT_CAT_LABELS = {
     tickets: 'Tiket Kandang',
@@ -299,7 +302,7 @@
       const isExpense = EXPENSE_CATEGORIES.has(cat);
       const signedAmt = isExpense ? -rawAmt : rawAmt;
       const dayStr = date.slice(8, 10);
-      const isCapEx = (cat === 'purchases' || cat === 'termination' || cat === 'sales')
+      const isCapEx = CAPEX_CATEGORIES.has(cat)
         || ((cat === 'stadium' || cat === 'ct') && dayStr !== '02' && rawAmt > 200000);
       const baseLabel = STMT_CAT_LABELS[cat] || cat;
       const extraMeta = row[3] && typeof row[3] === 'string' ? ` (${row[3]})` : '';
@@ -321,7 +324,7 @@
       const rawAmt = Math.abs(amt);
       const signedAmt = isExpense && amt > 0 ? -rawAmt : amt;
       const dayStr = date.slice(8, 10);
-      const isCapEx = (cat === 'purchases' || cat === 'termination' || cat === 'sales')
+      const isCapEx = CAPEX_CATEGORIES.has(cat)
         || ((cat === 'stadium' || cat === 'ct') && dayStr !== '02' && rawAmt > 200000);
       return {
         date,
@@ -394,7 +397,7 @@
     return def;
   }
 
-  function formatMatchDay(rawVal, seasonStartDate = null, currentDate = null) {
+  function formatMatchDay(rawVal, seasonStartDate = null, currentDate = null, matchYear = null) {
     if (rawVal === null || rawVal === undefined || rawVal === '') return '-';
     if (typeof rawVal === 'string') {
       const s = rawVal.trim();
@@ -404,6 +407,14 @@
     }
     if (typeof rawVal === 'number') {
       const dayInt = Math.trunc(rawVal);
+      if (matchYear !== null && matchYear !== undefined && matchYear !== '') {
+        const yr = Number(matchYear);
+        if (Number.isFinite(yr) && yr >= 1990 && yr <= 2200) {
+          const ms = Date.UTC(Math.trunc(yr), 0, 1);
+          const dt = new Date(ms + dayInt * 86400000);
+          return dt.toISOString().slice(0, 10);
+        }
+      }
       if (seasonStartDate) {
         const ms = parseIsoDateUtc(seasonStartDate);
         if (ms !== null) {
@@ -469,8 +480,20 @@
 
     let out = raw;
     const ptIdMap = [
+      ['Super League da Indonésia', 'Super League Indonesia'],
+      ['Liga dos Campeões da AFC Elite', 'AFC Champions League Elite'],
+      ['Liga dos Campeões da AFC 2', 'AFC Champions League Two'],
+      ['Liga dos Campeões da UEFA', 'UEFA Champions League'],
+      ['Liga Europa da UEFA', 'UEFA Europa League'],
+      ['Liga Conferência', 'UEFA Conference League'],
+      ['Liga das Nações', 'UEFA Nations League'],
+      ['Eliminatórias da Eurocopa', 'Kualifikasi Euro'],
+      ['Eliminatórias da Copa', 'Kualifikasi Piala Dunia'],
+      ['Copa do Mundo', 'Piala Dunia'],
+      ['Eurocopa', 'Piala Eropa (Euro)'],
       ['Campeonato', 'Liga'],
       ['Copa Nacional', 'Piala Nasional'],
+      ['Copa (', 'Piala ('],
       ['Copa ', 'Piala '],
       ['Supercopa', 'Piala Super'],
       ['Taça', 'Piala'],
@@ -480,6 +503,8 @@
       ['Série C', 'Serie C'],
       ['Série D', 'Serie D'],
       ['Amistoso', 'Laga Persahabatan'],
+      [' da Indonésia', ' Indonesia'],
+      ['Indonésia', 'Indonesia'],
     ];
     for (const [pt, idn] of ptIdMap) {
       if (out.includes(pt)) out = out.split(pt).join(idn);
@@ -489,20 +514,27 @@
 
   function translateRoundName(rStr) {
     if (!rStr) return '';
-    const s = String(rStr).trim();
+    let s = String(rStr).trim();
+    s = s.replace(/\(ida\)/gi, '(Leg 1)').replace(/\(volta\)/gi, '(Leg 2)');
     const low = s.toLowerCase();
     const exactMap = {
       'oitavas': '16 Besar (R16)',
       'oitavas de final': '16 Besar (R16)',
+      'oitavas de final (leg 1)': '16 Besar (Leg 1)',
+      'oitavas de final (leg 2)': '16 Besar (Leg 2)',
       'round of 16': '16 Besar (R16)',
       'r16': '16 Besar (R16)',
       'quartas': 'Perempat Final (QF)',
       'quartas de final': 'Perempat Final (QF)',
+      'quartas de final (leg 1)': 'Perempat Final (Leg 1)',
+      'quartas de final (leg 2)': 'Perempat Final (Leg 2)',
       'quarter-finals': 'Perempat Final (QF)',
       'quarterfinals': 'Perempat Final (QF)',
       'qf': 'Perempat Final (QF)',
       'semi': 'Semifinal (SF)',
       'semifinal': 'Semifinal (SF)',
+      'semifinal (leg 1)': 'Semifinal (Leg 1)',
+      'semifinal (leg 2)': 'Semifinal (Leg 2)',
       'semi-final': 'Semifinal (SF)',
       'semifinais': 'Semifinal (SF)',
       'sf': 'Semifinal (SF)',
@@ -514,6 +546,8 @@
       'terceiro lugar': 'Perebutan Juara 3',
     };
     if (exactMap[low]) return exactMap[low];
+    const ordMatch = /^(\d+)[ªº]?\s*(?:rodada|round|jornada|ronde)(.*)$/i.exec(s);
+    if (ordMatch) return `Pekan ${ordMatch[1]}${ordMatch[2] || ''}`.trim();
     if (low.startsWith('rodada ')) return 'Pekan ' + s.slice(7);
     if (low.startsWith('round ')) return 'Pekan ' + s.slice(6);
     if (low.startsWith('jornada ')) return 'Pekan ' + s.slice(8);

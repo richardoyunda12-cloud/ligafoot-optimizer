@@ -173,24 +173,68 @@
     return { deltas, updatedHistory: hist };
   }
 
-  function cleanPresGoals(rawPg) {
+  function cleanPresGoals(rawPg, worldComps = null) {
     if (!rawPg || typeof rawPg !== 'object' || Array.isArray(rawPg)) return rawPg || {};
     const pg = JSON.parse(JSON.stringify(rawPg));
+    const comps = (worldComps && typeof worldComps === 'object') ? worldComps : {};
     for (const k of ['league', 'cup', 'cont']) {
       if (pg[k] && typeof pg[k] === 'object') {
         const cid = String(pg[k].comp || '');
-        pg[k].name = U.translateCompName(pg[k].name || cid, cid);
+        const wcName = cid && comps[cid] && comps[cid].name ? comps[cid].name : '';
+        pg[k].name = U.translateCompName(pg[k].name || wcName || cid, cid);
       }
     }
     if (pg.last && typeof pg.last === 'object') {
       for (const k of ['league', 'cup', 'cont']) {
         if (pg.last[k] && typeof pg.last[k] === 'object') {
           const cid = String(pg.last[k].comp || '');
-          pg.last[k].name = U.translateCompName(pg.last[k].name || cid, cid);
+          const wcName = cid && comps[cid] && comps[cid].name ? comps[cid].name : '';
+          pg.last[k].name = U.translateCompName(pg.last[k].name || wcName || cid, cid);
         }
       }
     }
     return pg;
+  }
+
+  function auditMatchOrdersList(rawOrders, rosterById, xiIds) {
+    const orders = Array.isArray(rawOrders) ? rawOrders : [];
+    const rMap = rosterById instanceof Map ? rosterById : new Map();
+    const xSet = xiIds instanceof Set ? xiIds : new Set();
+    let activeOrderCnt = 0;
+    let hasTiredSubOrder = false;
+    const orderIssues = [];
+    for (const ord of orders) {
+      if (!ord || typeof ord !== 'object' || ord.on === false) continue;
+      activeOrderCnt++;
+      const oName = String(ord.name || 'Order #' + activeOrderCnt);
+      const when = ord.when || {};
+      const does = Array.isArray(ord.does) ? ord.does : [];
+      if ((when.redUs || when.redThem) && does.some(a => a && a.kind === 'formation')) {
+        orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Ubah Formasi Diblokir Kartu Merah`, detail: 'Aksi ganti formasi otomatis gagal (formationBlocked) saat kondisi redUs/redThem aktif. Hapus aksi formasi pada order ini.' });
+      }
+      for (const act of does) {
+        if (!act || act.kind !== 'sub') continue;
+        if (act.out && act.out.mode === 'tired') hasTiredSubOrder = true;
+        if (act.out && act.out.mode === 'player' && act.out.id) {
+          const po = rMap.get(act.out.id);
+          if (!po) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Keluar Hilang`, detail: 'Pemain target substitusi keluar sudah tidak ada di skuad — ubah ke mode "The most tired".' });
+          else if (po.injured || po.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${po.name} Cedera/Skorsing`, detail: 'Pemain tidak akan berada di lapangan; pertimbangkan pakai mode "The most tired".' });
+          else if (!xSet.has(po.id)) orderIssues.push({ severity: 'INFO', title: `Order "${oName}": ${po.name} Tidak di Best XI`, detail: 'Sub hanya berjalan jika pemain ini menjadi starter.' });
+        }
+        if (act.in && act.in.mode === 'player' && act.in.id) {
+          const pi = rMap.get(act.in.id);
+          if (!pi) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Masuk Hilang`, detail: 'Pemain pengganti sudah tidak ada di skuad — ubah ke mode "Best sub / Same slot".' });
+          else if (pi.injured || pi.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Cedera/Skorsing`, detail: 'Pemain pengganti tidak tersedia untuk masuk.' });
+          else if (xSet.has(pi.id)) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Sudah Starter`, detail: 'Starter tidak bisa masuk dari bangku cadangan — ubah ke "Same slot".' });
+        }
+      }
+    }
+    return {
+      count: orders.length,
+      activeCount: activeOrderCnt,
+      hasTiredSub: hasTiredSubOrder,
+      issues: orderIssues,
+    };
   }
 
   function buildPriorityAlerts(
@@ -265,7 +309,7 @@
 
     if (unhappyCnt >= C.LOCKER_UNHAPPY_MIN) {
       add('CRITICAL', 'Ruang Ganti', `${unhappyCnt} pemain UNHAPPY — Penalti Tim -${Math.round(lockerHit * 100)}% AKTIF!`,
-        "Atur pemain cadangan (#12 ke bawah) jadi squadRole = 'reserve' (100% kebal unhappy di v1.2.0) atau beri menit main sesuai target kuota.");
+        "Atur pemain cadangan (#12 ke bawah) jadi squadRole = 'reserve' (kebal unhappy di v1.2.0 selama tidak roleSore) atau beri menit main sesuai target kuota.");
     }
 
     const slumped = userRoster.filter(p => (p.fineSlump || 0) > 0);
@@ -428,8 +472,11 @@
     const bankLoan = Array.isArray(uTeam.loans) && uTeam.loans.length
       ? uTeam.loans.reduce((s, ln) => s + U.safeNum(ln && ln.balance, 0), 0)
       : U.safeNum(uTeam.bankLoan, 0);
-    let activeFormation = uTeam.formation || (save.lastLineup && save.lastLineup.formation) || '4-3-3';
-    if (!(activeFormation in C.FORMATIONS)) activeFormation = '4-3-3';
+    const rawActiveFormation = String(uTeam.formation || (save.lastLineup && save.lastLineup.formation) || '4-3-3').trim();
+    const baseActiveFormation = rawActiveFormation.split('~')[0].trim();
+    let activeFormation = (baseActiveFormation in C.FORMATIONS)
+      ? baseActiveFormation
+      : ((rawActiveFormation in C.FORMATIONS) ? rawActiveFormation : '4-3-3');
 
     const foreignLims = U.getForeignLimit(userCountry);
     const foreignCap = C.FOREIGN_FIELD_LIMITS[userCountry] || foreignLims.field || 7;
@@ -693,13 +740,25 @@
       }
     }
 
-    // MatchLog & Home Crowd Log
+    // MatchLog & Home Crowd Log (filter hanya laga klub user, kecualikan nat:*)
     const rawMlog = Array.isArray(save.matchLog) ? save.matchLog : [];
+    const clubMlog = rawMlog.filter((e) => {
+      if (!e || typeof e !== 'object') return false;
+      const cRaw = String(e.comp || e.c || '').toLowerCase();
+      if (cRaw.startsWith('nat:')) return false;
+      if (typeof e.h === 'string' && typeof e.a === 'string') {
+        return e.h === userId || e.a === userId;
+      }
+      if (typeof e.home === 'string' && typeof e.away === 'string') {
+        return e.home === userId || e.away === userId;
+      }
+      return true;
+    });
     const seasonStart = save.seasonStartDate || null;
     const recentMatches = [];
     const homeCrowdLog = [];
 
-    for (const entry of rawMlog.slice(-25)) {
+    for (const entry of clubMlog.slice(-40)) {
       if (!entry || typeof entry !== 'object') continue;
       const attV = U.safeInt(('at' in entry) ? entry.at : entry.attendance, 0);
       const revV = U.safeNum(('rv' in entry) ? entry.rv : entry.revenue, 0);
@@ -789,8 +848,8 @@
       }
 
       const recM = {
-        date: U.formatMatchDay(rawDKey, seasonStart, currentDate),
-        comp: U.translateCompName(compRaw, compRaw),
+        date: U.formatMatchDay(rawDKey, seasonStart, currentDate, entry.y ?? null),
+        comp: U.translateCompName(entry.cn || compRaw, compRaw),
         opp: oppStr || (isHm ? 'Laga Kandang' : 'Laga Tandang'),
         home: isHm,
         gf: gfV,
@@ -1078,6 +1137,12 @@
         });
       }
 
+      const natOrdersRaw = (save.matchOrders && !Array.isArray(save.matchOrders) && Array.isArray(save.matchOrders[natIso]))
+        ? save.matchOrders[natIso]
+        : [];
+      const natXiIds = new Set(uNatBestXi && Array.isArray(uNatBestXi.xi) ? uNatBestXi.xi.map(a => a.player.id) : []);
+      const natOrdersAudit = auditMatchOrdersList(natOrdersRaw, natMap, natXiIds);
+
       nationInfo = {
         iso: natIso,
         squadCount: rawLineup.length,
@@ -1085,6 +1150,7 @@
         lineup: parsedLineup,
         upcomingMatches: natMatches.slice(0, 6),
         matchPreviews: matchPreviews.filter(Boolean),
+        matchOrdersAudit: natOrdersAudit,
       };
     }
 
@@ -1096,44 +1162,25 @@
           : (Array.isArray(uTeam.matchOrders) ? uTeam.matchOrders : []));
     const rosterById = new Map(userRoster.map(p => [p.id, p]));
     const bestXiIds = new Set((bestXi.xi || []).map(a => a.player.id));
-    let activeOrderCnt = 0;
-    let hasTiredSubOrder = false;
-    const orderIssues = [];
-    for (const ord of rawOrders) {
-      if (!ord || typeof ord !== 'object' || ord.on === false) continue;
-      activeOrderCnt++;
-      const oName = String(ord.name || 'Order #' + activeOrderCnt);
-      const when = ord.when || {};
-      const does = Array.isArray(ord.does) ? ord.does : [];
-      if ((when.redUs || when.redThem) && does.some(a => a && a.kind === 'formation')) {
-        orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Ubah Formasi Diblokir Kartu Merah`, detail: 'Aksi ganti formasi otomatis gagal (formationBlocked) saat kondisi redUs/redThem aktif. Hapus aksi formasi pada order ini.' });
-      }
-      for (const act of does) {
-        if (!act || act.kind !== 'sub') continue;
-        if (act.out && act.out.mode === 'tired') hasTiredSubOrder = true;
-        if (act.out && act.out.mode === 'player' && act.out.id) {
-          const po = rosterById.get(act.out.id);
-          if (!po) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Keluar Hilang`, detail: 'Pemain target substitusi keluar sudah tidak ada di skuad — ubah ke mode "The most tired".' });
-          else if (po.injured || po.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${po.name} Cedera/Skorsing`, detail: 'Pemain tidak akan berada di lapangan; pertimbangkan pakai mode "The most tired".' });
-          else if (!bestXiIds.has(po.id)) orderIssues.push({ severity: 'INFO', title: `Order "${oName}": ${po.name} Tidak di Best XI`, detail: 'Sub hanya berjalan jika pemain ini menjadi starter.' });
-        }
-        if (act.in && act.in.mode === 'player' && act.in.id) {
-          const pi = rosterById.get(act.in.id);
-          if (!pi) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Masuk Hilang`, detail: 'Pemain pengganti sudah tidak ada di skuad — ubah ke mode "Best sub / Same slot".' });
-          else if (pi.injured || pi.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Cedera/Skorsing`, detail: 'Pemain pengganti tidak tersedia untuk masuk.' });
-          else if (bestXiIds.has(pi.id)) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Sudah Starter`, detail: 'Starter tidak bisa masuk dari bangku cadangan — ubah ke "Same slot".' });
-        }
-      }
-    }
-    const matchOrdersAudit = {
-      count: rawOrders.length,
-      activeCount: activeOrderCnt,
-      hasTiredSub: hasTiredSubOrder,
-      issues: orderIssues,
-    };
+    const matchOrdersAudit = auditMatchOrdersList(rawOrders, rosterById, bestXiIds);
 
-    // Info & Routing Tim B (eqb / checkCreateB #24615)
-    const hasBTeam = Boolean(uTeam.bTeamId || save.bTeamId || (compactTeams && compactTeams[userId + '_b']));
+    // Info & Routing Tim B (eqb / checkCreateB #24615 + save.userBTeams)
+    const userBList = Array.isArray(save.userBTeams) ? save.userBTeams : [];
+    const bTeamEntry = userBList.find(b => b && typeof b === 'object' && (b.main === userId || b.id === `userb-${userId}`)) || null;
+    const bTeamId = (bTeamEntry && bTeamEntry.id)
+      || uTeam.bTeamId
+      || save.bTeamId
+      || (compactTeams && compactTeams[`userb-${userId}`] ? `userb-${userId}` : null)
+      || (compactTeams && compactTeams[`${userId}_b`] ? `${userId}_b` : null);
+    const bTeamObj = (bTeamId && compactTeams && compactTeams[bTeamId]) ? compactTeams[bTeamId] : null;
+    const hasBTeam = Boolean(bTeamEntry || bTeamObj || bTeamId);
+    const bTeamName = (bTeamEntry && bTeamEntry.name) || (bTeamObj && bTeamObj.name) || (hasBTeam ? `${userName} B` : null);
+    const bTeamLeague = (bTeamEntry && bTeamEntry.leagueId) || (bTeamObj && bTeamObj.league) || null;
+    const bTeamSquadCount = bTeamObj
+      ? (Array.isArray(bTeamObj.playerIds) && bTeamObj.playerIds.length
+        ? bTeamObj.playerIds.length
+        : (Array.isArray(bTeamObj.extraRows) ? bTeamObj.extraRows.length : 0))
+      : 0;
     const bTeamCost = Math.min(2000000, Math.max(100000, Math.round(U.safeNum(userTeamLevel, 3) * 600000)));
     const excessForeign = Math.max(0, foreignCountSquad - foreignCap);
     const bTeamCandidates = userRoster
@@ -1157,6 +1204,10 @@
       .slice(0, 6);
     const bTeamInfo = {
       hasBTeam,
+      bTeamId: bTeamId || null,
+      bTeamName,
+      bTeamLeague,
+      bTeamSquadCount,
       creationCost: bTeamCost,
       curForeign: foreignCountSquad,
       foreignCap,
@@ -1262,7 +1313,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.3 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.6.2 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,
@@ -1295,6 +1346,8 @@
         payrollRef: Math.round(payrollRef),
         squadValue: Math.round(totalSquadVal),
         activeFormation,
+        activeFormationRaw: rawActiveFormation,
+        isCustomFormation: rawActiveFormation.includes('~'),
         foreignCap,
         foreignMax,
         foreignCountSquad,
@@ -1353,7 +1406,7 @@
       naming: uTeam.naming || null,
       fixedSponsor,
       sponsors: spContracts,
-      presGoals: cleanPresGoals(uTeam.presGoals),
+      presGoals: cleanPresGoals(uTeam.presGoals, worldComps),
       preContracts,
       ctMilestones: C.CT_MILESTONES,
       cashHistory: cashHist,

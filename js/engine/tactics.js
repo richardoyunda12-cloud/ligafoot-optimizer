@@ -163,12 +163,14 @@
   }
 
   /**
-   * Bytecode #21465 & #3726: Simulasi `squadMoods` v1.2.0:
-   * - Tier natural (hanya pemain fit !injured && !suspended):
+   * Bytecode #21754, #21757 & #3726: Simulasi `squadMoods` v1.2.0:
+   * - Tier natural (hanya pemain fit !injured && !suspended, serta age > 19):
    *   - Tier 2 (natural starter, 40%): Top 1 GK + Top 10 Outfield
    *   - Tier 1 (natural sub, 8%): Outfield indeks 10..16 (7 pemain berikutnya) dengan age > 19
    *   - Tier 0 (0%, kebal di mode auto): sisanya, termasuk pemain dengan age <= 19!
-   * - Role eksplisit: 'starter' || roleSore -> 40%; 'rotation' -> 25%; 'youth' -> 8% (jika age<=19); 'reserve' && !roleSore -> 0%
+   * - Role eksplisit: roleSore / 'starter' -> 40%; 'rotation' -> cap Math.min(tier, 1) (8%);
+   *   'youth' -> 0% jika age<=19 else cap Math.min(tier, 1); 'reserve' -> 0% (kecuali roleSore=true di save)
+   * - moodFrom: [baseTeamGames, baseSeasonMinutes, baseGamesPlayed] dikurangkan dari teamGames & seasonMinutes
    * - lockerRoomHit (#21831): min(0.04, max(0, unhappyCount - 3) * 0.01) -> baru aktif di >= 4 unhappy!
    */
   function computeSquadMoodsV9(roster, isAiTeam = false, explicitTeamGames = null) {
@@ -192,10 +194,13 @@
       if ((p.age || 20) > 19) tier1Ids.add(p.id);
     });
 
-    const maxMins = Math.max(...roster.map(p => U.safeNum(p.seasonMinutes, 0)), 0);
+    const computedTeamGames = Math.max(
+      0,
+      ...roster.map(p => Math.max(U.safeInt(p.gamesPlayed, 0), Math.ceil(U.safeNum(p.seasonMinutes, 0) / 90.0)))
+    );
     const teamGames = explicitTeamGames !== null && explicitTeamGames !== undefined
       ? Math.max(0, U.safeInt(explicitTeamGames, 0))
-      : (maxMins > 0 ? Math.max(1, Math.ceil(maxMins / 90.0)) : 0);
+      : computedTeamGames;
 
     const moods = {};
     let unhappyCount = 0;
@@ -206,17 +211,23 @@
       const naturalSub = tier1Ids.has(pid);
 
       let tier = 0;
-      if (naturalStarter) tier = 2;
-      else if (naturalSub) tier = 1;
+      if ((p.age || 20) > 19) {
+        if (naturalStarter) tier = 2;
+        else if (naturalSub) tier = 1;
+      }
 
       const role = String(p.squadRole || 'auto').toLowerCase();
-      const minsNow = Math.round(U.safeNum(p.seasonMinutes, 0));
+      const mf = (Array.isArray(p.moodFrom) && p.moodFrom.length >= 2) ? p.moodFrom : null;
+      const baseGames = mf ? Math.min(teamGames, Math.max(0, U.safeInt(mf[0], 0))) : 0;
+      const baseMins = mf ? Math.max(0, U.safeNum(mf[1], 0)) : 0;
+      const minsNow = Math.max(0, Math.round(U.safeNum(p.seasonMinutes, 0) - baseMins));
       const injDays = U.safeInt(p.seasonInjuryDays, 0);
       const injGames = Math.floor(injDays / 4); // #3726 injuryDaysPerGame = 4
-      const effGames = Math.max(0, teamGames - injGames);
+      const remGames = Math.max(0, teamGames - baseGames);
+      const effGames = Math.max(0, remGames - Math.min(remGames, injGames));
       const minRatio = effGames > 0 ? (minsNow / (effGames * 90.0)) : 1.0;
 
-      const roleSore = Boolean(!isAiTeam && role === 'reserve' && naturalStarter);
+      const roleSore = Boolean(p.roleSore);
       let reqRatio = 0.0;
       let immune = false;
       let reason = 'Aman';
@@ -224,17 +235,26 @@
       if (p.injured || p.suspended) {
         immune = true;
         reason = p.injured ? 'Cedera (kebal sementara)' : 'Skorsing';
-      } else if (role === 'reserve' && !roleSore) {
+      } else if (roleSore) {
+        reqRatio = 0.40;
+        reason = 'Menolak turun role (roleSore, wajib 40% menit)';
+      } else if (role === 'starter') {
+        reqRatio = 0.40;
+      } else if (role === 'reserve') {
         immune = true;
         reqRatio = 0.0;
         reason = 'Role Reserve (Kebal Unhappy)';
-      } else if (roleSore || role === 'starter') {
-        reqRatio = 0.40;
-        if (roleSore) reason = 'Natural Top-11 diset Reserve (tetap wajib 40%!)';
       } else if (role === 'rotation') {
-        reqRatio = 0.25;
+        const rotTier = Math.min(tier, 1);
+        if (rotTier >= 1) {
+          reqRatio = 0.08;
+        } else {
+          immune = true;
+          reqRatio = 0.0;
+          reason = 'Role Rotation (Kebal Unhappy)';
+        }
       } else if (role === 'youth') {
-        reqRatio = p.age <= 19 ? 0.08 : 0.0;
+        reqRatio = (p.age || 20) <= 19 ? 0.0 : (Math.min(tier, 1) >= 1 ? 0.08 : 0.0);
         if (reqRatio === 0.0) immune = true;
       } else {
         if (tier === 2) reqRatio = 0.40;

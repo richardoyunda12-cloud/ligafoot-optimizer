@@ -71,12 +71,17 @@
         const tbl = (st && Array.isArray(st.table) && st.table) || (st && Array.isArray(st.standings) && st.standings);
         if (tbl && tbl.length) {
           userLeagueTeams = tbl.length;
-          const sortedTbl = [...tbl].sort((a, b) => (U.safeInt(b.pts, 0) - U.safeInt(a.pts, 0)) || (U.safeInt(b.gd, (b.gf || 0) - (b.ga || 0)) - U.safeInt(a.gd, (a.gf || 0) - (a.ga || 0))));
+          const sortedTbl = [...tbl].sort((a, b) => (U.safeInt(b.pts ?? b.points, 0) - U.safeInt(a.pts ?? a.points, 0)) || (U.safeInt(b.gd ?? b.goalDiff, (b.gf || 0) - (b.ga || 0)) - U.safeInt(a.gd ?? a.goalDiff, (a.gf || 0) - (a.ga || 0))));
           const idx = sortedTbl.findIndex(r => (r.teamId || r.id || r.t) === userId);
           if (idx >= 0) userLeagueRank = idx + 1;
           break;
         }
       }
+    }
+    if (userLeagueRank === null && Array.isArray(save.standings) && save.standings.length) {
+      userLeagueTeams = save.standings.length;
+      const idx = save.standings.findIndex(r => r && (r.teamId || r.id || r.t) === userId);
+      if (idx >= 0) userLeagueRank = idx + 1;
     }
 
     function addMatchEntry(homeId, awayId, compId, compName, roundName = '', stageKind = '', day = null, roundsLeft = null, neutral = false, classic = false, compKind = '') {
@@ -127,10 +132,12 @@
         else { h = m.opponentId; a = userId; }
       }
       const resolvedRl = resolveRoundsLeftFromWorld(m, comps);
+      const mCid = m.compId || (m.ref && m.ref.compId) || m.competitionId || m.leagueId || '';
+      const mCname = m.compName || m.competitionName || m.cupName || m.stageName || (comps[mCid] && comps[mCid].name) || m.matchType || 'Pertandingan';
       addMatchEntry(
         h, a,
-        m.compId || (m.ref && m.ref.compId) || m.competitionId || m.leagueId || '',
-        m.compName || m.competitionName || m.matchType || 'Pertandingan',
+        mCid,
+        mCname,
         m.roundName || m.round || '',
         (m.knockout || m.isKnockout) ? 'knockout' : String(m.matchType || ''),
         m.day ?? m.date ?? null,

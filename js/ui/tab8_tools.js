@@ -249,7 +249,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.3.3 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.6.2 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -442,9 +442,13 @@ function renderTab8Extras() {
       }
     }
 
+    const natMo = D.nation.matchOrdersAudit || null;
+    const natMoHtml = natMo ? `<div style="margin-bottom:8px;font-size:11px">Match Orders Timnas: <span class="badge ${natMo.issues && natMo.issues.length ? 'b-warn' : (natMo.activeCount > 0 ? 'b-good' : 'b-info')}">${natMo.activeCount}/${natMo.count} Aktif</span>${natMo.hasTiredSub ? ' <span class="badge b-good">Sub Lelah ✓</span>' : ''}${natMo.issues && natMo.issues.length ? ' ' + natMo.issues.map(it => `<span class="badge b-warn">${esc(it.title)}</span>`).join(' ') : ' <span class="c-muted">Aman tanpa bentrok ✓</span>'}</div>` : '';
+
     natHtml += `
       <div class="mb-8">Melatih Timnas: <span class="badge b-good">${esc(iso)}</span> · Skuad dipanggil: <b class="mono">${D.nation.squadCount || 0}</b> · Pool Terdeteksi: <b class="mono">${natPool.length}</b> pemain</div>
       ${tacParts.length ? `<div class="c-muted mb-8" style="font-size:11.5px">Taktik Timnas: ${tacParts.join(' · ')}</div>` : ''}
+      ${natMoHtml}
       ${natMatches.length ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:8px;font-size:11.5px">
         <div><b>📅 Jadwal Timnas ${esc(iso)} Mendatang</b> <span class="c-muted" style="font-size:10.5px">(Dipisah dari War Room Klub)</span></div>
         <div class="mono" style="font-size:11px;margin-top:4px">${natMatches.map(m => `<span class="badge b-info" style="margin:2px 4px 2px 0">${esc(m.compName)}${m.roundName ? ' · ' + esc(m.roundName) : ''}: <b>${esc(m.home)} vs ${esc(m.away)}</b> (Hari ${m.day})</span>`).join('')}</div>
@@ -594,12 +598,12 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.3`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.3</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.6.2`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.6.2</span>`;
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)}) • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.3 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.6.2 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],
