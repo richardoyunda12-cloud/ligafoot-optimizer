@@ -6,6 +6,7 @@ Dipanggil otomatis oleh `node scripts/verify_e2e.js [savePath]` atau langsung:
 import functools
 import http.server
 import os
+import re
 import socketserver
 import sys
 import threading
@@ -13,6 +14,15 @@ from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+
+def read_expected_version():
+    idx_path = os.path.join(REPO_ROOT, 'index.html')
+    with open(idx_path, 'r', encoding='utf-8') as f:
+        txt = f.read()
+    m = re.search(r'v\d+\.\d+\.\d+', txt)
+    assert m, 'Tag versi vX.Y.Z tidak ditemukan di index.html'
+    return m.group(0)
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -44,7 +54,7 @@ def load_save_on_page(page, save_path):
     page.wait_for_function("() => window.D && window.D.meta && document.getElementById('hdr-badge')", timeout=15000)
 
 
-def run_desktop_checks(browser, url, save_path):
+def run_desktop_checks(browser, url, save_path, expected_ver):
     ctx = browser.new_context(viewport={'width': 1280, 'height': 800})
     page = ctx.new_page()
     errors = []
@@ -55,9 +65,18 @@ def run_desktop_checks(browser, url, save_path):
     load_save_on_page(page, save_path)
 
     hdr_badge = page.text_content('#hdr-badge') or ''
-    assert 'v8.9.0' in hdr_badge, f'Header badge tidak v8.9.0: {hdr_badge}'
+    assert expected_ver in hdr_badge, f'Header badge tidak {expected_ver}: {hdr_badge}'
 
-    # 1. Tab 3C: Pelacak Progresi Wonderkid + SVG + Selector
+    # 0. Tab 2 Desktop: Tabel Top 3 Formasi bebas horizontal scroll
+    page.evaluate("() => { goToView('t2'); }")
+    top3_hscroll = page.evaluate("""() => {
+      const t = document.querySelector('#panel-t2 .wr-top3-tbl');
+      const w = t && t.closest('.tbl-wrap');
+      return w ? Math.max(0, w.scrollWidth - w.clientWidth) : 0;
+    }""")
+    assert top3_hscroll <= 2, f'Desktop wr-top3-tbl masih horizontal scroll {top3_hscroll}px'
+
+    # 1. Tab 3C: Pelacak Progresi Wonderkid + SVG + Selector + Scope Tabs
     page.evaluate("() => { goToView('t3', 't3-train'); }")
     page.wait_for_selector('#t3-growth-tracker svg polyline', timeout=5000)
     opt_vals = page.evaluate("""() => {
@@ -69,6 +88,10 @@ def run_desktop_checks(browser, url, save_path):
         page.select_option('#t3-wk-select', opt_vals[1])
         cur_val = page.evaluate("() => document.getElementById('t3-wk-select').value")
         assert cur_val == opt_vals[1], 'Ganti pilihan wonderkid di chart gagal'
+    page.evaluate("() => { setT3TrainScope('WK'); }")
+    wk_only_ct_hidden = page.evaluate("() => getComputedStyle(document.getElementById('t3-ct-card')).display === 'none'")
+    assert wk_only_ct_hidden, 'Scope tab tab3-train (WK) tidak menyembunyikan card Training'
+    page.evaluate("() => { setT3TrainScope('ALL'); }")
 
     # 2. Tier 2 Controls Spot-Check
     page.evaluate("() => { goToView('t6', 't6-tel'); }")
@@ -85,9 +108,10 @@ def run_desktop_checks(browser, url, save_path):
         page.locator('#t6-preset-audit button:has-text("Tes")').first.click()
 
     page.evaluate("() => { goToView('t4', 't4-cart'); }")
-    if page.locator('#cart-bteam-pick option').count() > 1:
-        b_opt = page.evaluate("() => document.getElementById('cart-bteam-pick').options[1].value")
-        page.select_option('#cart-bteam-pick', b_opt)
+    if page.locator('#t7-bteam-pick option').count() > 1:
+        b_opt = page.evaluate("() => document.getElementById('t7-bteam-pick').options[0].value")
+        page.select_option('#t7-bteam-pick', b_opt)
+        page.evaluate("() => addBTeamSelectToCart()")
         assert page.locator('#t7-whatif-sim').count() > 0, 'What-If Simulator tidak tampil'
 
     page.evaluate("() => { goToView('t6', 't6-ext'); }")
@@ -141,7 +165,7 @@ def run_desktop_checks(browser, url, save_path):
     ctx.close()
 
 
-def run_mobile_checks(browser, url, save_path):
+def run_mobile_checks(browser, url, save_path, expected_ver):
     ctx = browser.new_context(viewport={'width': 390, 'height': 844}, has_touch=True)
     page = ctx.new_page()
     errors = []
@@ -152,7 +176,7 @@ def run_mobile_checks(browser, url, save_path):
     load_save_on_page(page, save_path)
 
     hdr_badge = page.text_content('#hdr-badge') or ''
-    assert 'v8.9.0' in hdr_badge, f'Mobile header badge tidak v8.9.0: {hdr_badge}'
+    assert expected_ver in hdr_badge, f'Mobile header badge tidak {expected_ver}: {hdr_badge}'
 
     views = [
         ('t1', None), ('t2', None),
@@ -171,6 +195,21 @@ def run_mobile_checks(browser, url, save_path):
             max_overflow = ov
         if ov > 0:
             overflows.append((sub or tab, ov))
+
+    # Cek global .col-hide-mob berfungsi di luar War Room & tombol Kondisi War Room >= 32px saat dibuka
+    page.evaluate("() => { goToView('t3', 't3-bteam'); }")
+    hidden_bteam = page.evaluate("() => Array.from(document.querySelectorAll('#t3b-tbl .col-hide-mob')).every(el => getComputedStyle(el).display === 'none')")
+    assert hidden_bteam, 'Global .col-hide-mob tidak menyembunyikan kolom sekunder di Mobile'
+
+    page.evaluate("() => { goToView('t2'); document.getElementById('wr-cond-details').setAttribute('open',''); }")
+    small_t2_btns = page.evaluate("""() => {
+      const ids = ['#wr-cond-auto', '#wr-ref-strict', '#wr-w-clear'];
+      return ids.filter(sel => {
+        const el = document.querySelector(sel);
+        return el && el.getBoundingClientRect().height < 32;
+      });
+    }""")
+    assert small_t2_btns == [], f'Tombol War Room Mobile terlalu kecil (<32px): {small_t2_btns}'
 
     assert not overflows, f'Mobile horizontal overflow ditemukan: {overflows}'
     assert errors == [], f'Mobile console/page errors: {errors}'
@@ -210,14 +249,15 @@ def main():
     if not os.path.isfile(save_path):
         raise FileNotFoundError(f'Save file tidak ditemukan: {save_path}')
 
+    expected_ver = read_expected_version()
     srv, port = start_server()
     url = f'http://127.0.0.1:{port}/index.html'
     try:
         with sync_playwright() as p:
             browser = launch_chromium(p)
             try:
-                run_desktop_checks(browser, url, save_path)
-                run_mobile_checks(browser, url, save_path)
+                run_desktop_checks(browser, url, save_path, expected_ver)
+                run_mobile_checks(browser, url, save_path, expected_ver)
             finally:
                 browser.close()
     finally:

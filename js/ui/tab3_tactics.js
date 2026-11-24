@@ -135,7 +135,7 @@ function renderFormCompareTable() {
   if (hdrEl) hdrEl.textContent = `📊 ${rows.length} Formasi (#3575/#21891 • Mode ${modeLbl})`;
 
   tbl.innerHTML = `<thead><tr>
-    <th>Formasi (Klik → Pitch)</th><th>Avg</th><th>Chem</th><th>DEF</th><th>MID</th><th>ATK</th><th>Asing</th><th>FB-WF</th>
+    <th>Formasi (Klik → Pitch)</th><th>Avg</th><th class="col-hide-mob">Chem</th><th>DEF</th><th>MID</th><th>ATK</th><th class="col-hide-mob">Asing</th><th class="col-hide-mob">FB-WF</th>
   </tr></thead><tbody>` +
     rows.map((f, idx) => {
       const isCur = f.formation === curFk;
@@ -153,12 +153,12 @@ function renderFormCompareTable() {
           ${bugTag}
         </td>
         <td class="mono ${f.hasFormationBug ? 'c-red' : 'c-green'}"><b>${f.avgScore}</b></td>
-        <td class="mono c-sky">${f.chemistry ?? 100}%</td>
+        <td class="mono c-sky col-hide-mob">${f.chemistry ?? 100}%</td>
         <td class="mono">${f.sectors.DEF}</td>
         <td class="mono">${f.sectors.MID}</td>
         <td class="mono ${f.hasFormationBug ? 'c-red' : ''}">${f.sectors.ATK}${f.hasFormationBug ? ' (-33%)' : ''}</td>
-        <td class="mono">${f.foreignCount}/${D.meta.foreignCap}</td>
-        <td class="mono ${f.wrongFootCount ? 'c-amber' : 'c-green'}">${f.wrongFootCount}</td>
+        <td class="mono col-hide-mob">${f.foreignCount}/${D.meta.foreignCap}</td>
+        <td class="mono col-hide-mob ${f.wrongFootCount ? 'c-amber' : 'c-green'}">${f.wrongFootCount}</td>
       </tr>`;
     }).join('') + `</tbody>`;
 }
@@ -208,12 +208,27 @@ function renderMoodTable() {
       <div class="c-muted" style="font-size:11px">Kuota bytecode #21465 (aktif setelah ≥6 laga): <b>40%</b> Top-11 (1 GK + 10 Outfield) / <code>role=starter</code> · <b>25%</b> <code>role=rotation</code> · <b>8%</b> Cadangan #12–#18 (&gt;19th) / <code>role=youth</code>. Usia ≤19th (auto) &amp; <code>reserve</code> kebal 0%!</div>`;
   }
 
+  const sumHdr = document.getElementById('t3-mood-sum-hdr');
+  const moodDet = document.getElementById('t3-mood-details');
+  const lockerHitPct = Number((D.meta && D.meta.lockerHitPct) || 0);
+  if (sumHdr) {
+    const mBCls = (lockerHitPct > 0 || unhCnt >= 4) ? 'b-crit' : (unhCnt > 0 || riskCnt > 0 ? 'b-warn' : 'b-good');
+    const mBTxt = lockerHitPct > 0 ? `Penalti -${lockerHitPct}%!` : (unhCnt > 0 ? `${unhCnt} Unhappy` : '✓ Ruang Ganti Aman');
+    sumHdr.innerHTML = `
+      <span style="font-size:15px;font-weight:800">😠 Radar Ruang Ganti v1.2.0 <span class="badge ${mBCls}">${mBTxt}</span></span>
+      <span class="c-muted mono" style="font-size:11px">Rawan ${riskCnt} · Kebal ${immuneCnt} ▼</span>`;
+  }
+  if (moodDet && !moodDet.dataset.userToggled) {
+    if (unhCnt >= 3 || lockerHitPct > 0) moodDet.setAttribute('open', '');
+    else moodDet.removeAttribute('open');
+  }
+
   const mRows = [...roster].sort(
     (a, b) => (a.mood === 'unhappy' ? -1 : 1) - (b.mood === 'unhappy' ? -1 : 1) || (b.minsDeficit || 0) - (a.minsDeficit || 0) || b.moodTier - a.moodTier || a.minPct - b.minPct
   );
   const tbl = document.getElementById('t3-mood-tbl');
   if (tbl) {
-    tbl.innerHTML = `<thead><tr><th>Pemain &amp; Mood</th><th>Saran Aksi v9</th><th>Kuota Menit</th><th>Target &amp; Defisit</th><th>Role v9</th><th>Pos</th></tr></thead><tbody>` +
+    tbl.innerHTML = `<thead><tr><th>Pemain &amp; Mood</th><th>Saran Aksi v9</th><th>Kuota Menit</th><th class="col-hide-mob">Target &amp; Defisit</th><th class="col-hide-mob">Role v9</th><th class="col-hide-mob">Pos</th></tr></thead><tbody>` +
       mRows.map(p => {
         const mCls = p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'warn' ? 'b-warn' : 'b-info');
         const adv = getMoodActionAdvice(p);
@@ -230,9 +245,9 @@ function renderMoodTable() {
           </td>
           <td><span class="badge ${adv.cls}">${esc(adv.txt)}</span></td>
           <td>${minutesQuotaBarHtml(p.minPct, p.reqPct, p.mood)}</td>
-          <td class="mono"><b>${p.reqPct}%</b>${defTxt}</td>
-          <td><span class="badge ${p.roleSore ? 'b-crit' : 'b-muted'}">${esc(p.moodReason)}</span></td>
-          <td><b>${fmtPos(p.pos)}</b></td>
+          <td class="mono col-hide-mob"><b>${p.reqPct}%</b>${defTxt}</td>
+          <td class="col-hide-mob"><span class="badge ${p.roleSore ? 'b-crit' : 'b-muted'}">${esc(p.moodReason)}</span></td>
+          <td class="col-hide-mob"><b>${fmtPos(p.pos)}</b></td>
         </tr>`;
       }).join('') + `</tbody>`;
   }

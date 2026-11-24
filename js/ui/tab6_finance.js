@@ -248,6 +248,13 @@ function renderTicketPresetAudit() {
     </div>`;
 }
 
+let calRangeMode = (typeof window !== 'undefined' && window.innerWidth <= 768) ? '4m' : '12m';
+
+function setCalRangeMode(m) {
+  calRangeMode = m === '4m' ? '4m' : '12m';
+  renderCashflowCalendar12m();
+}
+
 function renderCashflowCalendar12m() {
   const el = document.getElementById('t6-calendar-12m');
   const sumEl = document.getElementById('t6-cal-summary');
@@ -264,9 +271,18 @@ function renderCashflowCalendar12m() {
       `Sponsor/Naming: <b>${cal.commercialEventsCount}</b> · Golden -12%: <b class="c-green">${cal.goldenQueueCount}</b>`;
   }
 
+  const visMonths = (calRangeMode === '4m' && cal.months.length > 4) ? cal.months.slice(0, 4) : cal.months;
+
   el.innerHTML = `
+    <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+      <div class="t3-seg-2">
+        <button type="button" class="btn btn-sm ${calRangeMode === '4m' ? 'btn-green' : ''}" onclick="setCalRangeMode('4m')">4 Bln Terdekat</button>
+        <button type="button" class="btn btn-sm ${calRangeMode === '12m' ? 'btn-green' : ''}" onclick="setCalRangeMode('12m')">12 Bln Penuh</button>
+      </div>
+      <span class="c-muted mono" style="font-size:10.5px">Menampilkan ${visMonths.length}/${cal.months.length} bulan</span>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px">
-      ${cal.months.map(m => {
+      ${visMonths.map(m => {
         const hasComm = m.events.some(e => e.type === 'SPONSOR' || e.type === 'NAMING');
         const hasCrit = m.events.some(e => e.sev === 'CRITICAL' || e.sev === 'HIGH');
         const borderCol = hasCrit ? 'rgba(245,158,11,.55)' : (hasComm ? 'rgba(56,189,248,.45)' : 'var(--border)');
@@ -406,7 +422,7 @@ function renderTicketSim() {
       <div class="mb-8"><b>📋 Preset Siap Salin — 6 Fase Resmi <code>ticketMulBy</code> (${esc(compLbl)} • Base ${bpShow.geral}·${bpShow.arquibancada}·${bpShow.cadeiras}·${bpShow.camarotes}):</b></div>
       <div class="tbl-wrap tbl-sticky"><table>
         <thead><tr>
-          <th>Fase &amp; Harga + Multiplier Optimal</th><th>Status</th><th>Harga Kini</th><th>Fill</th><th>Est. Gate</th><th>Potensi +</th><th class="col-desk-only">Aksi</th>
+          <th>Fase &amp; Harga + Multiplier Optimal</th><th class="col-hide-mob">Status</th><th class="col-hide-mob">Harga Kini</th><th class="col-hide-mob">Fill</th><th>Est. Gate</th><th>Potensi +</th><th class="col-desk-only">Aksi</th>
         </tr></thead>
         <tbody>${phases.map(r => {
           const cp = r.curPrices, op = r.optPrices, om = r.optMuls || {};
@@ -416,16 +432,16 @@ function renderTicketSim() {
           const mulStr = `${Number(om.geral || 1).toFixed(2)}x · ${Number(om.arquibancada || 1).toFixed(2)}x · ${Number(om.cadeiras || 1).toFixed(2)}x · ${Number(om.camarotes || 1).toFixed(2)}x`;
           return `<tr>
             <td>
-              <div><b>${esc(r.label)}</b></div>
+              <div><b>${esc(r.label)}</b> <span class="badge ${r.fillPct >= 70 ? 'b-good' : 'b-crit'} mono">${r.fillPct}%</span></div>
               <div class="mono c-green" style="font-size:11px;margin-top:2px"><b>${optCompact}</b> <span class="c-muted">(${mulStr})</span></div>
               <div class="sticky-inline-acts">
                 <button type="button" class="btn btn-sm" onclick="copyText('${optStr}','Preset ${escJs(r.label)}')">📋 Salin</button>
                 <button type="button" class="btn btn-sm" onclick="applyPhaseToSim('${r.phase}')">Muat</button>
               </div>
             </td>
-            <td><span class="badge ${r.isCustom ? 'b-info' : 'b-muted'}">${r.isCustom ? 'Custom' : 'Default'}</span></td>
-            <td class="mono c-muted">${curStr}</td>
-            <td class="mono ${r.fillPct >= 70 ? 'c-green' : 'c-red'}">${r.fillPct}%</td>
+            <td class="col-hide-mob"><span class="badge ${r.isCustom ? 'b-info' : 'b-muted'}">${r.isCustom ? 'Custom' : 'Default'}</span></td>
+            <td class="mono c-muted col-hide-mob">${curStr}</td>
+            <td class="mono col-hide-mob ${r.fillPct >= 70 ? 'c-green' : 'c-red'}">${r.fillPct}%</td>
             <td class="mono">${fmtM(r.estRev)}</td>
             <td class="mono ${r.revGain > 5000 ? 'c-amber' : 'c-green'}">${r.revGain > 0 ? '+' + fmtM(r.revGain) : '✓ Pas'}</td>
             <td class="col-desk-only">

@@ -181,7 +181,8 @@ function renderRosterActionRadar() {
       ).join('')}</div>
     </div>` : '';
 
-  box.innerHTML = `<details class="glossary-inline" style="margin:6px 0 8px" open>
+  const radarOpen = typeof window === 'undefined' || window.innerWidth > 768;
+  box.innerHTML = `<details class="glossary-inline" style="margin:6px 0 8px" ${radarOpen ? 'open' : ''}>
     <summary>🎯 <b>Radar Keputusan Cepat:</b> Panen Jual (${harvest.length}) · Potong Gaji (${cutList.length}) · Routing Tim B (${btCands.length})</summary>
     <div class="grid g2" style="gap:8px;margin-top:6px">
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px">
@@ -230,11 +231,11 @@ function renderRosterTable() {
     ${thSort('force', 'F→Cap')}
     ${thSort('contractDays', 'Kontrak')}
     ${thSort('salary', 'Gaji/Bln')}
-    ${thSort('energy', 'Energi')}
-    ${thSort('age', 'Usia')}
-    ${thSort('growthFrac', 'Growth')}
-    ${thSort('stackPct', 'Skill Stack')}
-    ${thSort('marketValue', 'Nilai (Jual)')}
+    ${thSort('energy', 'Energi', 'col-hide-mob')}
+    ${thSort('age', 'Usia', 'col-hide-mob')}
+    ${thSort('growthFrac', 'Growth', 'col-hide-mob')}
+    ${thSort('stackPct', 'Skill Stack', 'col-hide-mob')}
+    ${thSort('marketValue', 'Nilai (Jual)', 'col-hide-mob')}
     <th class="col-desk-only">Rekomendasi Aksi</th>
   </tr></thead><tbody>` + (rows.length ? rows.map(p => {
     const stB = p.nonStack ? 'b-crit' : (p.stackGrade === 'GOD' ? 'b-good' : 'b-muted');
@@ -255,11 +256,11 @@ function renderRosterTable() {
       <td class="mono"><b>${p.force}</b>→<b class="c-green">${p.potCap}</b><div class="c-muted" style="font-size:10px">UI ${p.potential}</div></td>
       <td><span class="badge ${cB} mono">${p.contractDays}d</span>${loopTag}${p.benchCutSave ? `<div class="c-sky" style="font-size:10px">Bangku -${fmtM(p.benchCutSave)}</div>` : ''}${narTag}</td>
       <td class="mono">${fmtM(p.salary)}</td>
-      <td>${energyPillHtml(p.energy)}</td>
-      <td class="mono ${p.age >= p.sellWarnAge ? 'c-amber' : ''}">${p.age} <span class="c-muted">(@${p.declineAge})</span></td>
-      <td>${growthBarHtml(p.growthFrac, p.nearDrop)}</td>
-      <td><span class="badge ${stB}" title="${esc(p.stackNote || (p.nonStack ? tipFor('NONSTACK') : ''))}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct}%)</span></td>
-      <td class="mono">${fmtM(p.marketValue)} <div class="c-muted" style="font-size:10px">Real ~${fmtM(p.estRealSale)}</div></td>
+      <td class="col-hide-mob">${energyPillHtml(p.energy)}</td>
+      <td class="mono col-hide-mob ${p.age >= p.sellWarnAge ? 'c-amber' : ''}">${p.age} <span class="c-muted">(@${p.declineAge})</span></td>
+      <td class="col-hide-mob">${growthBarHtml(p.growthFrac, p.nearDrop)}</td>
+      <td class="col-hide-mob"><span class="badge ${stB}" title="${esc(p.stackNote || (p.nonStack ? tipFor('NONSTACK') : ''))}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct}%)</span></td>
+      <td class="mono col-hide-mob">${fmtM(p.marketValue)} <div class="c-muted" style="font-size:10px">Real ~${fmtM(p.estRealSale)}</div></td>
       <td class="col-desk-only"><span class="badge ${actB}">${esc(p.action)}</span></td>
     </tr>`;
   }).join('') : '<tr><td colspan="11" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
@@ -331,8 +332,27 @@ function renderTrainingAudit() {
 }
 
 // ==================== PELACAK PROGRESI WONDERKID & MULTI-SAVE (TIER 3) ====================
+let t3TrainScope = 'ALL'; // ALL | CT | WK | MOOD
 let wkTrackerFilter = 'ALL'; // ALL | TRAIN | SENIOR | BTEAM | YOUTH
 let wkTrackerSelectedId = null;
+
+function setT3TrainScope(sc) {
+  t3TrainScope = sc || 'ALL';
+  const showAll = t3TrainScope === 'ALL';
+  const ctCard = document.getElementById('t3-ct-card');
+  const wkCard = document.getElementById('t3-growth-card');
+  const moodCard = document.getElementById('t3-mood-card');
+  if (ctCard) ctCard.style.display = (showAll || t3TrainScope === 'CT') ? '' : 'none';
+  if (wkCard) wkCard.style.display = (showAll || t3TrainScope === 'WK') ? '' : 'none';
+  if (moodCard) moodCard.style.display = (showAll || t3TrainScope === 'MOOD') ? '' : 'none';
+  if (t3TrainScope === 'MOOD') {
+    const md = document.getElementById('t3-mood-details');
+    if (md) md.setAttribute('open', '');
+  }
+  document.querySelectorAll('#t3-train-tabs [data-t3scope]').forEach(b => {
+    b.classList.toggle('active', b.dataset.t3scope === t3TrainScope);
+  });
+}
 
 function setWkTrackerFilter(f) {
   wkTrackerFilter = f || 'ALL';

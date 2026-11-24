@@ -1,6 +1,12 @@
 // ==================== RENDER TAB 4: TRANSFER, SHORTLIST & AUTO-SCOUT (v8.2.3) ====================
-let scoutPageLimit = 80;
+let scoutPageLimit = 30;
 let cartBenchOppId = 'AUTO_NEXT';
+let bpShowAll = false;
+
+function toggleBpShowAll() {
+  bpShowAll = !bpShowAll;
+  renderScoutBlueprint();
+}
 
 function setCartBenchOpp(val) {
   cartBenchOppId = val || 'AUTO_NEXT';
@@ -715,9 +721,10 @@ function renderScoutBlueprint() {
     }
 
     if (topCash.length) {
-      extraSmartHtml += `<div style="margin-top:12px;padding:10px 11px;background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:11px;font-size:11.5px">
-        <div style="font-weight:800;margin-bottom:6px" class="c-green">💸 Downgrade Cerdas: Cetak Kas Besar Tanpa Turun Win%</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px">
+      const dgOpen = typeof window === 'undefined' || window.innerWidth > 768;
+      extraSmartHtml += `<details class="glossary-inline mt-12" ${dgOpen ? 'open' : ''} style="border-color:rgba(16,185,129,.35)">
+        <summary style="font-weight:800" class="c-green">💸 Downgrade Cerdas (${topCash.length}): Cetak Kas Besar Tanpa Turun Win%</summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;margin-top:8px;font-size:11.5px">
           ${topCash.map(cp => {
             const r = cp.c.r;
             return `<div style="padding:8px 10px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
@@ -733,7 +740,7 @@ function renderScoutBlueprint() {
             </div>`;
           }).join('')}
         </div>
-      </div>`;
+      </details>`;
     }
 
     if (nsPairs.length) {
@@ -837,7 +844,11 @@ function renderScoutBlueprint() {
     box.innerHTML = `<div class="alert-item"><span class="badge b-warn">KAS KETAT</span><div>Belum ada rekomendasi yang muat di <b>Sisa Daya Beli (${fmtM(cm.projBudget)})</b>. Klik tombol <b>⚡ Jual</b> di atas untuk menambah modal, atau cek tab <b>🆓 Gratis/Diskon</b>!</div></div>`;
     return;
   }
-  box.innerHTML = moneyballHtml + (picks.length ? `<div class="deal-grid">${picks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>` : '') + extraSmartHtml;
+  const shownPicks = (picks.length > 4 && !bpShowAll) ? picks.slice(0, 4) : picks;
+  const picksMoreBtn = picks.length > 4
+    ? `<div style="margin:8px 0"><button type="button" class="btn btn-sm" style="width:100%" onclick="toggleBpShowAll()">${bpShowAll ? '⬆️ Ringkas ke Top 4 Rekomendasi' : `⬇️ Tampilkan ${picks.length - 4} Rekomendasi Lainnya (${picks.length} total)`}</button></div>`
+    : '';
+  box.innerHTML = moneyballHtml + (shownPicks.length ? `<div class="deal-grid">${shownPicks.map(p => renderDealCard(p.it, p.lbl, p.cls)).join('')}</div>${picksMoreBtn}` : '') + extraSmartHtml;
 }
 
 function addAllShortlistToCart() {
@@ -866,7 +877,7 @@ function renderShortlistTab() {
 
   if (!ids.length) {
     if (sumEl) sumEl.innerHTML = '';
-    el.innerHTML = `<div class="alert-item"><span class="badge b-accent">SHORTLIST KOSONG</span><div>Klik ikon bintang <b>☆</b> pada pemain mana saja di <b>Belanja Pintar</b>, <b>Pasar Global</b>, atau <b>Player Drawer</b> untuk menyimpannya permanen antar-save!</div></div>`;
+    el.innerHTML = `<div class="alert-item"><span class="badge b-accent">SHORTLIST KOSONG</span><div style="flex:1">Klik ikon bintang <b>☆</b> pada pemain mana saja di <b>Belanja Pintar</b>, <b>Pasar Global</b>, atau <b>Player Drawer</b> untuk menyimpannya permanen antar-save!</div><button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-exp')">🔎 Pasar Global →</button></div>`;
     return;
   }
 
@@ -950,7 +961,7 @@ function toggleScoutPos(code) {
   const spm = document.getElementById('s-pos-mob');
   if (sp) sp.value = single;
   if (spm) spm.value = single;
-  scoutPageLimit = 80;
+  scoutPageLimit = 30;
   renderScout();
 }
 
@@ -974,7 +985,7 @@ function syncScoutQuick(kind, val) {
     const el = document.getElementById('s-sort');
     if (el) el.value = val;
   }
-  scoutPageLimit = 80;
+  scoutPageLimit = 30;
   renderScout();
 }
 
@@ -988,12 +999,12 @@ function syncScoutDesktopToMob() {
 }
 
 function resetScoutLimitAndRender() {
-  scoutPageLimit = 80;
+  scoutPageLimit = 30;
   renderScout();
 }
 
 function loadMoreScout() {
-  scoutPageLimit += 80;
+  scoutPageLimit += 30;
   renderScout();
 }
 
@@ -1056,7 +1067,7 @@ function updateScoutFilterSummary() {
 
 function applyScoutPreset(preset) {
   scoutPreset = preset;
-  scoutPageLimit = 80;
+  scoutPageLimit = 30;
   const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
   const setChk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v; };
   setVal('s-q', '');
@@ -1179,7 +1190,7 @@ function renderScout() {
 
   document.getElementById('t7-scout-tbl').innerHTML = `<thead><tr>
     <th>Pemain &amp; Aksi Cepat</th><th>Pos / Usia</th><th>F → Cap &amp; Skill</th>
-    <th>Est. Beli &amp; Fit</th><th>Saran Swap</th><th>Flip &amp; ROI</th><th class="col-desk-only">Aksi</th>
+    <th>Est. Beli &amp; Fit</th><th class="col-hide-mob">Saran Swap</th><th class="col-hide-mob">Flip &amp; ROI</th><th class="col-desk-only">Aksi</th>
   </tr></thead><tbody>` + (show.length ? show.map(it => {
     const r = it.r;
     const sw = it.swap;
@@ -1237,8 +1248,8 @@ function renderScout() {
         <b>${it.isBosman ? '<span class="c-green">0€*</span>' : fmtM(it.estBuy)}</b> ${fitBadge}
         <div class="c-muted" style="font-size:10px">${it.isBosman ? 'Tebus ' + fmtM(it.estBuy) + ' · ' : (it.affordCode === 'INST' ? `DP ${fmtM(it.dp25)} (${fmtM(it.inst24)}/b) · ` : '')}Gaji ${fmtM(it.sal3y)}</div>
       </td>
-      <td>${swCell}</td>
-      <td class="mono">
+      <td class="col-hide-mob">${swCell}</td>
+      <td class="mono col-hide-mob">
         <b class="${it.estProfit > 0 ? 'c-green' : 'c-muted'}">${it.estProfit >= 0 ? '+' : ''}${fmtM(it.estProfit)} (${it.roiPct}%)</b>
         <div class="c-muted" style="font-size:10px">Jual ~${fmtM(it.estResale)} (+${it.projGain}F)</div>
       </td>
@@ -1246,7 +1257,7 @@ function renderScout() {
     </tr>`;
   }).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada target sesuai filter (coba lepas centang "Masuk Daya Beli" atau pilih pemain dijual dulu).</td></tr>') + `</tbody>`;
 
-  // Pagination bertahap (+80 lagi)
+  // Pagination bertahap (+30 lagi)
   const moreEl = document.getElementById('t7-scout-more');
   if (moreEl) {
     if (!items.length) {
@@ -1255,7 +1266,7 @@ function renderScout() {
       const rem = items.length - show.length;
       moreEl.innerHTML = `
         <span class="c-muted mono">Menampilkan <b>${show.length}</b> dari <b>${items.length}</b> target</span>
-        <button type="button" class="btn btn-sm btn-green" onclick="loadMoreScout()">Muat +${Math.min(80, rem)} Lagi (${rem} tersisa)</button>`;
+        <button type="button" class="btn btn-sm btn-green" onclick="loadMoreScout()">Muat +${Math.min(30, rem)} Lagi (${rem} tersisa)</button>`;
     } else {
       moreEl.innerHTML = `<span class="c-muted mono">Menampilkan seluruh <b>${items.length}</b> target sesuai filter.</span>`;
     }
@@ -1554,7 +1565,7 @@ function renderCart() {
         <div class="c-muted mono" style="font-size:10px">${fmtPos(r[1])} · ${r[5]}→${r[7]} · ${r[15]}d</div>
       </td>
       <td class="mono ${isBosOn ? 'c-green' : 'c-amber'}"><b>${isBosOn ? '0€ (Gratis)' : fmtM(effCost)}</b></td>
-      <td>${canBos
+      <td class="col-hide-mob">${canBos
         ? `<button type="button" class="btn btn-sm ${isBosOn ? 'btn-green' : ''}" onclick="toggleCartInBosman('${pidJs}')">${isBosOn ? '🆓 0€ ON' : '0€ Off'}</button>`
         : '<span class="c-muted">-</span>'}</td>
       <td class="mono">${fmtM(Math.round(r[12] * 0.95))}</td>
@@ -1570,13 +1581,13 @@ function renderCart() {
         <div class="c-muted mono" style="font-size:10px">${fmtPos(bp.pos)} · ${bp.force}→${bp.potCap} · ${bp.age}th</div>
       </td>
       <td class="mono c-green"><b>0€ (Promosi)</b></td>
-      <td><span class="badge b-good">GRATIS</span></td>
+      <td class="col-hide-mob"><span class="badge b-good">GRATIS</span></td>
       <td class="mono">${fmtM(bp.salary || 0)}</td>
       <td><button type="button" class="btn btn-sm" onclick="toggleCartBIn('${pidJs}')">✕</button></td>
     </tr>`;
   }).join('');
 
   const allInRows = scoutRowsHtml + bRowsHtml;
-  document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Biaya Beli</th><th>Bosman 0€</th><th>Gaji 3Th</th><th>Hapus</th></tr></thead><tbody>` +
-    (allInRows || '<tr><td colspan="5" class="c-muted">Belum ada target. Klik "+ Beli", "🆓 + Bosman (0€)", "🅱️ + Promosi Tim B", atau "⇄ Swap"!</td></tr>') + `</tbody>`;
+  document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Biaya Beli</th><th class="col-hide-mob">Bosman 0€</th><th>Gaji 3Th</th><th>Hapus</th></tr></thead><tbody>` +
+    (allInRows || `<tr><td colspan="5" class="c-muted">Belum ada target. Klik "+ Beli" atau <button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-bp')">🧠 Buka Belanja Pintar →</button></td></tr>`) + `</tbody>`;
 }

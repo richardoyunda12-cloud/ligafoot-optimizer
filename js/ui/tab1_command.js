@@ -541,12 +541,13 @@ function renderActionPlaybook() {
   const step3Html = step3Parts.length ? step3Parts.join(' · ') : '<span class="c-green">✓ Kontrak &amp; rotasi laga berikutnya aman.</span>';
 
   const actionBadges = (needReserve.length ? 1 : 0) + (wastedTrain.length || needSwapTrain.length ? 1 : 0) + (goldList.length || loopList.length || yRisks.length ? 1 : 0);
+  const pbOpen = (lockerHit > 0) || (actionBadges > 0 && typeof window !== 'undefined' && window.innerWidth > 768);
 
   pbEl.innerHTML = `
-    <details class="glossary-inline" ${actionBadges > 0 ? 'open' : ''} style="border:none;padding:0;background:transparent">
+    <details class="glossary-inline" ${pbOpen ? 'open' : ''} style="border:none;padding:0;background:transparent">
       <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer">
         <span style="font-size:14px;font-weight:800">📋 Playbook Eksekusi di Game <span class="badge ${lockerHit > 0 ? 'b-crit' : (actionBadges > 0 ? 'b-warn' : 'b-good')}">${lockerHit > 0 ? `Penalti -${lockerHit}% Aktif` : (actionBadges > 0 ? `${actionBadges} Langkah` : '✓ Beres')}</span></span>
-        <span class="c-muted" style="font-size:11px">Klik nama → Profil</span>
+        <span class="c-muted" style="font-size:11px">${pbOpen ? 'Klik nama → Profil' : 'Ketuk buka 3 langkah ▼'}</span>
       </summary>
       <div class="grid g3 mt-12" style="gap:8px;font-size:11.5px">
         <div style="background:var(--bg2);border:1px solid ${needReserve.length ? 'rgba(239,68,68,.45)' : 'var(--border)'};border-radius:10px;padding:9px 10px">

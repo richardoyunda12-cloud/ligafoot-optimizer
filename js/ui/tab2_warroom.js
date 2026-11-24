@@ -845,10 +845,15 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       <div style="font-size:11px;margin-bottom:8px">${(m.reasons || []).map(r => `<div>• ${esc(r)}</div>`).join('')}</div>
       ${customRecHtml}
       ${renderXiPeekHtml(rec, fx)}
+    </div>` : '';
+
+  const top3Block = (m && rec && Array.isArray(m.top3) && m.top3.length) ? `
+    <div style="grid-column:1 / -1;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:10px 11px">
+      <div class="kpi-lbl mb-8">📊 Komparasi Top 3 Formasi Rekomendasi (#48031)</div>
       <div class="tbl-wrap"><table class="wr-top3-tbl"><thead><tr>
         <th>Top 3</th><th class="col-hide-mob">Fokus</th><th>MID</th><th>ATK</th><th>DEF</th><th class="col-hide-mob">FB-WF</th><th>Win%</th><th>XI</th>
       </tr></thead><tbody>
-        ${(m.top3 || []).map((tf, ti) => `<tr class="${tf.formation === rec.formation ? 'hl-user' : ''}">
+        ${m.top3.map((tf, ti) => `<tr class="${tf.formation === rec.formation ? 'hl-user' : ''}">
           <td>
             <b>#${ti + 1} ${esc(fmtForm(tf.formation))}</b>
             <span class="wr-form-mod-sub mono">${esc(tf.optFocus || rec.optFocus || 'Center')} · xG ${tf.xGF ?? '-'}${tf.wrongFootCount ? ' · ⚠FB' : ''}</span>
@@ -1009,6 +1014,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
     <div class="grid g2" style="gap:10px">
       ${formBlock}
       ${tacticBlock}
+      ${top3Block}
       ${ticketBlock}
       ${spAndSubBlock}
     </div>`;

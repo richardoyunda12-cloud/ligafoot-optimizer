@@ -333,6 +333,10 @@ function goToView(tab, sub) {
     const bar = document.querySelector(`.subtabs[data-group="${t}"]`);
     if (bar) {
       bar.querySelectorAll('.subtab').forEach(b => b.classList.toggle('active', b.dataset.sub === targetSub));
+      const actSub = bar.querySelector('.subtab.active');
+      if (actSub && typeof actSub.scrollIntoView === 'function' && window.innerWidth <= 900) {
+        try { actSub.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) {}
+      }
     }
     const panel = document.getElementById('panel-' + t);
     if (panel) {
@@ -892,6 +896,10 @@ window.LFResetUIState = function () {
   if (typeof whatsNewDismissed !== 'undefined') whatsNewDismissed = false;
   if (typeof wkTrackerFilter !== 'undefined') wkTrackerFilter = 'ALL';
   if (typeof wkTrackerSelectedId !== 'undefined') wkTrackerSelectedId = null;
+  if (typeof bpShowAll !== 'undefined') bpShowAll = false;
+  if (typeof t3TrainScope !== 'undefined') t3TrainScope = 'ALL';
+  if (typeof yScoutTab !== 'undefined') yScoutTab = 'LOCAL';
+  if (typeof calRangeMode !== 'undefined') calRangeMode = (typeof window !== 'undefined' && window.innerWidth <= 768) ? '4m' : '12m';
   activeDrawer = null;
   if (D && D.stadium && D.stadium.optLigaPrices) {
     simPrices = { ...D.stadium.optLigaPrices };

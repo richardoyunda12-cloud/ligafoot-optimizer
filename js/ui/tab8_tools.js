@@ -249,7 +249,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.9.0 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.9.1 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -388,22 +388,29 @@ function renderTab8Extras() {
     .sort((a, b) => (b[7] - a[7]) || (b[5] - a[5]))
     .slice(0, 5);
 
-  const pcHtml = (D.preContracts && D.preContracts.length)
+  const pcCnt = (D.preContracts || []).length;
+  const pcHtml = pcCnt
     ? D.preContracts.map(pc => `<div class="bosman-mini-row"><div><b>${esc(pc.playerName)}</b> <span class="c-muted">(dari ${esc(pc.fromTeam)})</span></div><div class="mono c-green">${esc(pc.arriveDate)} · ${fmtM(pc.salary)}/bln</div></div>`).join('')
     : '<div class="c-muted mb-8">Belum ada pra-kontrak aktif. Rekrut bintang kontrak ≤180 hari secara <b>GRATIS (0€)</b>!</div>';
 
-  const bosPreviewHtml = bosmanTop5.length
-    ? `<div class="mt-12"><div class="flex-between mb-8"><b>🆓 Top 5 Target Bosman Gratis (≤180d)</b><button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-exp');applyScoutPreset('BOSMAN')">Lihat Semua →</button></div>`
-      + bosmanTop5.map(r => `<div class="bosman-mini-row">
-          <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(r[19])}')"><b>${esc(r[0])}</b></a>
-            <span class="c-muted" style="font-size:10.5px">(${fmtPos(r[1])} ${r[2]}th · ${esc(r[16])})</span>
-          </div>
-          <div class="mono" style="flex-shrink:0"><b>${r[5]}→<span class="c-green">${r[7]}</span></b> <span class="badge b-good">${r[15]}d</span></div>
-        </div>`).join('') + `</div>`
-    : `<div class="mt-12"><button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-exp');applyScoutPreset('BOSMAN')">🔎 Cari Target Bosman (≤180d) →</button></div>`;
+  const bosListHtml = bosmanTop5.map(r => `<div class="bosman-mini-row">
+      <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(r[19])}')"><b>${esc(r[0])}</b></a>
+        <span class="c-muted" style="font-size:10.5px">(${fmtPos(r[1])} ${r[2]}th · ${esc(r[16])})</span>
+      </div>
+      <div class="mono" style="flex-shrink:0"><b>${r[5]}→<span class="c-green">${r[7]}</span></b> <span class="badge b-good">${r[15]}d</span></div>
+    </div>`).join('');
 
-  document.getElementById('t8-precontracts').innerHTML = `<h3>📜 Pra-Kontrak / Bosman Aktif (${(D.preContracts || []).length})</h3>` + pcHtml + bosPreviewHtml;
+  let bosPreviewHtml = '';
+  if (bosmanTop5.length) {
+    bosPreviewHtml = pcCnt > 0
+      ? `<div class="mt-12"><div class="flex-between mb-8"><b>🆓 Top 5 Target Bosman Gratis (≤180d)</b><button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-exp');applyScoutPreset('BOSMAN')">Lihat Semua →</button></div>${bosListHtml}</div>`
+      : `<details class="glossary-inline" style="margin-top:6px"><summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>🆓 Intip Top 5 Target Bosman Gratis (0€ ≤180d) ▼</span><button type="button" class="btn btn-sm btn-green" onclick="event.preventDefault();event.stopPropagation();goToView('t4','t4-exp');applyScoutPreset('BOSMAN')">Lihat Semua →</button></summary><div style="margin-top:8px">${bosListHtml}</div></details>`;
+  } else {
+    bosPreviewHtml = `<div class="mt-8"><button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-exp');applyScoutPreset('BOSMAN')">🔎 Cari Target Bosman (≤180d) →</button></div>`;
+  }
+
+  document.getElementById('t8-precontracts').innerHTML = `<h3>📜 Pra-Kontrak / Bosman Aktif (${pcCnt})</h3>` + pcHtml + bosPreviewHtml;
 
   // 5. Sub-Tab 6C: Status Timnas + Interactive War Room + Call-Up Optimizer
   renderNationSection();
@@ -443,7 +450,7 @@ function renderMatchTelemetry() {
       <td class="mono">${f.games}</td>
       <td class="mono">${f.w}-${f.d}-${f.l}</td>
       <td class="mono ${wCls}"><b>${f.winPct}%</b></td>
-      <td class="mono">${f.ppg}</td>
+      <td class="mono col-hide-mob">${f.ppg}</td>
       <td class="mono col-hide-mob">${f.avgPos}%</td>
       <td class="mono">${f.gfPg}–${f.gaPg}</td>
     </tr>`;
@@ -456,7 +463,7 @@ function renderMatchTelemetry() {
       <td class="mono">${f.games}</td>
       <td class="mono">${f.w}-${f.d}-${f.l}</td>
       <td class="mono ${wCls}"><b>${f.winPct}%</b></td>
-      <td class="mono">${f.ppg}</td>
+      <td class="mono col-hide-mob">${f.ppg}</td>
       <td class="mono">${f.gfPg}–${f.gaPg}</td>
     </tr>`;
   }).join('');
@@ -537,7 +544,7 @@ function renderMatchTelemetry() {
           <h3>⚔️ Efektivitas Formasi Sendiri (Klik → Lapangan)</h3>
           <div class="tbl-wrap tbl-sticky" style="max-height:310px;overflow-y:auto">
             <table>
-              <thead><tr><th>Formasi</th><th>M</th><th>M-S-K</th><th>Win%</th><th>PPG</th><th class="col-hide-mob">Pos%</th><th>Gol/Kbl</th></tr></thead>
+              <thead><tr><th>Formasi</th><th>M</th><th>M-S-K</th><th>Win%</th><th class="col-hide-mob">PPG</th><th class="col-hide-mob">Pos%</th><th>Gol/Kbl</th></tr></thead>
               <tbody>${formRows || '<tr><td colspan="7" class="c-muted">Belum ada data.</td></tr>'}</tbody>
             </table>
           </div>
@@ -546,7 +553,7 @@ function renderMatchTelemetry() {
           <h3>🛡️ Rekor Melawan Formasi Lawan</h3>
           <div class="tbl-wrap tbl-sticky" style="max-height:310px;overflow-y:auto">
             <table>
-              <thead><tr><th>Formasi Lawan</th><th>M</th><th>M-S-K</th><th>Win%</th><th>PPG</th><th>Gol/Kbl</th></tr></thead>
+              <thead><tr><th>Formasi Lawan</th><th>M</th><th>M-S-K</th><th>Win%</th><th class="col-hide-mob">PPG</th><th>Gol/Kbl</th></tr></thead>
               <tbody>${oppRows || '<tr><td colspan="6" class="c-muted">Belum ada data.</td></tr>'}</tbody>
             </table>
           </div>
@@ -567,6 +574,7 @@ function renderMatchTelemetry() {
           ${pt.underperformers.length ? pt.underperformers.map(p => pRowHtml(p, `<span class="badge b-warn">${p.avgRating}</span>${p.cards ? ` · ${p.cards}K` : ''}`)).join('') : '<div class="c-muted">Semua pemain inti tampil di atas rata-rata ✓</div>'}
         </div>
       </div>
+      <div class="c-muted" style="font-size:10.5px;margin-top:8px">ℹ️ Pemain pengganti menit 82+ dengan rating <code>null</code> dari engine tidak dihitung sebagai 0 sehingga rata-rata tetap akurat.</div>
     </div>`;
 }
 
@@ -935,12 +943,12 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.9.0`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.9.0</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.9.1`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.9.1</span>`;
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)}) • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.9.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.9.1 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],
