@@ -772,6 +772,61 @@
       if (!improved) break;
     }
 
+    // Bench-swap pass (Best XI): jika 2-opt memindahkan pemain keluar posisi ke slot dengan skor lebih rendah
+    // dibanding pemain natural yang tersisa di bangku cadangan, tukar masuk pemain cadangan tersebut.
+    for (let bPass = 0; bPass < (rotationMode ? 0 : 2); bPass++) {
+      let bImproved = false;
+      for (let i = 1; i < assigned.length; i++) {
+        if (!assigned[i]) continue;
+        const curItem = assigned[i];
+        const sCode = curItem.slot;
+        const ruleId = curItem.ruleId;
+        const curIsF = Boolean(userCountry && curItem.player.nationality && curItem.player.nationality !== userCountry);
+        let bestCand = null;
+        let bestCandEv = null;
+        for (const p of avail) {
+          if (usedIds.has(p.id)) continue;
+          if (sCode === 'G' && p.pos !== 'G') continue;
+          if (sCode !== 'G' && p.pos === 'G') continue;
+          const newIsF = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
+          if ((foreignUsed - (curIsF ? 1 : 0) + (newIsF ? 1 : 0)) > foreignCap) continue;
+          const evB = evalPlayerForSlot(p, sCode, true, repLevel, ruleId);
+          if (evB.score > (bestCandEv ? bestCandEv.score : curItem.score + 0.01)) {
+            bestCand = p;
+            bestCandEv = evB;
+          }
+        }
+        if (bestCand && bestCandEv) {
+          const newIsF = Boolean(userCountry && bestCand.nationality && bestCand.nationality !== userCountry);
+          usedIds.delete(curItem.player.id);
+          usedIds.add(bestCand.id);
+          foreignUsed = foreignUsed - (curIsF ? 1 : 0) + (newIsF ? 1 : 0);
+          assigned[i] = {
+            ...curItem,
+            player: bestCand,
+            score: U.roundTo(bestCandEv.score, 2),
+            wrongFoot: bestCandEv.wrongFoot,
+            compat: bestCandEv.compat,
+          };
+          bImproved = true;
+        }
+      }
+      if (!bImproved) break;
+      for (let i = 1; i < assigned.length; i++) {
+        for (let j = i + 1; j < assigned.length; j++) {
+          if (!assigned[i] || !assigned[j]) continue;
+          const curSum = assigned[i].score + assigned[j].score;
+          const evI = evalPlayerForSlot(assigned[j].player, assigned[i].slot, true, repLevel, assigned[i].ruleId);
+          const evJ = evalPlayerForSlot(assigned[i].player, assigned[j].slot, true, repLevel, assigned[j].ruleId);
+          if (evI.score + evJ.score > curSum + 0.01) {
+            const pI = assigned[i].player, pJ = assigned[j].player;
+            assigned[i] = { ...assigned[i], player: pJ, score: U.roundTo(evI.score, 2), wrongFoot: evI.wrongFoot, compat: evI.compat };
+            assigned[j] = { ...assigned[j], player: pI, score: U.roundTo(evJ.score, 2), wrongFoot: evJ.wrongFoot, compat: evJ.compat };
+          }
+        }
+      }
+    }
+
     const xiClean = assigned.filter(Boolean);
     const gkScores = [];
     const defScores = [];
@@ -2390,8 +2445,11 @@
     const userCountry = String(opts.userCountry || '');
     const repLevel = U.safeInt(opts.repLevel, 3);
     const formList = Array.isArray(opts.formations) && opts.formations.length
-      ? opts.formations
+      ? [...opts.formations]
       : Object.keys(C.FORMATIONS).filter(fk => !(C.FORMATION_BUGS && C.FORMATION_BUGS[fk] && C.FORMATION_BUGS[fk].hasBug));
+    if (opts.activeFormationRaw && String(opts.activeFormationRaw).includes('~') && !formList.includes(opts.activeFormationRaw)) {
+      formList.push(opts.activeFormationRaw);
+    }
 
     let best = null;
     for (const fk of formList) {
@@ -2465,6 +2523,16 @@
     return {
       formation: best.formation,
       avgScore: best.xiRes.avgScore,
+      chemistry: best.xiRes.chemistry,
+      wrongFootCount: best.xiRes.wrongFootCount,
+      xiIds: (best.xiRes.xi || []).map(a => a.player.id),
+      xiSummary: (best.xiRes.xi || []).map(a => ({
+        id: a.player.id,
+        name: a.player.name,
+        slot: a.slot,
+        pos: a.player.pos,
+        force: a.player.force,
+      })),
       winPct: bestSim.winPct,
       drawPct: bestSim.drawPct,
       lossPct: bestSim.lossPct,

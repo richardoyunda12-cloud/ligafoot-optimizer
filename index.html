@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
-<title>LigaFoot Optimizer v8.7.0 — Web App &amp; PWA</title>
+<title>LigaFoot Optimizer v8.8.0 — Web App &amp; PWA</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="brand-ico">⚽</div>
         <div>
-          <h1>LigaFoot Optimizer <span class="c-green">v8.7.0 PWA</span></h1>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.8.0 PWA</span></h1>
           <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 (Bytecode v9) • Tanpa Upload</div>
         </div>
       </div>
@@ -165,7 +165,7 @@
         <div class="brand">
           <div class="brand-ico">⚽</div>
           <div>
-            <h1 id="hdr-title">LigaFoot Optimizer v8.7.0</h1>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.8.0</h1>
             <div class="sub" id="hdr-sub">Memuat data...</div>
           </div>
         </div>
@@ -175,7 +175,7 @@
           <button type="button" class="btn" onclick="openSearch()" title="Cari Cepat (Ctrl+K)">🔍<span class="btn-lbl-mob-hide"> Cari</span></button>
           <button type="button" class="btn" onclick="openGlossary()" title="Kamus Istilah">📖<span class="btn-lbl-mob-hide"> Kamus</span></button>
           <button class="btn" id="btn-density" onclick="toggleDensity()" title="Ganti kepadatan tampilan tabel &amp; kartu">↕️ Mode: Lega</button>
-          <span class="badge b-good" id="hdr-badge">v8.7.0 PWA</span>
+          <span class="badge b-good" id="hdr-badge">v8.8.0 PWA</span>
         </div>
       </div>
       <nav class="tabs" id="nav-tabs">
@@ -606,6 +606,13 @@
           <div id="t6-commercial" style="font-size:12px"></div>
         </div>
       </div>
+      <div class="card mt-12">
+        <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0">📅 Kalender Cashflow, Sponsor &amp; Kontrak 12 Bulan</h2>
+          <span id="t6-cal-summary" class="mono" style="font-size:11px"></span>
+        </div>
+        <div id="t6-calendar-12m" style="font-size:12px"></div>
+      </div>
     </div>
 
     <!-- Sub-tab 5B: Tiket & 6 Fase -->
@@ -628,6 +635,7 @@
         </div>
         <div id="t6-ticket-sim" class="grid g4"></div>
         <div id="t6-ticket-res" class="mt-12" style="font-size:12px"></div>
+        <div id="t6-preset-audit" class="mt-12" style="font-size:12px"></div>
         <div id="t6-tmb" class="mt-12" style="font-size:12px"></div>
       </div>
     </div>
@@ -665,6 +673,7 @@
   <section id="panel-t6" class="panel">
     <div class="subtabs" data-group="t6">
       <button type="button" class="subtab active" data-sub="t6-lg" onclick="goToView('t6','t6-lg')">🏆 Klasemen &amp; Histori</button>
+      <button type="button" class="subtab" data-sub="t6-tel" onclick="goToView('t6','t6-tel')">📊 Forensik Laga</button>
       <button type="button" class="subtab" data-sub="t6-calc" onclick="goToView('t6','t6-calc')">🧮 5 Kalkulator Engine</button>
       <button type="button" class="subtab" data-sub="t6-ext" onclick="goToView('t6','t6-ext')">🌍 Bosman, Timnas &amp; PWA</button>
     </div>
@@ -688,6 +697,11 @@
           <div class="tbl-wrap"><table id="t3-recent-tbl"></table></div>
         </div>
       </div>
+    </div>
+
+    <!-- Sub-tab 6T: Forensik MatchLog & Efektivitas Taktik -->
+    <div id="sub-t6-tel" class="subpanel">
+      <div id="t6-tel-wrap"></div>
     </div>
 
     <!-- Sub-tab 6B: 5 Kalkulator Engine (Terhubung ke Skuadmu!) -->
@@ -794,10 +808,10 @@
     <!-- Sub-tab 6C: Pra-Kontrak + Bosman Preview, Timnas & Manajemen PWA HP -->
     <div id="sub-t6-ext" class="subpanel">
       <div class="grid g2">
-        <div class="card">
+        <div class="card" style="grid-column: 1 / -1">
           <div id="t8-precontracts" style="font-size:12px"></div>
         </div>
-        <div class="card">
+        <div class="card" style="grid-column: 1 / -1">
           <div id="t8-nation" style="font-size:12px"></div>
         </div>
         <div class="card" style="grid-column: 1 / -1">

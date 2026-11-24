@@ -1,5 +1,69 @@
 // ==================== RENDER TAB 4: TRANSFER, SHORTLIST & AUTO-SCOUT (v8.2.3) ====================
 let scoutPageLimit = 80;
+let cartBenchOppId = 'AUTO_NEXT';
+
+function setCartBenchOpp(val) {
+  cartBenchOppId = val || 'AUTO_NEXT';
+  if (D) D._benchImpactCache = null;
+  renderCart();
+}
+
+function bTeamPlayerToSimPlayer(p) {
+  const pos = p.pos || 'MC';
+  return {
+    id: p.id,
+    name: p.name,
+    pos,
+    cat: EXACT_CAT[pos] ?? 3,
+    age: p.age || 21,
+    foot: p.foot || 'D',
+    nationality: p.nationality || '',
+    force: p.force || 25,
+    effForce: p.effForce || p.force || 25,
+    potential: p.potential || p.potCap || p.force || 25,
+    potCap: p.potCap || p.force || 25,
+    s1: p.s1 || '',
+    s2: p.s2 || '',
+    stackPct: p.stackPct || 0,
+    nonStack: Boolean(p.nonStack),
+    salary: p.salary || 0,
+    marketValue: p.marketValue || 0,
+    energy: p.energy ?? 100,
+    injured: Boolean(p.injured),
+    suspended: Boolean(p.suspended),
+    star: Boolean(p.star),
+    top: Boolean(p.top),
+    starAwarded: false,
+    integration: p.integration ?? 95,
+    rx: p.rx ?? 7,
+    mood: 'ok',
+    fineSlump: 0,
+  };
+}
+
+function toggleCartBIn(pid) {
+  if (!pid) return;
+  const list = (D.bTeamInfo && Array.isArray(D.bTeamInfo.roster)) ? D.bTeamInfo.roster : [];
+  if (cartBIn[pid]) {
+    const nm = cartBIn[pid].name || 'Pemain Tim B';
+    delete cartBIn[pid];
+    showToast(`Dilepas dari Simulasi Cart: ${nm}`);
+  } else {
+    const found = list.find(x => x.id === pid);
+    if (found) {
+      cartBIn[pid] = found;
+      showToast(`🅱️ ${found.name} masuk Simulasi Cart (Promosi 0€)!`);
+    }
+  }
+  renderTab7All();
+  if (typeof renderBTeamPanel === 'function') renderBTeamPanel();
+}
+
+function addBTeamSelectToCart() {
+  const sel = document.getElementById('t7-bteam-pick');
+  if (!sel || !sel.value) return;
+  toggleCartBIn(sel.value);
+}
 
 function isRecommendedSell(p) {
   if (p.injured) return false;
@@ -67,22 +131,60 @@ function scoutRowToSimPlayer(r) {
 function getBenchmarkMatchContext() {
   const Eng = window.LFEngine;
   if (!Eng || !Eng.tactics || typeof Eng.tactics.evaluateSquadImpact !== 'function') return null;
-  const fx = (D.upcoming && D.upcoming[0]) || null;
-  const oppName = fx ? fx.oppName : 'Rival Setara';
-  const cacheKey = `${(D.meta && D.meta.currentDate) || ''}_${oppName}_${(D.roster || []).length}`;
+  const fx0 = (D.upcoming && D.upcoming[0]) || null;
+  const simList = Array.isArray(D.simOpponents) ? D.simOpponents : [];
+  const strongestOpp = [...simList].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0] || null;
+
+  const buildOppPow = oppObj => {
+    const xiArr = (Array.isArray(oppObj.xiLite) && oppObj.xiLite.length)
+      ? oppObj.xiLite.map(row => ({ player: { pos: row[0] || 'MC', s1: row[1] || '', s2: row[2] || '', force: row[3] || 38 } }))
+      : (oppObj.stars || []).map(s => ({ player: { pos: s.pos || 'MC', s1: s.s1 || '', s2: s.s2 || '', force: s.force || 38 } }));
+    const oppXi = {
+      formation: oppObj.formation || '4-4-2',
+      avgScore: Number(oppObj.avgScore || 38),
+      sectors: oppObj.sectors || { GK: 38, DEF: 38, MID: 38, ATK: 38 },
+      xi: xiArr,
+    };
+    return Eng.tactics.computeEngineSectorPower(oppXi, oppXi.formation, {
+      isHome: false, crowdOver70: true, style: 'Balanced', marking: 'Heavy',
+    });
+  };
+
+  let oppName = fx0 ? fx0.oppName : 'Rival Setara';
+  let isHome = fx0 ? Boolean(fx0.isHome) : true;
+  let neutral = fx0 ? Boolean(fx0.neutral) : false;
+  let oppStyle = (fx0 && fx0.aiStyle) || 'Balanced';
+  let oppFocus = (fx0 && fx0.aiFocus) || 'Center';
+  let oppPow = fx0 && fx0.matchup && fx0.matchup.oppPow;
+
+  if (cartBenchOppId === 'STRONGEST_RIVAL' && strongestOpp) {
+    oppName = strongestOpp.name;
+    isHome = false;
+    neutral = false;
+    oppStyle = 'Balanced';
+    oppFocus = 'Center';
+    oppPow = buildOppPow(strongestOpp);
+  } else if (cartBenchOppId !== 'AUTO_NEXT') {
+    const picked = simList.find(o => o.id === cartBenchOppId);
+    if (picked) {
+      oppName = picked.name;
+      isHome = true;
+      neutral = false;
+      oppStyle = 'Balanced';
+      oppFocus = 'Center';
+      oppPow = buildOppPow(picked);
+    }
+  }
+
+  const cacheKey = `${(D.meta && D.meta.currentDate) || ''}_${cartBenchOppId}_${oppName}_${(D.roster || []).length}`;
   if (D._benchImpactCache && D._benchImpactCache.key === cacheKey) {
     return D._benchImpactCache.ctx;
   }
 
-  let oppPow = fx && fx.matchup && fx.matchup.oppPow;
   if (!oppPow) {
     const avg = Number((D.bestXi && D.bestXi.avgScore) || 35);
     oppPow = { GK: avg, DEF: avg * 0.75, MID: avg * 0.85, ATK: avg * 0.75, atkCenter: avg * 0.77, atkWings: avg * 0.75, shooterVal: avg };
   }
-  const isHome = fx ? Boolean(fx.isHome) : true;
-  const neutral = fx ? Boolean(fx.neutral) : false;
-  const oppStyle = (fx && fx.aiStyle) || 'Balanced';
-  const oppFocus = (fx && fx.aiFocus) || 'Center';
   const opts = {
     isHome,
     neutral,
@@ -91,9 +193,21 @@ function getBenchmarkMatchContext() {
     foreignCap: (D.meta && D.meta.foreignCap) || 7,
     userCountry: (D.meta && D.meta.country) || '',
     repLevel: (D.meta && D.meta.repLevel) !== undefined ? D.meta.repLevel : 3,
+    activeFormationRaw: (D.meta && D.meta.activeFormationRaw) || null,
   };
   const base = Eng.tactics.evaluateSquadImpact(D.roster || [], oppPow, opts);
-  const ctx = { oppName, isHome, neutral, oppPow, opts, base, fx };
+
+  let topRival = null;
+  if (strongestOpp && strongestOpp.name !== oppName) {
+    const rPow = buildOppPow(strongestOpp);
+    const rOpts = { ...opts, isHome: false, oppStyle: 'Balanced', oppFocus: 'Center' };
+    const rBase = Eng.tactics.evaluateSquadImpact(D.roster || [], rPow, rOpts);
+    if (rBase) {
+      topRival = { name: strongestOpp.name, oppPow: rPow, opts: rOpts, base: rBase };
+    }
+  }
+
+  const ctx = { oppName, isHome, neutral, oppPow, opts, base, fx: fx0, topRival };
   D._benchImpactCache = { key: cacheKey, ctx };
   return ctx;
 }
@@ -134,19 +248,27 @@ function getCartMetrics() {
     salDelta -= p.salary;
     if (hc && p.nationality && p.nationality !== hc) fDelta -= 1;
   });
-  const inList = Object.values(cartIn);
+  const inList = Object.values(cartIn || {});
   inList.forEach(r => {
     cashOut += getEffectiveBuyCost(r);
     salDelta += Math.round(r[12] * 0.95);
     if (hc && r[4] && r[4] !== hc) fDelta += 1;
+  });
+  const bInList = Object.values(cartBIn || {});
+  bInList.forEach(p => {
+    salDelta += (p.salary || 0);
+    if (hc && p.nationality && p.nationality !== hc) fDelta += 1;
   });
   const curForeign = D.roster.filter(p => hc && p.nationality && p.nationality !== hc).length;
   const projForeign = curForeign + fDelta;
   const projBudget = D.meta.budget + cashIn - cashOut;
   const buyingPower = D.meta.budget + cashIn;
   const outCount = Object.keys(cartOut).length;
-  const inCount = inList.length;
-  return { cashIn, cashOut, salDelta, fDelta, curForeign, projForeign, projBudget, buyingPower, inList, outCount, inCount };
+  const inCount = inList.length + bInList.length;
+  return {
+    cashIn, cashOut, salDelta, fDelta, curForeign, projForeign, projBudget, buyingPower,
+    inList, bInList, outCount, inCount, scoutInCount: inList.length, bInCount: bInList.length,
+  };
 }
 
 let _rosterCacheRef = null;
@@ -1232,13 +1354,15 @@ function clearCart() {
   cartOut = {};
   cartIn = {};
   cartInBosman = {};
+  cartBIn = {};
   renderTab7All();
+  if (typeof renderBTeamPanel === 'function') renderBTeamPanel();
   showToast('Keranjang transfer dikosongkan');
 }
 
 function renderCart() {
   const cm = getCartMetrics();
-  const { cashIn, cashOut, salDelta, projBudget, projForeign, inList, outCount, inCount } = cm;
+  const { cashIn, cashOut, salDelta, projBudget, projForeign, inList, bInList, outCount, inCount, scoutInCount, bInCount } = cm;
 
   document.getElementById('t7-cart-kpis').innerHTML = `
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
@@ -1249,7 +1373,7 @@ function renderCart() {
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
       <div class="kpi-lbl">Belanja Masuk</div>
       <div class="kpi-val mono c-amber">-${fmtM(cashOut)}</div>
-      <div class="kpi-sub">${inCount} target masuk</div>
+      <div class="kpi-sub">${scoutInCount} scout${bInCount ? ` + ${bInCount} Tim B (0€)` : ''}</div>
     </div>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px">
       <div class="kpi-lbl">Sisa Kas</div>
@@ -1262,13 +1386,13 @@ function renderCart() {
       <div class="kpi-sub">${projForeign > D.meta.foreignCap ? '⚠ Melebihi batas XI!' : '✓ Aman masuk XI'}</div>
     </div>`;
 
-  // Strip Proyeksi Dampak Skuad + Simulasi Dampak Cart ke Win% War Room (#48031)
+  // Strip Proyeksi Dampak Skuad + What-If Transfer & Squad Simulator (Tier 2 #7)
   const impEl = document.getElementById('t7-cart-impact');
   if (impEl) {
     const curSq = (D.roster || []).length;
     const projSq = curSq - outCount + inCount;
     const extraForeignWarn = (projForeign > D.meta.foreignCap)
-      ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual 1 pemain asing lama</span>`
+      ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual/rotasi ke Tim B</span>`
       : `<span class="badge b-good">✓ Komposisi Asing &amp; Kas Sehat</span>`;
     const ecoPlan = (window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeInstallmentPlan);
     const p6 = ecoPlan ? ecoPlan(cashOut, 6) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.03 / 6) };
@@ -1281,47 +1405,100 @@ function renderCart() {
       ? `<span class="badge ${p24.monthly <= instCapTot ? 'b-info' : 'b-warn'} mono" title="Simulasi OTA TRANSFER_INSTALLMENTS (DP 25% + bunga 6b +3% / 12b +8% / 24b +18%)">💳 Cicil DP 25% (${fmtM(p24.dp)}): 6b ${fmtM(p6.monthly)} · 12b ${fmtM(p12.monthly)} · 24b ${fmtM(p24.monthly)}/bln${estSurplus !== null ? ` (Sisa Net/bln: ${fmtM(estSurplus - p24.monthly - salDelta)})` : ''}</span>`
       : '';
 
+    const simList = Array.isArray(D.simOpponents) ? D.simOpponents : [];
+    const strongestOpp = [...simList].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0] || null;
+    const fx0Name = (D.upcoming && D.upcoming[0]) ? D.upcoming[0].oppName : 'Laga Berikutnya';
+    const bList = (D.bTeamInfo && D.bTeamInfo.hasBTeam && Array.isArray(D.bTeamInfo.roster)) ? D.bTeamInfo.roster : [];
+
+    const whatIfCtrlBar = `
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:7px 10px;font-size:11px">
+        <span class="c-muted">🎯 Benchmark Lawan:</span>
+        <select id="t7-bench-select" style="width:auto;max-width:240px;padding:4px 7px;font-size:11px" onchange="setCartBenchOpp(this.value)">
+          <option value="AUTO_NEXT" ${cartBenchOppId === 'AUTO_NEXT' ? 'selected' : ''}>Berikutnya: ${esc(fx0Name)}</option>
+          ${strongestOpp ? `<option value="STRONGEST_RIVAL" ${cartBenchOppId === 'STRONGEST_RIVAL' ? 'selected' : ''}>⭐ Rival Terkuat: ${esc(strongestOpp.name)} (Avg ${strongestOpp.avgScore})</option>` : ''}
+          ${simList.slice(0, 8).map(o => `<option value="${esc(o.id)}" ${cartBenchOppId === o.id ? 'selected' : ''}>${esc(o.name)} (Avg ${o.avgScore})</option>`).join('')}
+        </select>
+        ${bList.length ? `
+          <span class="c-muted" style="margin-left:auto">🅱️ Promosi ${esc(D.bTeamInfo.bTeamName || 'Tim B')}:</span>
+          <select id="t7-bteam-pick" style="width:auto;max-width:210px;padding:4px 7px;font-size:11px">
+            ${bList.map(bp => `<option value="${esc(bp.id)}" ${cartBIn[bp.id] ? 'disabled' : ''}>${esc(bp.name)} (${fmtPos(bp.pos)} F${bp.force}→${bp.potCap}${bp.isForeign ? ' · ASING' : ''})</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-sm btn-accent" onclick="addBTeamSelectToCart()">+ Promosi Tim B (0€)</button>
+        ` : ''}
+      </div>`;
+
     let matchImpactHtml = '';
     if (outCount > 0 || inCount > 0) {
       const ctx = getBenchmarkMatchContext();
       const Eng = window.LFEngine;
       if (ctx && ctx.base && Eng && Eng.tactics) {
-        const simRoster = (D.roster || []).filter(p => !cartOut[p.id]).concat(inList.map(scoutRowToSimPlayer));
+        const simRoster = (D.roster || [])
+          .filter(p => !cartOut[p.id])
+          .concat(inList.map(scoutRowToSimPlayer))
+          .concat(bInList.map(bTeamPlayerToSimPlayer));
         const aft = simRoster.length >= 11
           ? Eng.tactics.evaluateSquadImpact(simRoster, ctx.oppPow, ctx.opts)
           : null;
         if (aft) {
           const b = ctx.base;
+          const dAvg = +(aft.avgScore - b.avgScore).toFixed(2);
           const dWin = +(aft.winPct - b.winPct).toFixed(1);
           const dXPts = +(aft.xPts - b.xPts).toFixed(3);
           const dPoss = +(aft.possPct - b.possPct).toFixed(1);
+          const dGk = +(aft.uPow.GK - b.uPow.GK).toFixed(1);
           const dDef = +(aft.uPow.DEF - b.uPow.DEF).toFixed(1);
           const dMid = +(aft.uPow.MID - b.uPow.MID).toFixed(1);
           const dAtk = +(aft.uPow.ATK - b.uPow.ATK).toFixed(1);
+          const dChem = (aft.chemistry ?? 100) - (b.chemistry ?? 100);
+          const dWf = (aft.wrongFootCount ?? 0) - (b.wrongFootCount ?? 0);
           const fmtD = (v, suf = '') => `<span class="${v > 0 ? 'c-green' : (v < 0 ? 'c-red' : 'c-muted')}">(${v >= 0 ? '+' : ''}${v}${suf})</span>`;
           const netSpend = cashOut - cashIn;
           const effBadge = (dWin > 0 && cashOut > 0)
             ? `<span class="badge b-info mono">+${(dWin / (cashOut / 1e6)).toFixed(2)}% Win / 1M</span>`
             : (dWin > 0 && netSpend <= 0 ? '<span class="badge b-good">🆓 Gratis / Surplus Kas!</span>' : '');
+
+          let rivalLine = '';
+          if (ctx.topRival) {
+            const aftR = Eng.tactics.evaluateSquadImpact(simRoster, ctx.topRival.oppPow, ctx.topRival.opts);
+            if (aftR) {
+              const bR = ctx.topRival.base;
+              const dWR = +(aftR.winPct - bR.winPct).toFixed(1);
+              rivalLine = ` · vs ${esc(ctx.topRival.name)}: <b>${bR.winPct}% → ${aftR.winPct}%</b> ${fmtD(dWR, '%')}`;
+            }
+          }
+
+          const baseIds = new Set(Array.isArray(b.xiIds) ? b.xiIds : []);
+          const aftSummary = Array.isArray(aft.xiSummary) ? aft.xiSummary : [];
+          const aftIds = new Set(Array.isArray(aft.xiIds) ? aft.xiIds : []);
+          const xiAdded = aftSummary.filter(x => !baseIds.has(x.id));
+          const xiDropped = (Array.isArray(b.xiSummary) ? b.xiSummary : []).filter(x => !aftIds.has(x.id));
+          const xiDiffLine = (xiAdded.length || xiDropped.length) ? `
+            <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:10.5px">
+              ${xiAdded.length ? `<span class="c-green"><b>⬆ Masuk Starter XI:</b> ${xiAdded.map(x => `${esc(x.name)} (${fmtPos(x.slot)} F${x.force})`).join(', ')}</span>` : ''}
+              ${xiDropped.length ? ` <span class="c-amber">· <b>⬇ Tergeser:</b> ${xiDropped.map(x => `${esc(x.name)} (${fmtPos(x.slot)} F${x.force})`).join(', ')}</span>` : ''}
+            </div>` : '';
+
           matchImpactHtml = `
-            <div style="margin-top:8px;padding:9px 11px;background:var(--bg2);border:1px solid ${dXPts >= 0 ? 'rgba(16,185,129,.45)' : 'rgba(239,68,68,.45)'};border-radius:10px;font-size:11.5px">
+            <div id="t7-whatif-sim" style="margin-top:8px;padding:10px 12px;background:var(--bg2);border:1px solid ${dXPts >= 0 ? 'rgba(16,185,129,.45)' : 'rgba(239,68,68,.45)'};border-radius:10px;font-size:11.5px">
               <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
-                <div><b>🧪 Simulasi Dampak ke Match Engine vs ${esc(ctx.oppName)}</b> <span class="c-muted">(${ctx.isHome ? 'Kandang' : 'Tandang'})</span></div>
+                <div><b>🧪 What-If Simulator (Before → After) vs ${esc(ctx.oppName)}</b> <span class="c-muted">(${ctx.isHome ? 'Kandang' : 'Tandang'})</span></div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap">
                   <span class="badge ${dWin >= 0 ? 'b-good' : 'b-crit'} mono">Win ${b.winPct}% → ${aft.winPct}% ${dWin >= 0 ? '+' : ''}${dWin}%</span>
                   ${effBadge}
                 </div>
               </div>
               <div class="mono" style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px">
+                <span>Best XI Avg: <b>${b.avgScore} → ${aft.avgScore}</b> ${fmtD(dAvg)}</span>
                 <span>Formasi: <b>${esc(fmtForm(b.formation))} → ${esc(fmtForm(aft.formation))}</b></span>
                 <span>xPts: <b>${b.xPts} → ${aft.xPts}</b> ${fmtD(dXPts)}</span>
                 <span>xG: <b>${b.xGF}–${b.xGA} → ${aft.xGF}–${aft.xGA}</b></span>
-                <span>Ball: <b>${b.possPct}% → ${aft.possPct}%</b> ${fmtD(dPoss, '%')}</span>
+                <span>Ball: <b>${b.possPct}% → ${aft.possPct}%</b> ${fmtD(dPoss, '%')}${rivalLine}</span>
               </div>
-              <div class="mono c-muted" style="margin-top:4px;font-size:10.5px">
-                Sektor Engine: DEF <b>${b.uPow.DEF}→${aft.uPow.DEF}</b> ${fmtD(dDef)} · MID <b>${b.uPow.MID}→${aft.uPow.MID}</b> ${fmtD(dMid)} · ATK <b>${b.uPow.ATK}→${aft.uPow.ATK}</b> ${fmtD(dAtk)}
+              <div class="mono c-muted" style="margin-top:5px;font-size:10.5px">
+                Sektor: GK <b>${b.uPow.GK}→${aft.uPow.GK}</b> ${fmtD(dGk)} · DEF <b>${b.uPow.DEF}→${aft.uPow.DEF}</b> ${fmtD(dDef)} · MID <b>${b.uPow.MID}→${aft.uPow.MID}</b> ${fmtD(dMid)} · ATK <b>${b.uPow.ATK}→${aft.uPow.ATK}</b> ${fmtD(dAtk)} · Chem <b>${b.chemistry ?? 100}%→${aft.chemistry ?? 100}%</b> ${dChem !== 0 ? fmtD(dChem, '%') : ''} · WF <b>${b.wrongFootCount ?? 0}→${aft.wrongFootCount ?? 0}</b>${dWf !== 0 ? ` ${fmtD(dWf)}` : ''}
                 ${aft.falseNineTarget ? ` · <span class="c-sky">⚡ F9 Aktif: ${esc(aft.falseNineTarget.name)}</span>` : ''}
               </div>
+              ${xiDiffLine}
             </div>`;
         } else {
           matchImpactHtml = `<div class="alert-item CRITICAL mt-8"><span class="badge b-crit">SKUAD &lt;11</span><div>Sisa pemain di Cart kurang dari 11 — tambahkan target masuk sebelum menjual!</div></div>`;
@@ -1338,7 +1515,7 @@ function renderCart() {
         </div>
         ${extraForeignWarn}
         ${instHtml}
-      </div>${matchImpactHtml}`;
+      </div>${whatIfCtrlBar}${matchImpactHtml}`;
   }
 
   // Tabel Pemain Keluar dengan pencarian cepat
@@ -1364,25 +1541,42 @@ function renderCart() {
       </tr>`;
     }).join('') : '<tr><td colspan="4" class="c-muted">Pemain tidak ditemukan.</td></tr>') + `</tbody>`;
 
-  // Tabel Target Masuk dengan Toggle 🆓 0€ Bosman!
+  // Tabel Target Masuk (Scout + Promosi Tim B 0€)
+  const scoutRowsHtml = inList.map(r => {
+    const pid = r[19];
+    const pidJs = escJs(pid);
+    const canBos = isBosmanTarget(r);
+    const isBosOn = Boolean(canBos && cartInBosman[pid]);
+    const effCost = getEffectiveBuyCost(r);
+    return `<tr>
+      <td>
+        <a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')"><b>${esc(r[0])}</b></a>
+        <div class="c-muted mono" style="font-size:10px">${fmtPos(r[1])} · ${r[5]}→${r[7]} · ${r[15]}d</div>
+      </td>
+      <td class="mono ${isBosOn ? 'c-green' : 'c-amber'}"><b>${isBosOn ? '0€ (Gratis)' : fmtM(effCost)}</b></td>
+      <td>${canBos
+        ? `<button type="button" class="btn btn-sm ${isBosOn ? 'btn-green' : ''}" onclick="toggleCartInBosman('${pidJs}')">${isBosOn ? '🆓 0€ ON' : '0€ Off'}</button>`
+        : '<span class="c-muted">-</span>'}</td>
+      <td class="mono">${fmtM(Math.round(r[12] * 0.95))}</td>
+      <td><button type="button" class="btn btn-sm" onclick="toggleCartIn('${pidJs}')">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  const bRowsHtml = bInList.map(bp => {
+    const pidJs = escJs(bp.id);
+    return `<tr>
+      <td>
+        <a class="clickable-name" onclick="openPlayerDrawer('bteam','${pidJs}')"><b>${esc(bp.name)}</b></a> <span class="badge b-accent">TIM B</span>
+        <div class="c-muted mono" style="font-size:10px">${fmtPos(bp.pos)} · ${bp.force}→${bp.potCap} · ${bp.age}th</div>
+      </td>
+      <td class="mono c-green"><b>0€ (Promosi)</b></td>
+      <td><span class="badge b-good">GRATIS</span></td>
+      <td class="mono">${fmtM(bp.salary || 0)}</td>
+      <td><button type="button" class="btn btn-sm" onclick="toggleCartBIn('${pidJs}')">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  const allInRows = scoutRowsHtml + bRowsHtml;
   document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Biaya Beli</th><th>Bosman 0€</th><th>Gaji 3Th</th><th>Hapus</th></tr></thead><tbody>` +
-    (inList.length ? inList.map(r => {
-      const pid = r[19];
-      const pidJs = escJs(pid);
-      const canBos = isBosmanTarget(r);
-      const isBosOn = Boolean(canBos && cartInBosman[pid]);
-      const effCost = getEffectiveBuyCost(r);
-      return `<tr>
-        <td>
-          <a class="clickable-name" onclick="openPlayerDrawer('scout','${pidJs}')"><b>${esc(r[0])}</b></a>
-          <div class="c-muted mono" style="font-size:10px">${fmtPos(r[1])} · ${r[5]}→${r[7]} · ${r[15]}d</div>
-        </td>
-        <td class="mono ${isBosOn ? 'c-green' : 'c-amber'}"><b>${isBosOn ? '0€ (Gratis)' : fmtM(effCost)}</b></td>
-        <td>${canBos
-          ? `<button type="button" class="btn btn-sm ${isBosOn ? 'btn-green' : ''}" onclick="toggleCartInBosman('${pidJs}')">${isBosOn ? '🆓 0€ ON' : '0€ Off'}</button>`
-          : '<span class="c-muted">-</span>'}</td>
-        <td class="mono">${fmtM(Math.round(r[12] * 0.95))}</td>
-        <td><button type="button" class="btn btn-sm" onclick="toggleCartIn('${pidJs}')">✕</button></td>
-      </tr>`;
-    }).join('') : '<tr><td colspan="5" class="c-muted">Belum ada target. Klik "+ Beli", "🆓 + Bosman (0€)", atau "⇄ Swap" di Belanja Pintar / Pasar Global!</td></tr>') + `</tbody>`;
+    (allInRows || '<tr><td colspan="5" class="c-muted">Belum ada target. Klik "+ Beli", "🆓 + Bosman (0€)", "🅱️ + Promosi Tim B", atau "⇄ Swap"!</td></tr>') + `</tbody>`;
 }

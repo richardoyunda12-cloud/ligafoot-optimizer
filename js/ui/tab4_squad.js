@@ -470,6 +470,7 @@ function renderBTeamPanel() {
   </tr></thead><tbody>` + (filtered.length ? filtered.map(p => {
     const gap = Math.max(0, (p.potCap || p.force) - p.force);
     const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
+    const inBCart = Boolean(typeof cartBIn !== 'undefined' && cartBIn[p.id]);
     return `<tr>
       <td>
         <a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
@@ -483,7 +484,12 @@ function renderBTeamPanel() {
       <td class="mono col-hide-mob">${p.gamesPlayed || 0}g <span class="c-muted">(${p.seasonMinutes || 0}m · ${p.avgRating || '-'})</span></td>
       <td class="mono">${fmtM(p.salary)}</td>
       <td class="col-hide-mob"><span class="badge ${cB} mono">${p.contractDays}d</span></td>
-      <td><span class="badge ${esc(p.bCls || 'b-info')}">${esc(p.bAction || 'TAHAN')}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <span class="badge ${esc(p.bCls || 'b-info')}">${esc(p.bAction || 'TAHAN')}</span>
+          <button type="button" class="btn btn-sm ${inBCart ? 'btn-amber' : ''}" onclick="if(typeof toggleCartBIn==='function'){toggleCartBIn('${escJs(p.id)}');}" title="Uji promosi 0€ ke Simulasi Cart Tab 4D">${inBCart ? '✓Cart' : '+Cart'}</button>
+        </div>
+      </td>
     </tr>`;
   }).join('') : '<tr><td colspan="8" class="c-muted">Tidak ada pemain Tim B pada filter ini.</td></tr>') + `</tbody>`;
 }

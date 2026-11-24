@@ -249,7 +249,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.7.0 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.8.0 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -395,111 +395,438 @@ function renderTab8Extras() {
 
   document.getElementById('t8-precontracts').innerHTML = `<h3>📜 Pra-Kontrak / Bosman Aktif (${(D.preContracts || []).length})</h3>` + pcHtml + bosPreviewHtml;
 
-  // 5. Sub-Tab 6C: Status Timnas + Taktik + Best XI & Top-23 Pemain Dunia Berpaspor Sama
-  let natHtml = '<h3>🌍 Status Tim Nasional</h3>';
-  if (D.nation && D.nation.iso) {
-    const iso = String(D.nation.iso).toUpperCase();
-    const tac = D.nation.tactics || {};
-    const tacParts = [];
-    if (tac.formation) tacParts.push(`Formasi: <b>${esc(fmtForm(tac.formation))}</b>`);
-    if (tac.playStyle) tacParts.push(`Gaya: <b>${esc(tac.playStyle)}</b>`);
-    if (tac.marking) tacParts.push(`Marking: <b>${esc(tac.marking)}</b>`);
-    if (tac.attackFocus) tacParts.push(`Fokus: <b>${esc(tac.attackFocus)}</b>`);
-
-    const rosterIds = new Set((D.roster || []).map(p => p.id));
-    const scoutIds = new Set((D.scoutPool || []).map(r => r[19]));
-    const natMap = new Map();
-    (D.nation.lineup || []).forEach(p => {
-      const src = rosterIds.has(p.id) ? 'roster' : (scoutIds.has(p.id) ? 'scout' : '');
-      natMap.set(p.id, { ...p, _called: true, _src: src, _club: p.clubName || '-' });
-    });
-    (D.roster || []).forEach(p => {
-      if (String(p.nationality || '').toUpperCase() === iso) {
-        const prev = natMap.get(p.id);
-        natMap.set(p.id, { ...p, _called: !!(prev && prev._called), _src: 'roster', _club: D.meta.clubName || 'Klubmu' });
-      }
-    });
-    (D.scoutPool || []).forEach(r => {
-      if (String(r[4] || '').toUpperCase() === iso && !natMap.has(r[19])) {
-        const sp = typeof scoutRowToSimPlayer === 'function' ? scoutRowToSimPlayer(r) : {
-          id: r[19], name: r[0], pos: r[1], age: r[2], foot: r[3], nationality: r[4],
-          force: r[5], effForce: r[5], potCap: r[7], s1: r[8], s2: r[9], stackPct: r[10], nonStack: !!r[11], energy: 100,
-        };
-        natMap.set(r[19], { ...sp, _called: false, _src: 'scout', _club: r[16] || '-' });
-      }
-    });
-    const natPool = Array.from(natMap.values()).sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
-    const natMatches = Array.isArray(D.nation.upcomingMatches) ? D.nation.upcomingMatches : [];
-    const natPreviews = Array.isArray(D.nation.matchPreviews) ? D.nation.matchPreviews : [];
-
-    let bestNatXi = null;
-    const Eng = window.LFEngine;
-    if (natPool.length >= 11 && Eng && Eng.tactics && Eng.tactics.solveBestXi) {
-      for (const fk of ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2', '4-1-2-1-2']) {
-        if (!D.formations || !(fk in D.formations)) continue;
-        const rXi = Eng.tactics.solveBestXi(natPool, fk, 99, '');
-        if (!bestNatXi || rXi.avgScore > bestNatXi.avgScore) bestNatXi = { ...rXi, formation: fk };
-      }
-    }
-
-    const natMo = D.nation.matchOrdersAudit || null;
-    const natMoHtml = natMo ? `<div style="margin-bottom:8px;font-size:11px">Match Orders Timnas: <span class="badge ${natMo.issues && natMo.issues.length ? 'b-warn' : (natMo.activeCount > 0 ? 'b-good' : 'b-info')}">${natMo.activeCount}/${natMo.count} Aktif</span>${natMo.hasTiredSub ? ' <span class="badge b-good">Sub Lelah ✓</span>' : ''}${natMo.issues && natMo.issues.length ? ' ' + natMo.issues.map(it => `<span class="badge b-warn">${esc(it.title)}</span>`).join(' ') : ' <span class="c-muted">Aman tanpa bentrok ✓</span>'}</div>` : '';
-
-    natHtml += `
-      <div class="mb-8">Melatih Timnas: <span class="badge b-good">${esc(iso)}</span> · Skuad dipanggil: <b class="mono">${D.nation.squadCount || 0}</b> · Pool Terdeteksi: <b class="mono">${natPool.length}</b> pemain</div>
-      ${tacParts.length ? `<div class="c-muted mb-8" style="font-size:11.5px">Taktik Timnas: ${tacParts.join(' · ')}</div>` : ''}
-      ${natMoHtml}
-      ${natMatches.length ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:8px;font-size:11.5px">
-        <div><b>📅 Jadwal Timnas ${esc(iso)} Mendatang</b> <span class="c-muted" style="font-size:10.5px">(Dipisah dari War Room Klub)</span></div>
-        <div class="mono" style="font-size:11px;margin-top:4px">${natMatches.map(m => `<span class="badge b-info" style="margin:2px 4px 2px 0">${esc(m.compName)}${m.roundName ? ' · ' + esc(m.roundName) : ''}: <b>${esc(m.home)} vs ${esc(m.away)}</b> (Hari ${m.day})</span>`).join('')}</div>
-      </div>` : `<div class="c-muted mb-8" style="font-size:11px">Belum ada jadwal pertandingan Timnas mendatang di kalender aktif (jadwal Timnas dipisah dari War Room Klub).</div>`}
-      ${natPreviews.length ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;font-size:11.5px">
-        <div style="margin-bottom:6px"><b>⚔️ Mini War Room Timnas ${esc(iso)}</b> <span class="c-muted" style="font-size:10.5px">(Terisolasi penuh dari War Room Klub)</span></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px">
-          ${natPreviews.map(mp => {
-            const acN = mp.autoCond;
-            const nWIco = { clear: '☀️ Cerah', cloudy: '⛅ Berawan', rain: '🌧️ Hujan', heat: '🔥 Panas', snow: '❄️ Salju' };
-            const nRIco = { strict: '🟥 Ketat', normal: '⚖️ Normal', lenient: '🟩 Longgar', home: '🏠 Pro-Home' };
-            const nCondLine = acN ? `<div class="mono c-muted" style="font-size:10px;margin-top:2px">${nWIco[acN.weather] || acN.weather} · Wasit ${nRIco[acN.refStyle] || acN.refStyle} (${esc(acN.refCountry)}${acN.refName ? ' · ' + esc(acN.refName) : ''}) · 🕒 ${esc(acN.ko)}${acN.varOn ? ' · VAR ON' : ''}</div>` : '';
-            return `<div style="padding:7px 9px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
-            <div class="flex-between" style="gap:6px">
-              <b>${esc(mp.home)} vs ${esc(mp.away)}</b>
-              <span class="badge ${mp.winPct >= mp.lossPct ? 'b-good' : 'b-warn'} mono">Win ${mp.winPct}%</span>
-            </div>
-            <div class="c-muted mono" style="font-size:10.5px;margin:2px 0">${esc(mp.compName)}${mp.roundName ? ' · ' + esc(mp.roundName) : ''} · Hari ${mp.day}</div>
-            <div class="mono" style="font-size:10.5px">${esc(iso)} Avg <b>${mp.uAvg}</b> (${esc(fmtForm(mp.uForm))}) vs ${esc(mp.oppIso)} <b>${mp.oAvg}</b> (${esc(fmtForm(mp.oForm))})</div>
-            <div class="mono c-sky" style="font-size:10.5px;margin-top:2px">Saran: <b>${esc(mp.recStyle)}</b> · Fokus <b>${esc(mp.recFocus)}</b> <span class="c-muted">(W ${mp.winPct}% · D ${mp.drawPct}% · L ${mp.lossPct}%)</span></div>
-            ${nCondLine}
-            ${mp.oppStars && mp.oppStars.length ? `<div class="c-muted" style="font-size:10px;margin-top:2px">Ancaman ${esc(mp.oppIso)}: ${mp.oppStars.map(s => `${esc(s.name)}(${s.force})`).join(', ')}</div>` : ''}
-          </div>`;
-          }).join('')}
-        </div>
-      </div>` : ''}
-      ${bestNatXi ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:8px;font-size:11.5px">
-        <div><b>🏆 Rekomendasi Best XI Timnas ${esc(iso)}:</b> <span class="badge b-good mono">${esc(fmtForm(bestNatXi.formation))} · Avg ${bestNatXi.avgScore}</span></div>
-        <div class="c-muted mono" style="font-size:10.5px;margin-top:4px">${bestNatXi.xi.map(x => `${fmtPos(x.slot)}:${x.player.name}(${x.player.force})`).join(' · ')}</div>
-      </div>` : ''}
-      <div style="border-top:1px solid var(--border);padding-top:8px">
-        <b>Skuad Timnas & Top Pemain Berpaspor ${esc(iso)}:</b>
-        <div class="tbl-wrap tbl-sticky mt-8" style="max-height:320px;overflow-y:auto"><table>
-          <thead><tr><th>Pemain</th><th>Pos</th><th>Usia</th><th>Force</th><th>Skill Stack</th><th>Klub</th></tr></thead>
-          <tbody>${natPool.slice(0, 26).map(p => `<tr>
-            <td>${p._src ? `<a class="clickable-name" onclick="openPlayerDrawer('${p._src}','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>` : `<b>${esc(p.name)}</b>`}${p._called ? ' <span class="badge b-info">DIPANGGIL</span>' : ''}${p._src === 'roster' ? ' <span class="badge b-good">KLUBMU</span>' : ''}</td>
-            <td class="mono"><b>${fmtPos(p.pos)}</b></td>
-            <td class="mono">${p.age}</td>
-            <td class="mono"><b class="c-green">${p.force}</b></td>
-            <td><span class="badge ${p.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct || 0}%)</span></td>
-            <td class="c-muted">${esc(p._club)}</td>
-          </tr>`).join('') || '<tr><td colspan="6" class="c-muted">Belum ada pemain berpaspor ' + esc(iso) + ' terdeteksi.</td></tr>'}</tbody>
-        </table></div>
-      </div>`;
-  } else {
-    natHtml += '<div class="c-muted">Saat ini tidak sedang melatih tim nasional.</div>';
-  }
-  document.getElementById('t8-nation').innerHTML = natHtml;
+  // 5. Sub-Tab 6C: Status Timnas + Interactive War Room + Call-Up Optimizer
+  renderNationSection();
 
   // 6. Sub-Tab 6C: PWA Storage & Backup Manager
   renderPwaManager();
+}
+
+// ==================== SUB-TAB 6T: FORENSIK MATCHLOG (TIER 2 #5) ====================
+let telScope = 'all';
+
+function setTelScope(sc) {
+  telScope = sc === 'season' ? 'season' : 'all';
+  renderMatchTelemetry();
+}
+
+function renderMatchTelemetry() {
+  const wrap = document.getElementById('t6-tel-wrap');
+  if (!wrap) return;
+  const mt = D.matchTelemetry || null;
+  if (!mt || !mt.all || !mt.all.games) {
+    wrap.innerHTML = `<div class="card"><div class="c-muted">Belum ada catatan <code>matchLog</code> yang terhubung dengan klub ini.</div></div>`;
+    return;
+  }
+
+  const sc = (telScope === 'season' && mt.season && mt.season.games > 0) ? mt.season : mt.all;
+  const hasSeason = Boolean(mt.season && mt.season.games > 0);
+  const maxB = Math.max(1, ...((sc.minuteBuckets || []).map(b => Math.max(b.gf, b.ga))));
+  const ph = sc.phases || { h1: { gf: 0, ga: 0 }, mid2: { gf: 0, ga: 0 }, orderZone: { gf: 0, ga: 0 }, lateShareGf: 0, lateShareGa: 0 };
+
+  const formRows = (sc.byFormation || []).map(f => {
+    const canOpen = (D.formations && f.formation in D.formations) || String(f.formation || '').includes('~');
+    const attr = canOpen ? `style="cursor:pointer" onclick="openFormInTab3('${escJs(f.formation)}',false)" title="Klik → Buka di Lapangan Tab 3"` : '';
+    const wCls = f.winPct >= 65 ? 'c-green' : (f.winPct >= 45 ? 'c-amber' : 'c-red');
+    return `<tr ${attr}>
+      <td><b>${esc(fmtForm(f.formation))}</b>${String(f.formation).includes('~') ? ' <span class="badge b-accent">CUSTOM</span>' : ''}</td>
+      <td class="mono">${f.games}</td>
+      <td class="mono">${f.w}-${f.d}-${f.l}</td>
+      <td class="mono ${wCls}"><b>${f.winPct}%</b></td>
+      <td class="mono">${f.ppg}</td>
+      <td class="mono col-hide-mob">${f.avgPos}%</td>
+      <td class="mono">${f.gfPg}–${f.gaPg}</td>
+    </tr>`;
+  }).join('');
+
+  const oppRows = (sc.vsOppFormation || []).map(f => {
+    const wCls = f.winPct >= 65 ? 'c-green' : (f.winPct >= 45 ? 'c-amber' : 'c-red');
+    return `<tr>
+      <td><b>${esc(fmtForm(f.oppForm))}</b></td>
+      <td class="mono">${f.games}</td>
+      <td class="mono">${f.w}-${f.d}-${f.l}</td>
+      <td class="mono ${wCls}"><b>${f.winPct}%</b></td>
+      <td class="mono">${f.ppg}</td>
+      <td class="mono">${f.gfPg}–${f.gaPg}</td>
+    </tr>`;
+  }).join('');
+
+  const pt = sc.playerTelemetry || { teamAvgRating: 6.5, overperformers: [], supersubs: [], underperformers: [] };
+  const pRowHtml = (p, metricHtml) => `<div class="bosman-mini-row">
+    <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      ${p.id ? `<a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>` : `<b>${esc(p.name)}</b>`}
+      <span class="c-muted mono" style="font-size:10.5px">(${fmtPos(p.pos)}${p.force ? ' F' + p.force : ''} · ${p.apps}g)</span>
+    </div>
+    <div class="mono" style="flex-shrink:0">${metricHtml}</div>
+  </div>`;
+
+  wrap.innerHTML = `
+    <div class="card mb-8">
+      <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+        <div>
+          <h2 style="margin:0">📊 Forensik &amp; Telemetri Pasca-Laga (<code>matchLog</code>)</h2>
+          <div class="kpi-sub">Audit efektivitas formasi nyata, x-minute Match Orders, &amp; konversi peluang dari histori ${mt.all.games} pertandingan.</div>
+        </div>
+        <div class="t3-seg-2">
+          <button type="button" class="btn btn-sm ${telScope === 'all' ? 'btn-green' : ''}" onclick="setTelScope('all')">Semua (${mt.all.games} Laga)</button>
+          <button type="button" class="btn btn-sm ${telScope === 'season' ? 'btn-green' : ''}" ${hasSeason ? '' : 'disabled'} onclick="setTelScope('season')">Musim M${mt.currentSeason} (${mt.season ? mt.season.games : 0})</button>
+        </div>
+      </div>
+
+      <div class="grid g4 mb-8">
+        <div class="kpi">
+          <span class="kpi-lbl">Rekor &amp; Poin/Laga</span>
+          <span class="kpi-val c-green mono">${sc.winPct}% Win</span>
+          <span class="kpi-sub mono">${sc.wins}M-${sc.draws}S-${sc.losses}K · <b>${sc.ppg} PPG</b> · SG ${sc.gd >= 0 ? '+' : ''}${sc.gd}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-lbl">Dominasi &amp; Akurasi</span>
+          <span class="kpi-val c-sky mono">${sc.avgPos}% Pos</span>
+          <span class="kpi-sub mono">Tembakan ${sc.avgShotsFor} vs ${sc.avgShotsAg} · Pass ${sc.avgPassFor}%</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-lbl">Konversi Peluang</span>
+          <span class="kpi-val c-green mono">${sc.convOtPct}% Gol/OT</span>
+          <span class="kpi-sub mono">${sc.shotAccPct}% OT · ${sc.convShotPct}%/Shot · CS ${sc.cleanSheets}x</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-lbl">Zona Order (66–90+')</span>
+          <span class="kpi-val ${ph.orderZone.gf >= ph.orderZone.ga ? 'c-green' : 'c-red'} mono">${ph.orderZone.gf}–${ph.orderZone.ga}</span>
+          <span class="kpi-sub mono">Gol ${ph.lateShareGf}% · Kebobolan ${ph.lateShareGa}% · K${sc.yellows}/M${sc.reds}</span>
+        </div>
+      </div>
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+        <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+          <b>⏱️ Timeline Menit Gol vs Kebobolan &amp; Audit Match Orders</b>
+          <div class="mono" style="font-size:11px;display:flex;gap:8px;flex-wrap:wrap">
+            <span>B1 (0–45'): <b class="c-green">${ph.h1.gf}</b>–<b class="c-red">${ph.h1.ga}</b></span>
+            <span>B2 Awal (46–65'): <b class="c-green">${ph.mid2.gf}</b>–<b class="c-red">${ph.mid2.ga}</b></span>
+            <span>Order Zone (66–90+'): <b class="c-green">${ph.orderZone.gf}</b>–<b class="c-red">${ph.orderZone.ga}</b></span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">
+          ${(sc.minuteBuckets || []).map(b => {
+            const wF = Math.round((b.gf / maxB) * 100);
+            const wA = Math.round((b.ga / maxB) * 100);
+            return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-size:11px">
+              <div class="flex-between mono mb-8" style="margin-bottom:4px">
+                <b>${esc(b.label)}</b>
+                <span><b class="c-green">${b.gf}</b>:<b class="c-red">${b.ga}</b></span>
+              </div>
+              <div class="mini-bar-bg" style="height:6px;margin-bottom:4px"><div class="mini-bar-fill" style="width:${wF}%;background:var(--green)"></div></div>
+              <div class="mini-bar-bg" style="height:6px"><div class="mini-bar-fill" style="width:${wA}%;background:var(--red)"></div></div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="c-muted" style="font-size:11.5px;margin-top:8px">💡 <b>Evaluasi Match Orders:</b> ${esc(sc.orderVerdict)}</div>
+      </div>
+
+      <div class="grid g2 mb-8">
+        <div>
+          <h3>⚔️ Efektivitas Formasi Sendiri (Klik → Lapangan)</h3>
+          <div class="tbl-wrap tbl-sticky" style="max-height:310px;overflow-y:auto">
+            <table>
+              <thead><tr><th>Formasi</th><th>M</th><th>M-S-K</th><th>Win%</th><th>PPG</th><th class="col-hide-mob">Pos%</th><th>Gol/Kbl</th></tr></thead>
+              <tbody>${formRows || '<tr><td colspan="7" class="c-muted">Belum ada data.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3>🛡️ Rekor Melawan Formasi Lawan</h3>
+          <div class="tbl-wrap tbl-sticky" style="max-height:310px;overflow-y:auto">
+            <table>
+              <thead><tr><th>Formasi Lawan</th><th>M</th><th>M-S-K</th><th>Win%</th><th>PPG</th><th>Gol/Kbl</th></tr></thead>
+              <tbody>${oppRows || '<tr><td colspan="6" class="c-muted">Belum ada data.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid g3">
+        <div style="background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:10px;padding:9px 11px">
+          <h3 class="c-green" style="margin-top:0">🔥 Overperformers (Avg Tim ${pt.teamAvgRating})</h3>
+          ${pt.overperformers.length ? pt.overperformers.map(p => pRowHtml(p, `<span class="badge b-good">${p.avgRating}</span> · ${p.goals}G`)).join('') : '<div class="c-muted">Belum cukup laga.</div>'}
+        </div>
+        <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:10px;padding:9px 11px">
+          <h3 class="c-sky" style="margin-top:0">⚡ Top Supersubs (Rating Sub)</h3>
+          ${pt.supersubs.length ? pt.supersubs.map(p => pRowHtml(p, `<span class="badge b-info">${p.subAvgRating}</span> · ${p.subs} sub`)).join('') : '<div class="c-muted">Belum ada catatan supersub.</div>'}
+        </div>
+        <div style="background:var(--bg2);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:9px 11px">
+          <h3 class="c-amber" style="margin-top:0">⚠️ Performa Di Bawah Rata2 Tim</h3>
+          ${pt.underperformers.length ? pt.underperformers.map(p => pRowHtml(p, `<span class="badge b-warn">${p.avgRating}</span>${p.cards ? ` · ${p.cards}K` : ''}`)).join('') : '<div class="c-muted">Semua pemain inti tampil di atas rata-rata ✓</div>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ==================== SUB-TAB 6C: TIMNAS CALL-UP OPTIMIZER & WAR ROOM INTERAKTIF ====================
+let natWarState = {
+  matchIdx: 0,
+  squadMode: 'called',
+  formation: 'AUTO',
+  style: 'AUTO',
+  focus: 'AUTO',
+  marking: 'Heavy',
+  weather: 'AUTO',
+  ref: 'AUTO',
+  poolFilter: 'ALL',
+};
+
+function setNatWarOpt(key, val) {
+  if (key === 'matchIdx') {
+    natWarState.matchIdx = Number(val) || 0;
+    natWarState.formation = 'AUTO';
+    natWarState.style = 'AUTO';
+    natWarState.focus = 'AUTO';
+    natWarState.weather = 'AUTO';
+    natWarState.ref = 'AUTO';
+  } else {
+    natWarState[key] = val;
+  }
+  renderNationSection();
+}
+
+function resetNatWarCond() {
+  natWarState.weather = 'AUTO';
+  natWarState.ref = 'AUTO';
+  natWarState.formation = 'AUTO';
+  natWarState.style = 'AUTO';
+  natWarState.focus = 'AUTO';
+  renderNationSection();
+}
+
+function renderNationSection() {
+  const container = document.getElementById('t8-nation');
+  if (!container) return;
+  if (!D.nation || !D.nation.iso) {
+    container.innerHTML = '<h3>🌍 Status Tim Nasional</h3><div class="c-muted">Saat ini tidak sedang melatih tim nasional.</div>';
+    return;
+  }
+
+  const iso = String(D.nation.iso).toUpperCase();
+  const tac = D.nation.tactics || {};
+  const tacParts = [];
+  if (tac.formation) tacParts.push(`Formasi: <b>${esc(fmtForm(tac.formation))}</b>`);
+  if (tac.playStyle) tacParts.push(`Gaya: <b>${esc(tac.playStyle)}</b>`);
+  if (tac.marking) tacParts.push(`Marking: <b>${esc(tac.marking)}</b>`);
+  if (tac.attackFocus) tacParts.push(`Fokus: <b>${esc(tac.attackFocus)}</b>`);
+
+  const natPoolAll = Array.isArray(D.nation.natPool) ? D.nation.natPool : [];
+  const audit = D.nation.callupAudit || null;
+  const swaps = (audit && Array.isArray(audit.swaps)) ? audit.swaps : [];
+  const bugBanner = (audit && audit.hasBug343)
+    ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">BUG 3-4-3 (#34992)</span><div><b>Formasi Timnas aktif 3-4-3 membuang slot penyerang ke-11 ke sektor 'X' (-33% ATK)!</b> Segera ganti formasi Timnas di game ke <b>${esc(fmtForm(audit.optForm || '3-5-2'))}</b> atau <b>4-3-3</b>!</div></div>`
+    : '';
+
+  const natMatches = Array.isArray(D.nation.upcomingMatches) ? D.nation.upcomingMatches : [];
+  const natPreviews = Array.isArray(D.nation.matchPreviews) ? D.nation.matchPreviews : [];
+  const natMo = D.nation.matchOrdersAudit || null;
+  const natMoHtml = natMo ? `<div style="margin-bottom:8px;font-size:11px">Match Orders Timnas: <span class="badge ${natMo.issues && natMo.issues.length ? 'b-warn' : (natMo.activeCount > 0 ? 'b-good' : 'b-info')}">${natMo.activeCount}/${natMo.count} Aktif</span>${natMo.hasTiredSub ? ' <span class="badge b-good">Sub Lelah ✓</span>' : ''}${natMo.issues && natMo.issues.length ? ' ' + natMo.issues.map(it => `<span class="badge b-warn">${esc(it.title)}</span>`).join(' ') : ' <span class="c-muted">Aman tanpa bentrok ✓</span>'}</div>` : '';
+
+  // 1) Interactive Timnas War Room Simulation
+  let warRoomHtml = '';
+  const Tac = (window.LFEngine && LFEngine.tactics) ? LFEngine.tactics : null;
+  if (natPreviews.length && Tac) {
+    if (natWarState.matchIdx >= natPreviews.length) natWarState.matchIdx = 0;
+    const mp = natPreviews[natWarState.matchIdx];
+    const acN = mp.autoCond || {};
+    const effWeather = natWarState.weather === 'AUTO' ? (acN.weather || 'clear') : natWarState.weather;
+    const effRef = natWarState.ref === 'AUTO' ? (acN.refStyle || 'normal') : natWarState.ref;
+    const condF = Tac.resolveMatchCondFactors
+      ? Tac.resolveMatchCondFactors({ weather: effWeather, refStyle: effRef, alt: acN.alt || 0, altHit: acN.altHit || 0, varOn: acN.varOn }, mp.isHome, Boolean(mp.neutral))
+      : { weather: effWeather, refStyle: effRef, altHit: 0, missMul: 1, userEnergyMul: 1, oppEnergyMul: 1, userCardMul: 1, oppCardMul: 1 };
+
+    const calledOnly = natPoolAll.filter(p => p.called && !p.injured && !p.suspended);
+    const outSwapIds = new Set(swaps.map(s => s.out.id));
+    const optimalSquad = natPoolAll.filter(p => p.called && !outSwapIds.has(p.id)).concat(swaps.map(s => s.in));
+    const simPool = (natWarState.squadMode === 'optimal' && optimalSquad.length >= 11)
+      ? optimalSquad
+      : (calledOnly.length >= 11 ? calledOnly : natPoolAll);
+
+    const validForms = ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2', '4-1-2-1-2', '3-4-2-1']
+      .filter(f => D.formations && (f in D.formations));
+    const oppPool = (Array.isArray(mp.oppPoolSlim) && mp.oppPoolSlim.length >= 11) ? mp.oppPoolSlim : [];
+    const oppXi = oppPool.length >= 11 ? Tac.solveBestXi(oppPool, mp.oForm || '4-3-3', 99, '') : null;
+    const oPowLive = oppXi
+      ? Tac.computeEngineSectorPower(oppXi, mp.oForm || '4-3-3', {
+          isHome: !mp.isHome, neutral: Boolean(mp.neutral), style: 'Balanced', marking: 'Heavy',
+          altHit: condF.altHit, energyMul: condF.oppEnergyMul, cardMul: condF.oppCardMul,
+        })
+      : mp.oPow;
+
+    const tryForms = natWarState.formation === 'AUTO' ? validForms : [natWarState.formation];
+    const tryStyles = natWarState.style === 'AUTO' ? ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'] : [natWarState.style];
+    const tryFocuses = natWarState.focus === 'AUTO' ? ['Center', 'Wings'] : [natWarState.focus];
+    const effMark = natWarState.marking || 'Heavy';
+
+    let bestNatSim = null;
+    for (const fk of tryForms) {
+      const xi = Tac.solveBestXi(simPool, fk, 99, '');
+      for (const stTry of tryStyles) {
+        const uPow = Tac.computeEngineSectorPower(xi, fk, {
+          isHome: mp.isHome, neutral: Boolean(mp.neutral), style: stTry, marking: effMark,
+          altHit: condF.altHit, energyMul: condF.userEnergyMul, cardMul: condF.userCardMul,
+        });
+        for (const fcTry of tryFocuses) {
+          const sim = Tac.simulateMatchExpectation(uPow, oPowLive, {
+            isHome: mp.isHome, neutral: Boolean(mp.neutral), style: stTry, focus: fcTry,
+            oppStyle: 'Balanced', oppFocus: 'Center', missMul: condF.missMul,
+          });
+          if (!bestNatSim || sim.xPts > bestNatSim.sim.xPts) {
+            bestNatSim = { fk, xi, stTry, fcTry, uPow: { ...uPow, ATK: sim.effAtkUser }, sim };
+          }
+        }
+      }
+    }
+
+    const nWIco = { clear: '☀️ Cerah', cloudy: '⛅ Berawan', rain: '🌧️ Hujan', heat: '🔥 Panas', snow: '❄️ Salju' };
+    const nRIco = { strict: '🟥 Ketat', normal: '⚖️ Normal', lenient: '🟩 Longgar', home: '🏠 Pro-Home' };
+    const cleanUPow = bestNatSim ? Tac.computeEngineSectorPower(bestNatSim.xi, bestNatSim.fk, { isHome: mp.isHome, neutral: Boolean(mp.neutral), style: bestNatSim.stTry, marking: effMark }) : null;
+    const cleanOPow = oppXi ? Tac.computeEngineSectorPower(oppXi, mp.oForm || '4-3-3', { isHome: !mp.isHome, neutral: Boolean(mp.neutral), style: 'Balanced', marking: 'Heavy' }) : mp.oPow;
+    const cleanSim = (cleanUPow && bestNatSim)
+      ? Tac.simulateMatchExpectation(cleanUPow, cleanOPow, { isHome: mp.isHome, neutral: Boolean(mp.neutral), style: bestNatSim.stTry, focus: bestNatSim.fcTry, oppStyle: 'Balanced', oppFocus: 'Center', missMul: 1.0 })
+      : null;
+    const dCondWin = (bestNatSim && cleanSim) ? +(bestNatSim.sim.winPct - cleanSim.winPct).toFixed(1) : 0;
+
+    warRoomHtml = bestNatSim ? `
+      <div id="nat-warroom-box" style="margin-bottom:12px;padding:10px 12px;background:var(--bg2);border:1px solid rgba(168,85,247,.45);border-radius:10px">
+        <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+          <div>
+            <b>⚔️ War Room Timnas ${esc(iso)} Interaktif</b>
+            <span class="c-muted" style="font-size:10.5px">(Simulasi Live vs ${esc(mp.oppIso)})</span>
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            ${natPreviews.map((mItem, idx) => `<button type="button" class="btn btn-sm ${natWarState.matchIdx === idx ? 'btn-green' : ''}" onclick="setNatWarOpt('matchIdx',${idx})">${esc(mItem.home)} vs ${esc(mItem.away)}</button>`).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;align-items:center">
+          <div class="t3-seg-2">
+            <button type="button" class="btn btn-sm ${natWarState.squadMode === 'called' ? 'btn-green' : ''}" onclick="setNatWarOpt('squadMode','called')">25 Dipanggil</button>
+            <button type="button" class="btn btn-sm ${natWarState.squadMode === 'optimal' ? 'btn-green' : ''}" onclick="setNatWarOpt('squadMode','optimal')">✨ Optimal Call-Up</button>
+          </div>
+          <select id="nat-wr-form" style="width:auto;padding:4px 7px;font-size:11px" onchange="setNatWarOpt('formation',this.value)">
+            <option value="AUTO" ${natWarState.formation === 'AUTO' ? 'selected' : ''}>Formasi: AUTO</option>
+            ${validForms.map(fk => `<option value="${fk}" ${natWarState.formation === fk ? 'selected' : ''}>${fmtForm(fk)}</option>`).join('')}
+          </select>
+          <select id="nat-wr-style" style="width:auto;padding:4px 7px;font-size:11px" onchange="setNatWarOpt('style',this.value)">
+            <option value="AUTO" ${natWarState.style === 'AUTO' ? 'selected' : ''}>Gaya: AUTO</option>
+            ${['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'].map(st => `<option value="${st}" ${natWarState.style === st ? 'selected' : ''}>${st}</option>`).join('')}
+          </select>
+          <select id="nat-wr-focus" style="width:auto;padding:4px 7px;font-size:11px" onchange="setNatWarOpt('focus',this.value)">
+            <option value="AUTO" ${natWarState.focus === 'AUTO' ? 'selected' : ''}>Fokus: AUTO</option>
+            <option value="Center" ${natWarState.focus === 'Center' ? 'selected' : ''}>Center</option>
+            <option value="Wings" ${natWarState.focus === 'Wings' ? 'selected' : ''}>Wings</option>
+          </select>
+          <select id="nat-wr-mark" style="width:auto;padding:4px 7px;font-size:11px" onchange="setNatWarOpt('marking',this.value)">
+            <option value="Light" ${natWarState.marking === 'Light' ? 'selected' : ''}>Mark: Light</option>
+            <option value="Heavy" ${natWarState.marking === 'Heavy' ? 'selected' : ''}>Mark: Heavy</option>
+            <option value="Very Heavy" ${natWarState.marking === 'Very Heavy' ? 'selected' : ''}>Mark: Very Heavy</option>
+          </select>
+          <select id="nat-wr-weather" style="width:auto;padding:4px 7px;font-size:11px" onchange="setNatWarOpt('weather',this.value)">
+            <option value="AUTO" ${natWarState.weather === 'AUTO' ? 'selected' : ''}>Cuaca: Auto (${nWIco[acN.weather] || acN.weather || 'Cerah'})</option>
+            ${Object.entries(nWIco).map(([k, lbl]) => `<option value="${k}" ${natWarState.weather === k ? 'selected' : ''}>${lbl}</option>`).join('')}
+          </select>
+          <select id="nat-wr-ref" style="width:auto;padding:4px 7px;font-size:11px" onchange="setNatWarOpt('ref',this.value)">
+            <option value="AUTO" ${natWarState.ref === 'AUTO' ? 'selected' : ''}>Wasit: Auto (${nRIco[acN.refStyle] || acN.refStyle || 'Normal'})</option>
+            ${Object.entries(nRIco).map(([k, lbl]) => `<option value="${k}" ${natWarState.ref === k ? 'selected' : ''}>${lbl}</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-sm" onclick="resetNatWarCond()">↺ Reset</button>
+        </div>
+
+        <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+          <div style="font-size:12px">
+            <b>${esc(mp.home)} vs ${esc(mp.away)}</b> · <span class="c-muted">${esc(mp.compName)}${mp.roundName ? ' · ' + esc(mp.roundName) : ''} (Hari ${mp.day})</span>
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <span class="badge b-good mono">${esc(fmtForm(bestNatSim.fk))} · Avg ${bestNatSim.xi.avgScore}</span>
+            <span id="nat-wr-win-badge" class="badge ${bestNatSim.sim.winPct >= bestNatSim.sim.lossPct ? 'b-good' : 'b-warn'} mono">${bestNatSim.sim.winPct}% Win · ${bestNatSim.sim.drawPct}% D · ${bestNatSim.sim.lossPct}% L</span>
+            <span class="badge b-info mono">${esc(bestNatSim.stTry)} · ${esc(bestNatSim.fcTry)} · ${esc(effMark)}</span>
+          </div>
+        </div>
+
+        ${typeof renderH2HBars === 'function' ? renderH2HBars(bestNatSim.uPow, oPowLive) : ''}
+
+        <div style="margin-top:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:11px">
+          <span class="mono">xG <b class="c-green">${bestNatSim.sim.xGF}</b>–<b class="c-red">${bestNatSim.sim.xGA}</b> · Ball <b>${bestNatSim.sim.possPct}%</b> · xPts <b>${bestNatSim.sim.xPts}</b></span>
+          <span class="mono c-muted">${nWIco[effWeather] || effWeather} · ${nRIco[effRef] || effRef}${acN.alt >= 2000 ? ` · ⛰️ ${acN.alt}m` : ''}${acN.varOn ? ' · VAR ON' : ''}${Math.abs(dCondWin) >= 0.1 ? ` · Kondisi ${dCondWin >= 0 ? '+' : ''}${dCondWin}% W` : ''}</span>
+        </div>
+
+        <details class="wr-xi-peek mt-8">
+          <summary>👥 11 Starter Timnas (${esc(fmtForm(bestNatSim.fk))} · ${natWarState.squadMode === 'optimal' ? 'Optimal Call-Up' : '25 Dipanggil'})</summary>
+          <div class="wr-xi-grid">${bestNatSim.xi.xi.map(a => {
+            const p = a.player;
+            const srcAttr = p.src ? `onclick="openPlayerDrawer('${p.src}','${escJs(p.id)}')"` : '';
+            return `<div class="wr-xi-chip" ${srcAttr}><span><b class="mono c-sky">${fmtPos(a.slot)}</b> ${esc(p.name)}</span><b class="mono c-green">${p.force}</b></div>`;
+          }).join('')}</div>
+        </details>
+      </div>` : '';
+  }
+
+  // 2) Call-Up Optimizer Section
+  let callupHtml = '';
+  if (audit) {
+    callupHtml = `
+      <div id="nat-callup-audit" style="margin-bottom:12px;padding:10px 12px;background:var(--bg2);border:1px solid rgba(16,185,129,.4);border-radius:10px">
+        <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+          <div>
+            <b>📣 Call-Up Optimizer Timnas ${esc(iso)}</b>
+            <span class="c-muted" style="font-size:10.5px">(Bandingkan 25 dipanggil vs ${audit.poolCount || natPoolAll.length} pemain berpaspor ${esc(iso)})</span>
+          </div>
+          <div class="mono" style="font-size:11px">
+            Best XI Dipanggil: <b>${audit.currentXiAvg}</b> (${esc(audit.curForm)}) → Optimal: <b class="c-green">${audit.optimalXiAvg}</b> (${esc(audit.optForm)}${audit.xiAvgGain > 0 ? `, +${audit.xiAvgGain}` : ''})
+          </div>
+        </div>
+        ${swaps.length ? `
+          <div class="tbl-wrap tbl-sticky" style="max-height:240px;overflow-y:auto">
+            <table>
+              <thead><tr><th>Sektor</th><th>⬇ Coret dari 25</th><th>⬆ Panggil Pengganti</th><th>ΔForce</th><th class="col-hide-mob">Alasan</th></tr></thead>
+              <tbody>${swaps.map(sw => `<tr>
+                <td><span class="badge b-accent">${esc(sw.sector)}</span></td>
+                <td>${sw.out.src ? `<a class="clickable-name" onclick="openPlayerDrawer('${sw.out.src}','${escJs(sw.out.id)}')"><b>${esc(sw.out.name)}</b></a>` : `<b>${esc(sw.out.name)}</b>`} <span class="mono c-muted">(${fmtPos(sw.out.pos)} F${sw.out.force})</span></td>
+                <td>${sw.in.src ? `<a class="clickable-name" onclick="openPlayerDrawer('${sw.in.src}','${escJs(sw.in.id)}')"><b>${esc(sw.in.name)}</b></a>` : `<b>${esc(sw.in.name)}</b>`} <span class="mono c-green">(${fmtPos(sw.in.pos)} <b>F${sw.in.force}</b> · ${esc(sw.in.clubName)})</span></td>
+                <td class="mono c-green"><b>${sw.forceGain >= 0 ? '+' : ''}${sw.forceGain}</b></td>
+                <td class="c-muted col-hide-mob">${esc(sw.reason)}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </div>` : '<div class="c-good" style="font-size:11.5px">✓ 25 pemain yang dipanggil saat ini sudah mencakup seluruh pemain terkuat di posisinya!</div>'}
+      </div>`;
+  }
+
+  // 3) Full Pool Table with Filter Chips
+  const fMode = natWarState.poolFilter || 'ALL';
+  const filteredPool = natPoolAll.filter(p => fMode === 'CALLED' ? p.called : (fMode === 'UNCALLED' ? !p.called : true));
+
+  container.innerHTML = `
+    <h3>🌍 Markas Tim Nasional ${esc(iso)}</h3>
+    ${bugBanner}
+    <div class="mb-8">Melatih Timnas: <span class="badge b-good">${esc(iso)}</span> · Skuad dipanggil: <b class="mono">${D.nation.squadCount || 0}</b> · Pool terdeteksi: <b class="mono">${(audit && audit.poolCount) || natPoolAll.length}</b> pemain</div>
+    ${tacParts.length ? `<div class="c-muted mb-8" style="font-size:11.5px">Taktik aktif di save: ${tacParts.join(' · ')}</div>` : ''}
+    ${natMoHtml}
+    ${warRoomHtml}
+    ${callupHtml}
+    <div>
+      <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+        <b>Daftar Pemain Berpaspor ${esc(iso)} (${filteredPool.length})</b>
+        <div class="quick-chips-bar" style="margin:0">
+          <button type="button" class="qchip ${fMode === 'ALL' ? 'active' : ''}" onclick="setNatWarOpt('poolFilter','ALL')">Semua (${natPoolAll.length})</button>
+          <button type="button" class="qchip ${fMode === 'CALLED' ? 'active' : ''}" onclick="setNatWarOpt('poolFilter','CALLED')">✓ Dipanggil (${natPoolAll.filter(p => p.called).length})</button>
+          <button type="button" class="qchip ${fMode === 'UNCALLED' ? 'active' : ''}" onclick="setNatWarOpt('poolFilter','UNCALLED')">🆓 Belum Dipanggil (${natPoolAll.filter(p => !p.called).length})</button>
+        </div>
+      </div>
+      <div class="tbl-wrap tbl-sticky" style="max-height:330px;overflow-y:auto"><table>
+        <thead><tr><th>Pemain</th><th>Pos</th><th class="col-hide-mob">Usia</th><th>Force</th><th class="col-hide-mob">Skill Stack</th><th>Klub</th></tr></thead>
+        <tbody>${filteredPool.map(p => `<tr>
+          <td>${p.src ? `<a class="clickable-name" onclick="openPlayerDrawer('${p.src}','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>` : `<b>${esc(p.name)}</b>`}${p.called ? ' <span class="badge b-info">DIPANGGIL</span>' : ''}${p.src === 'roster' ? ' <span class="badge b-good">KLUBMU</span>' : ''}</td>
+          <td class="mono"><b>${fmtPos(p.pos)}</b></td>
+          <td class="mono col-hide-mob">${p.age}</td>
+          <td class="mono"><b class="c-green">${p.force}</b></td>
+          <td class="col-hide-mob"><span class="badge ${p.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct || 0}%)</span></td>
+          <td class="c-muted">${esc(p.clubName || '-')}</td>
+        </tr>`).join('') || '<tr><td colspan="6" class="c-muted">Tidak ada pemain berpaspor ' + esc(iso) + ' pada filter ini.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
 }
 
 // ==================== QUICK SEARCH (Ctrl+K — Nama, Klub, Posisi & Tag) ====================
@@ -598,12 +925,12 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.7.0`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.7.0</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.8.0`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.8.0</span>`;
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)}) • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.7.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.8.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],
@@ -615,6 +942,7 @@ window.LFInitDashboard = function () {
     ['Tab6', renderTab6],
     ['Tab7', renderTab7All],
     ['Tab8', renderTab8Extras],
+    ['Tab6Tel', renderMatchTelemetry],
     ['Calc', calcAll],
   ];
   for (const [nm, fn] of _steps) {

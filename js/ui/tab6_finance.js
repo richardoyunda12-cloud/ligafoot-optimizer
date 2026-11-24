@@ -168,9 +168,130 @@ function renderTab6() {
   document.getElementById('t6-commercial').innerHTML = nmHtml + '<div class="mt-12"><b>Sponsor Jersey (' + (D.sponsors || []).length + '/3):</b>' + spHtml + '</div>' + pgHtml + calcBtnHtml;
 
   renderTicketSim();
+  renderTicketPresetAudit();
+  renderCashflowCalendar12m();
   renderCashChartAndRoi();
   renderShopAnalytics();
   renderCrowdHistoryAndStmt();
+}
+
+// ==================== AUDIT TICKET PRESETS & KALENDER CASHFLOW 12 BLN (TIER 2 #6) ====================
+function loadSavedPresetToSim(presetIdx) {
+  const pa = D.stadium && D.stadium.presetAudit;
+  const p = pa && Array.isArray(pa.presets) ? pa.presets[presetIdx] : null;
+  if (!p || !p.mul) return;
+  const bp = getSimBasePrices(simCompKind);
+  simPrices = {
+    geral: Math.max(1, Math.round(bp.geral * (p.mul.geral ?? 1))),
+    arquibancada: Math.max(1, Math.round(bp.arquibancada * (p.mul.arquibancada ?? 1))),
+    cadeiras: Math.max(1, Math.round(bp.cadeiras * (p.mul.cadeiras ?? 1))),
+    camarotes: Math.max(1, Math.round(bp.camarotes * (p.mul.camarotes ?? 1))),
+  };
+  renderTicketSim();
+  showToast(`Preset "${p.name}" dimuat ke Simulator Tiket!`);
+}
+
+function renderTicketPresetAudit() {
+  const el = document.getElementById('t6-preset-audit');
+  if (!el) return;
+  const pa = (D.stadium && D.stadium.presetAudit) || null;
+  if (!pa || !Array.isArray(pa.presets) || !pa.presets.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const alertsHtml = []
+    .concat(pa.summaryAlert ? [`<div class="alert-item HIGH mb-8"><span class="badge b-warn">PRESET AKTIF</span><div>${esc(pa.summaryAlert)}</div></div>`] : [])
+    .concat(pa.runinAlert ? [`<div class="alert-item HIGH mb-8"><span class="badge b-warn">RUN-IN</span><div>${esc(pa.runinAlert)}</div></div>`] : [])
+    .join('');
+
+  el.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+        <div>
+          <b>🏷️ Audit Preset Tiket Tersimpan (<code>save.ticketPresets</code>)</b>
+          <span class="c-muted" style="font-size:10.5px">(Aktif di save: <b>${esc(pa.activePresetName || '-')}</b>)</span>
+        </div>
+        ${pa.bestLigaPresetName ? `<span class="badge b-good">Rekomendasi Liga: ${esc(pa.bestLigaPresetName)}</span>` : ''}
+      </div>
+      ${alertsHtml}
+      <div class="tbl-wrap tbl-sticky">
+        <table>
+          <thead><tr>
+            <th>Preset</th>
+            <th class="col-hide-mob">Multiplier</th>
+            <th>Liga (Fill · Gate)</th>
+            <th class="col-hide-mob">Big Match</th>
+            <th>Status</th>
+            <th>Tes</th>
+          </tr></thead>
+          <tbody>${pa.presets.map((pr, idx) => `
+            <tr class="${pr.isActive ? 'hl-user' : ''}">
+              <td>
+                <b>${esc(pr.name)}</b>
+                ${pr.isActive ? ' <span class="badge b-accent">AKTIF</span>' : ''}
+              </td>
+              <td class="mono col-hide-mob">${esc(pr.mulSummary)}</td>
+              <td class="mono">
+                <b class="${pr.ligaFillPct >= 70 ? 'c-green' : 'c-red'}">${pr.ligaFillPct}%</b> · ${fmtM(pr.ligaRev)}
+                ${pr.ligaLoss > 5000 ? `<div class="c-amber" style="font-size:10px">-${fmtM(pr.ligaLoss)} vs opt</div>` : ''}
+              </td>
+              <td class="mono col-hide-mob">
+                <b class="${pr.bigFillPct >= 70 ? 'c-green' : 'c-amber'}">${pr.bigFillPct}%</b> · ${fmtM(pr.bigRev)}
+              </td>
+              <td><span class="badge ${esc(pr.badgeCls)}">${esc(pr.verdict)}</span></td>
+              <td><button type="button" class="btn btn-sm" onclick="loadSavedPresetToSim(${idx})">Tes</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderCashflowCalendar12m() {
+  const el = document.getElementById('t6-calendar-12m');
+  const sumEl = document.getElementById('t6-cal-summary');
+  if (!el) return;
+  const cal = D.cashflowCalendar || null;
+  if (!cal || !Array.isArray(cal.months) || !cal.months.length) {
+    el.innerHTML = '<div class="c-muted">Data proyeksi 12 bulan tidak tersedia.</div>';
+    return;
+  }
+
+  if (sumEl) {
+    sumEl.innerHTML =
+      `Kas Kini <b class="c-sky">${fmtM(cal.startBudget)}</b> → 12 Bln <b class="${cal.endBudget12m >= cal.startBudget ? 'c-green' : 'c-amber'}">${fmtM(cal.endBudget12m)}</b> · ` +
+      `Sponsor/Naming: <b>${cal.commercialEventsCount}</b> · Golden -12%: <b class="c-green">${cal.goldenQueueCount}</b>`;
+  }
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px">
+      ${cal.months.map(m => {
+        const hasComm = m.events.some(e => e.type === 'SPONSOR' || e.type === 'NAMING');
+        const hasCrit = m.events.some(e => e.sev === 'CRITICAL' || e.sev === 'HIGH');
+        const borderCol = hasCrit ? 'rgba(245,158,11,.55)' : (hasComm ? 'rgba(56,189,248,.45)' : 'var(--border)');
+        const evHtml = m.events.map(ev => {
+          const bCls = ev.sev === 'CRITICAL' ? 'b-crit' : (ev.sev === 'HIGH' ? 'b-warn' : (ev.sev === 'GOOD' ? 'b-good' : 'b-info'));
+          return `<div style="margin-top:4px;font-size:10.5px;line-height:1.35">
+            <span class="badge ${bCls}">${esc(ev.type)}</span> <b>${esc(ev.title)}</b>
+            <div class="c-muted">${esc(ev.detail)}</div>
+          </div>`;
+        }).join('');
+
+        const gPills = (m.goldenPlayers || []).slice(0, 3).map(gp =>
+          `<span class="tl-pill" onclick="openPlayerDrawer('${gp.kind === 'bteam' ? 'bteam' : 'roster'}','${escJs(gp.id)}')"><b>${esc(gp.name)}</b> <span class="mono">${gp.contractDays}d${gp.kind === 'bteam' ? '·B' : ''}</span></span>`
+        ).join('');
+
+        return `<div style="background:var(--bg2);border:1px solid ${borderCol};border-radius:9px;padding:8px 10px">
+          <div class="flex-between" style="border-bottom:1px dashed var(--border);padding-bottom:4px;margin-bottom:4px">
+            <b class="mono">${esc(m.label)}</b>
+            <span class="mono ${m.projBudget >= 0 ? 'c-green' : 'c-red'}" style="font-size:11.5px"><b>${fmtM(m.projBudget)}</b></span>
+          </div>
+          ${evHtml || '<div class="c-muted" style="font-size:10.5px">Operasional rutin ✓</div>'}
+          ${gPills ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${gPills}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 // ==================== SUB-TAB 5B: SIMULATOR TIKET & 6 FASE ====================

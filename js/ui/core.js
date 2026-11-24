@@ -12,6 +12,7 @@ let scoutBlueprintTab = 'UPGRADE';
 let cartOut = {}; // playerId -> { arab: bool }
 let cartIn = {};  // playerId -> scoutRow
 let cartInBosman = {}; // playerId -> bool (0€ Pra-Kontrak)
+let cartBIn = {}; // playerId -> bTeam player object (0€ Promosi Tim B)
 
 // Single Source of Truth dari js/engine/config.js via D.cfg
 const CFG = D.cfg || {};
@@ -772,7 +773,13 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)}</span></div>
         <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +40%: ${fmtM(p.estCounter40)}</span></b></div>
       </div>
-      <div class="c-muted mt-12" style="font-size:11px">Routing Tim B ↔ Tim Utama <b>100% gratis</b> di menu Skuad game. Memindahkan pemain asing ke Tim B juga membebaskan 1 slot kuota asing di Tim Utama!</div>`;
+      <div class="c-muted mt-12" style="font-size:11px">Routing Tim B ↔ Tim Utama <b>100% gratis</b> di menu Skuad game. Memindahkan pemain asing ke Tim B juga membebaskan 1 slot kuota asing di Tim Utama!</div>
+      <div class="pill-row mt-12">
+        <button class="btn ${cartBIn[p.id] ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="if(typeof toggleCartBIn==='function'){toggleCartBIn('${escJs(p.id)}');openPlayerDrawer('bteam','${escJs(p.id)}');}">
+          ${cartBIn[p.id] ? '✓ Di Simulasi Cart (Lepas)' : '🧪 + Promosi ke Simulasi Cart (0€)'}
+        </button>
+        <button class="btn" onclick="closePlayerDrawer();goToView('t4','t4-cart')">🛒 Buka Cart</button>
+      </div>`;
   }
   bg.classList.add('open');
 }
@@ -834,7 +841,7 @@ function renderStickyCartBar() {
   const bar = document.getElementById('sticky-cart-bar');
   if (!bar || typeof getCartMetrics !== 'function') return;
   const outCnt = Object.keys(cartOut || {}).length;
-  const inCnt = Object.keys(cartIn || {}).length;
+  const inCnt = Object.keys(cartIn || {}).length + Object.keys(cartBIn || {}).length;
   const onCartSubtab = (activeTab === 't4' && activeSubTabs && activeSubTabs.t4 === 't4-cart');
   if ((outCnt === 0 && inCnt === 0) || onCartSubtab) {
     bar.classList.remove('open');
@@ -867,6 +874,18 @@ window.LFResetUIState = function () {
   activeMatchIdx = 0;
   cartOut = {};
   cartIn = {};
+  cartInBosman = {};
+  cartBIn = {};
+  if (typeof telScope !== 'undefined') telScope = 'all';
+  if (typeof natWarState !== 'undefined') {
+    natWarState.matchIdx = 0;
+    natWarState.formation = 'AUTO';
+    natWarState.style = 'AUTO';
+    natWarState.focus = 'AUTO';
+    natWarState.weather = 'AUTO';
+    natWarState.ref = 'AUTO';
+  }
+  if (typeof cartBenchOppId !== 'undefined') cartBenchOppId = 'AUTO_NEXT';
   scoutPreset = 'ALL';
   scoutBlueprintTab = 'UPGRADE';
   if (typeof acadFilter !== 'undefined') acadFilter = 'ALL';

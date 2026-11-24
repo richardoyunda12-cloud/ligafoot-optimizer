@@ -971,6 +971,8 @@
 
     const sponsorOnly = estFixedSponsor + estVarSponsor;
 
+    const netMarginPct = estMonthlyRev > 0 ? U.roundTo((estProjectedNet / estMonthlyRev) * 100, 1) : 0.0;
+
     return {
       ...cashflowMeta,
       avgOpNet3m: avgNet,
@@ -1001,6 +1003,7 @@
       monthlyIncome: estMonthlyRev,
       monthlyExpense: estMonthlyExp,
       monthlyNet: estProjectedNet,
+      netMarginPct,
       estBreakdown: {
         tickets: estTickets,
         sponsors: sponsorOnly,
@@ -1019,6 +1022,265 @@
         bankLoanParcel,
         transferDebtParcel,
       },
+    };
+  }
+
+  /**
+   * Audit `save.ticketPresets` & `uTeam.ticketMulBy.runin` (#19915 / #24024):
+   * Membandingkan preset tersimpan vs harga optimal Liga Normal & Big Match/KO.
+   */
+  function auditTicketPresets(
+    rawPresets, activePresetId, sections, fanConf, division, repLevel, country,
+    optLiga, optBig, ticketMul, ticketMulBy, upcomingHomeFx = null
+  ) {
+    const list = Array.isArray(rawPresets) ? rawPresets.filter(p => p && typeof p === 'object') : [];
+    const stadOpts = { homeRepLvl: repLevel, country: country || 'OTHER', kind: 'league' };
+    const bigOpts = { ...stadOpts, koStage: 'final', isClassic: true };
+    const optLigaRev = optLiga && optLiga.sim ? optLiga.sim.totalRev : 0;
+    const optBigRev = optBig && optBig.sim ? optBig.sim.totalRev : 0;
+
+    const presets = list.map(p => {
+      const m = U.normalizeTicketMul(p.mul);
+      const ligaSim = simulateStadiumV9(sections, m, fanConf, division, false, false, 0, stadOpts);
+      const bigSim = simulateStadiumV9(sections, m, fanConf, division, true, true, 1, bigOpts);
+      const ligaLoss = Math.max(0, Math.round(optLigaRev - ligaSim.totalRev));
+      const bigLoss = Math.max(0, Math.round(optBigRev - bigSim.totalRev));
+      const isActive = Boolean(activePresetId && p.id === activePresetId);
+      const mulSummary = `${Number(m.geral).toFixed(2)}·${Number(m.arquibancada).toFixed(2)}·${Number(m.cadeiras).toFixed(2)}·${Number(m.camarotes).toFixed(2)}x`;
+
+      let bestUse = 'LIGA';
+      let badgeCls = 'b-info';
+      let verdict = `Kurang optimal (-${Math.round(ligaLoss / 1000)}K Liga)`;
+      if (ligaSim.fillPct < 70 && bigSim.fillPct < 70) {
+        bestUse = 'OVERPRICED';
+        badgeCls = 'b-crit';
+        verdict = 'Fill <70% di semua laga (-2% MID hilang!)';
+      } else if (ligaLoss <= 15000 && ligaSim.fillPct >= 70) {
+        bestUse = 'LIGA';
+        badgeCls = 'b-good';
+        verdict = '✓ Optimal Liga Normal';
+      } else if (bigLoss <= 20000 && bigSim.fillPct >= 70) {
+        bestUse = 'BIG';
+        badgeCls = 'b-good';
+        verdict = '✓ Optimal Big Match / KO';
+      } else if (ligaSim.fillPct < 70) {
+        bestUse = 'BIG';
+        badgeCls = 'b-warn';
+        verdict = `Hanya untuk Big Match (Fill Liga ${ligaSim.fillPct}% <70%)`;
+      }
+
+      return {
+        id: p.id || '',
+        name: String(p.name || 'Preset'),
+        mul: m,
+        mulSummary,
+        isActive,
+        ligaRev: Math.round(ligaSim.totalRev),
+        ligaFillPct: ligaSim.fillPct,
+        ligaLoss,
+        bigRev: Math.round(bigSim.totalRev),
+        bigFillPct: bigSim.fillPct,
+        bigLoss,
+        bestUse,
+        badgeCls,
+        verdict,
+      };
+    });
+
+    const activeObj = presets.find(x => x.isActive) || null;
+    const bestLigaPreset = presets
+      .filter(x => x.ligaFillPct >= 70)
+      .sort((a, b) => a.ligaLoss - b.ligaLoss || b.ligaFillPct - a.ligaFillPct)[0] || null;
+
+    let summaryAlert = null;
+    const nextIsBigOrKo = Boolean(upcomingHomeFx && upcomingHomeFx.ticketRec && (upcomingHomeFx.ticketRec.isBig || upcomingHomeFx.ticketRec.isKnockout));
+    if (activeObj && (activeObj.ligaFillPct < 70 || (!nextIsBigOrKo && activeObj.ligaLoss >= 100000))) {
+      const sug = bestLigaPreset && bestLigaPreset.id !== activeObj.id
+        ? `Pakai "${bestLigaPreset.name}" (Fill ${bestLigaPreset.ligaFillPct}%) untuk laga Liga Biasa`
+        : 'Terapkan harga optimal Liga Tab 5B';
+      const lossK = Math.round(activeObj.ligaLoss / 1000);
+      summaryAlert = nextIsBigOrKo
+        ? `Preset aktif "${activeObj.name}" (${activeObj.mulSummary}) hanya untuk Big Match/KO: pada Liga Biasa Fill turun ke ${activeObj.ligaFillPct}% (-2% MID & rugi -${lossK}K). ${sug}.`
+        : `Preset aktif "${activeObj.name}" (${activeObj.mulSummary}) menghasilkan Fill Liga ${activeObj.ligaFillPct}% (${activeObj.ligaFillPct < 70 ? '-2% MID hilang & ' : ''}rugi -${lossK}K/laga)! ${sug}.`;
+    }
+
+    let runinAlert = null;
+    const tmb = (ticketMulBy && typeof ticketMulBy === 'object') ? ticketMulBy : {};
+    if (tmb.runin && typeof tmb.runin === 'object') {
+      const rMul = U.normalizeTicketMul(tmb.runin);
+      const rSim = simulateStadiumV9(sections, rMul, fanConf, division, false, true, 1, stadOpts);
+      const rOpt = optimizeTicketPricesV9(sections, fanConf, division, false, true, 1, 70.5, stadOpts);
+      const rLoss = Math.max(0, Math.round(rOpt.sim.totalRev - rSim.totalRev));
+      if (rLoss >= 100000 || rSim.fillPct < 70) {
+        const pStr = `${rOpt.prices.geral}·${rOpt.prices.arquibancada}·${rOpt.prices.cadeiras}·${rOpt.prices.camarotes}`;
+        runinAlert = `Preset fase Run-in (${Number(rMul.geral).toFixed(2)}·${Number(rMul.arquibancada).toFixed(2)}·${Number(rMul.cadeiras).toFixed(2)}·${Number(rMul.camarotes).toFixed(2)}x) kurang optimal: Fill ${rSim.fillPct}%, rugi -${Math.round(rLoss / 1000)}K/laga vs optimal (${pStr}).`;
+      }
+    }
+
+    return {
+      activePresetId: activePresetId || null,
+      activePresetName: activeObj ? activeObj.name : null,
+      presets,
+      bestLigaPresetName: bestLigaPreset ? bestLigaPreset.name : null,
+      summaryAlert,
+      runinAlert,
+    };
+  }
+
+  /**
+   * Kalender Proyeksi Kas, Sponsor, Naming Rights & Antrean Kontrak 12 Bulan (#24161/#37498).
+   */
+  function buildCashflowCalendar12m(currentDate, budget, cashflow, sponsors, naming, uTeam, userRoster, bTeamRoster) {
+    const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const dStr = /^\d{4}-\d{2}/.test(String(currentDate || '')) ? String(currentDate).slice(0, 7) : '2026-01';
+    const startYear = parseInt(dStr.slice(0, 4), 10) || 2026;
+    const startMonth0 = Math.max(0, Math.min(11, (parseInt(dStr.slice(5, 7), 10) || 1) - 1));
+    const monthlyNet = Math.round(U.safeNum(cashflow && cashflow.estCurrentNet, 0));
+    const startBudget = Math.round(U.safeNum(budget, 0));
+
+    let runCash = startBudget;
+    const months = [];
+    const ymToIdx = new Map();
+    for (let i = 0; i < 12; i++) {
+      const mAbs = startMonth0 + i;
+      const y = startYear + Math.floor(mAbs / 12);
+      const m0 = mAbs % 12;
+      const ym = `${y}-${String(m0 + 1).padStart(2, '0')}`;
+      const label = `${MONTHS_ID[m0]} '${String(y).slice(-2)}`;
+      runCash += monthlyNet;
+      ymToIdx.set(ym, i);
+      months.push({
+        offset: i,
+        ym,
+        label,
+        netMonthly: monthlyNet,
+        projBudget: runCash,
+        events: [],
+        goldenPlayers: [],
+        trapPlayers: [],
+      });
+    }
+
+    let commercialEventsCount = 0;
+    for (const c of (Array.isArray(sponsors) ? sponsors : [])) {
+      if (!c || typeof c !== 'object') continue;
+      const rem = c.paymentsLeft !== undefined ? U.safeInt(c.paymentsLeft, 99) : U.safeInt(c.monthsLeft, 99);
+      if (rem >= 1 && rem <= 12) {
+        commercialEventsCount++;
+        const mBucket = months[Math.min(11, rem - 1)];
+        const luvK = Math.round(U.safeNum(c.luvas, 0) / 1000);
+        const moK = Math.round(U.safeNum(c.monthly, 0) / 1000);
+        mBucket.events.push({
+          type: 'SPONSOR',
+          sev: rem <= 2 ? 'HIGH' : 'INFO',
+          title: `Sponsor ${c.company || c.slot || ''} Habis`,
+          detail: `Slot ${c.slot || '-'} · ${luvK > 0 ? `Luvas ${luvK}K` : `${moK}K/bln`} — negosiasi Tier 3 (+7..12%)!`,
+        });
+      }
+    }
+
+    if (naming && typeof naming === 'object') {
+      const nRem = U.safeInt(naming.monthsLeft, 99);
+      if (nRem >= 1 && nRem <= 12) {
+        commercialEventsCount++;
+        const nBucket = months[Math.min(11, nRem - 1)];
+        const nK = Math.round(U.safeNum(naming.yearly, 0) / 1000);
+        nBucket.events.push({
+          type: 'NAMING',
+          sev: nRem <= 3 ? 'CRITICAL' : 'WARN',
+          title: `Naming Rights ${naming.company || naming.name || ''} Habis`,
+          detail: `${nK}K/thn — WAJIB pilih kontrak 1 Tahun (1.15x, +30.7% vs 5th)!`,
+        });
+      }
+    }
+
+    const ut = (uTeam && typeof uTeam === 'object') ? uTeam : {};
+    if (ut.ctWork && ut.ctWork.endDate) {
+      const idx = ymToIdx.get(String(ut.ctWork.endDate).slice(0, 7));
+      if (idx !== undefined) {
+        months[idx].events.push({
+          type: 'FACILITY',
+          sev: 'INFO',
+          title: `CT Upgrade Lv ${ut.ctWork.to || '?'} Selesai`,
+          detail: 'Slot & bonus pertumbuhan aktif otomatis di tanggal ini.',
+        });
+      }
+    }
+    const stWork = ut.stadiumConstruction || null;
+    if (stWork && (stWork.endDate || stWork.end)) {
+      const idx = ymToIdx.get(String(stWork.endDate || stWork.end).slice(0, 7));
+      if (idx !== undefined) {
+        months[idx].events.push({
+          type: 'FACILITY',
+          sev: 'INFO',
+          title: 'Konstruksi Stadion Selesai',
+          detail: 'Penutupan sementara 12% kursi berakhir.',
+        });
+      }
+    }
+
+    let goldenQueueCount = 0;
+    let trapQueueCount = 0;
+    const scanRoster = (list, kind) => {
+      for (const p of (Array.isArray(list) ? list : [])) {
+        if (!p || p.loanedFrom) continue;
+        const cd = U.safeInt(p.contractDays, 999);
+        const item = {
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          force: p.force,
+          contractDays: cd,
+          salary: p.salary || 0,
+          kind,
+        };
+        if (cd >= 60 && cd <= 480) {
+          const gIdx = cd <= 120 ? 0 : Math.min(11, Math.floor((cd - 120) / 30));
+          months[gIdx].goldenPlayers.push(item);
+          goldenQueueCount++;
+        }
+        if (cd <= 360) {
+          const tIdx = cd <= 10 ? 0 : Math.min(11, Math.floor((cd - 10) / 30));
+          months[tIdx].trapPlayers.push(item);
+          trapQueueCount++;
+        }
+      }
+    };
+    scanRoster(userRoster, 'roster');
+    scanRoster(bTeamRoster, 'bteam');
+
+    for (const m of months) {
+      m.goldenPlayers.sort((a, b) => (a.contractDays - b.contractDays) || (b.force - a.force));
+      m.trapPlayers.sort((a, b) => (a.contractDays - b.contractDays) || (b.force - a.force));
+      if (m.goldenPlayers.length) {
+        m.events.push({
+          type: 'GOLDEN',
+          sev: m.offset === 0 ? 'GOOD' : 'INFO',
+          title: `${m.goldenPlayers.length} Kontrak di Golden Window (-12%)`,
+          detail: `Diskon 3 Tahun (-12% gaji): ${m.goldenPlayers.slice(0, 3).map(x => `${x.name} (${x.contractDays}d)`).join(', ')}`,
+        });
+      }
+      if (m.trapPlayers.length) {
+        m.events.push({
+          type: 'TRAP',
+          sev: m.offset === 0 ? 'CRITICAL' : 'WARN',
+          title: `${m.trapPlayers.length} Kontrak Masuk Zona <=10d`,
+          detail: `Gunakan Loophole Auto-Renew 0% / lepas cadangan: ${m.trapPlayers.slice(0, 3).map(x => `${x.name} (${x.contractDays}d)`).join(', ')}`,
+        });
+      }
+    }
+
+    const endBudget12m = months.length ? months[months.length - 1].projBudget : startBudget;
+    return {
+      startYm: months[0] ? months[0].ym : dStr,
+      endYm: months.length ? months[months.length - 1].ym : dStr,
+      startBudget,
+      endBudget12m,
+      totalNet12m: endBudget12m - startBudget,
+      commercialEventsCount,
+      goldenQueueCount,
+      trapQueueCount,
+      months,
     };
   }
 
@@ -1042,5 +1304,7 @@
     computeLoanLimit,
     computeCashflow3m,
     buildCashflowPayload,
+    auditTicketPresets,
+    buildCashflowCalendar12m,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -237,12 +237,281 @@
     };
   }
 
+  /**
+   * Ekstraksi Analitik Forensik & Telemetri Pasca-Laga dari `save.matchLog` (pos, sh, so, pa, g, cd, f, l).
+   * Catatan skema: `m.pos` & `m.sh/so/pa/f/l/cd` memakai indeks/sisi [0 = home, 1 = away].
+   */
+  function buildMatchTelemetry(save, userId, userRoster, currentSeason) {
+    const rawLog = Array.isArray(save.matchLog) ? save.matchLog : [];
+    const userMatches = rawLog.filter(m => m && (m.h === userId || m.a === userId));
+    const curS = U.safeInt(currentSeason, 1);
+    const seasonMatches = userMatches.filter(m => U.safeInt(m.s, 0) === curS);
+
+    const rosterById = new Map();
+    const rosterByName = new Map();
+    for (const p of (Array.isArray(userRoster) ? userRoster : [])) {
+      rosterById.set(p.id, p);
+      const low = String(p.name || '').trim().toLowerCase();
+      const prev = rosterByName.get(low);
+      if (!prev || p.force > prev.force) rosterByName.set(low, p);
+    }
+
+    function bucketIdx(min) {
+      const m = U.safeNum(min, 45);
+      if (m <= 15) return 0;
+      if (m <= 30) return 1;
+      if (m <= 45) return 2;
+      if (m <= 65) return 3;
+      if (m <= 80) return 4;
+      return 5;
+    }
+
+    function aggregateScope(list) {
+      let games = 0, wins = 0, draws = 0, losses = 0, gf = 0, ga = 0, cleanSheets = 0;
+      let posSum = 0, posCnt = 0;
+      let shFor = 0, shAg = 0, soFor = 0, soAg = 0, shCnt = 0;
+      let paForSum = 0, paAgSum = 0, paCnt = 0;
+      let yellows = 0, reds = 0;
+      const bLabels = ["0–15'", "16–30'", "31–45+'", "46–65'", "66–80'", "81–90+'"];
+      const minuteBuckets = bLabels.map(lbl => ({ label: lbl, gf: 0, ga: 0 }));
+      const formMap = new Map();
+      const oppFormMap = new Map();
+      const pStats = new Map();
+
+      for (const m of list) {
+        const isHome = m.h === userId;
+        const uSide = isHome ? 0 : 1;
+        const oSide = 1 - uSide;
+        const ug = U.safeInt(isHome ? m.hg : m.ag, 0);
+        const og = U.safeInt(isHome ? m.ag : m.hg, 0);
+        games++;
+        gf += ug;
+        ga += og;
+        if (ug > og) wins++;
+        else if (ug === og) draws++;
+        else losses++;
+        if (og === 0) cleanSheets++;
+
+        const upos = typeof m.pos === 'number' ? (isHome ? m.pos : (100 - m.pos)) : null;
+        if (upos !== null && Number.isFinite(upos)) {
+          posSum += upos;
+          posCnt++;
+        }
+        if (Array.isArray(m.sh) && m.sh.length >= 2) {
+          shFor += U.safeInt(m.sh[uSide], 0);
+          shAg += U.safeInt(m.sh[oSide], 0);
+          shCnt++;
+        }
+        if (Array.isArray(m.so) && m.so.length >= 2) {
+          soFor += U.safeInt(m.so[uSide], 0);
+          soAg += U.safeInt(m.so[oSide], 0);
+        }
+        if (Array.isArray(m.pa) && m.pa.length >= 2) {
+          paForSum += U.safeNum(m.pa[uSide], 0);
+          paAgSum += U.safeNum(m.pa[oSide], 0);
+          paCnt++;
+        }
+        if (Array.isArray(m.cd) && m.cd.length >= 4) {
+          yellows += U.safeInt(m.cd[uSide * 2], 0);
+          reds += U.safeInt(m.cd[uSide * 2 + 1], 0);
+        }
+
+        const pGoalsThisMatch = new Map();
+        for (const g of (Array.isArray(m.g) ? m.g : [])) {
+          if (!Array.isArray(g)) continue;
+          const bi = bucketIdx(g[0]);
+          if (g[1] === uSide) {
+            minuteBuckets[bi].gf++;
+            const sn = String(g[3] || '').trim().toLowerCase();
+            if (sn) pGoalsThisMatch.set(sn, (pGoalsThisMatch.get(sn) || 0) + 1);
+          } else {
+            minuteBuckets[bi].ga++;
+          }
+        }
+        const pCardsThisMatch = new Map();
+        for (const k of (Array.isArray(m.k) ? m.k : [])) {
+          if (!Array.isArray(k)) continue;
+          if (k[1] === uSide) {
+            const kn = String(k[3] || '').trim().toLowerCase();
+            if (kn) pCardsThisMatch.set(kn, (pCardsThisMatch.get(kn) || 0) + 1);
+          }
+        }
+
+        const uForm = Array.isArray(m.f) ? String(m.f[uSide] || '-').trim() : '-';
+        const oForm = Array.isArray(m.f) ? String(m.f[oSide] || '-').trim() : '-';
+        const updMap = (mp, key) => {
+          let row = mp.get(key);
+          if (!row) {
+            row = { key, games: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, posSum: 0, posCnt: 0 };
+            mp.set(key, row);
+          }
+          row.games++;
+          if (ug > og) row.w++;
+          else if (ug === og) row.d++;
+          else row.l++;
+          row.gf += ug;
+          row.ga += og;
+          if (upos !== null) { row.posSum += upos; row.posCnt++; }
+        };
+        updMap(formMap, uForm);
+        updMap(oppFormMap, oForm);
+
+        const uLine = (Array.isArray(m.l) && Array.isArray(m.l[uSide])) ? m.l[uSide] : [];
+        for (const pl of uLine) {
+          if (!Array.isArray(pl) || pl.length < 3) continue;
+          const nm = String(pl[0] || '').trim();
+          const low = nm.toLowerCase();
+          const pos = String(pl[1] || '-');
+          const rt = U.safeNum(pl[2], 0);
+          const subMin = pl.length >= 4 ? U.safeInt(pl[3], 0) : 0;
+          let st = pStats.get(low);
+          if (!st) {
+            const rp = rosterByName.get(low) || null;
+            st = {
+              id: rp ? rp.id : null,
+              name: rp ? rp.name : nm,
+              pos: rp ? rp.pos : pos,
+              force: rp ? rp.force : 0,
+              isCurrent: Boolean(rp),
+              apps: 0,
+              starts: 0,
+              subs: 0,
+              ratingSum: 0,
+              subRatingSum: 0,
+              goals: 0,
+              cards: 0,
+            };
+            pStats.set(low, st);
+          }
+          st.apps++;
+          if (subMin > 0) {
+            st.subs++;
+            st.subRatingSum += rt;
+          } else {
+            st.starts++;
+          }
+          st.ratingSum += rt;
+          st.goals += (pGoalsThisMatch.get(low) || 0);
+          st.cards += (pCardsThisMatch.get(low) || 0);
+        }
+      }
+
+      const finForm = mp => Array.from(mp.values()).map(r => ({
+        formation: r.key,
+        oppForm: r.key,
+        games: r.games,
+        w: r.w,
+        d: r.d,
+        l: r.l,
+        gf: r.gf,
+        ga: r.ga,
+        gd: r.gf - r.ga,
+        winPct: r.games ? U.roundTo((r.w / r.games) * 100, 1) : 0,
+        ppg: r.games ? U.roundTo((r.w * 3 + r.d) / r.games, 2) : 0,
+        gfPg: r.games ? U.roundTo(r.gf / r.games, 2) : 0,
+        gaPg: r.games ? U.roundTo(r.ga / r.games, 2) : 0,
+        avgPos: r.posCnt ? U.roundTo(r.posSum / r.posCnt, 1) : 50,
+      })).sort((a, b) => (b.games - a.games) || (b.ppg - a.ppg));
+
+      const h1 = {
+        gf: minuteBuckets[0].gf + minuteBuckets[1].gf + minuteBuckets[2].gf,
+        ga: minuteBuckets[0].ga + minuteBuckets[1].ga + minuteBuckets[2].ga,
+      };
+      const mid2 = { gf: minuteBuckets[3].gf, ga: minuteBuckets[3].ga };
+      const orderZone = {
+        gf: minuteBuckets[4].gf + minuteBuckets[5].gf,
+        ga: minuteBuckets[4].ga + minuteBuckets[5].ga,
+      };
+      const lateShareGa = ga > 0 ? U.roundTo((orderZone.ga / ga) * 100, 1) : 0;
+      const lateShareGf = gf > 0 ? U.roundTo((orderZone.gf / gf) * 100, 1) : 0;
+      let orderVerdict = 'Seimbang di menit akhir (66–90+\').';
+      if (games > 0) {
+        if (orderZone.gf >= orderZone.ga * 2 && lateShareGa <= 32) {
+          orderVerdict = `Match Orders menit akhir dominan: cetak ${orderZone.gf} gol (${lateShareGf}% total gol) vs hanya kebobolan ${orderZone.ga} (${lateShareGa}%).`;
+        } else if (lateShareGa >= 36 && orderZone.ga > orderZone.gf) {
+          orderVerdict = `WASPADA menit 66–90+': ${lateShareGa}% kebobolan (${orderZone.ga} gol) terjadi di menit akhir! Aktifkan Order Defend Lead + sub pemain <60% stamina lebih awal.`;
+        } else if (lateShareGa >= 34) {
+          orderVerdict = `Cukup rapat tapi ${lateShareGa}% kebobolan (${orderZone.ga} dari ${ga}) muncul di menit 66–90+'. Pertimbangkan sub bertahan menit 65.`;
+        } else {
+          orderVerdict = `Stabil di menit 66–90+': ${orderZone.gf} gol vs ${orderZone.ga} kebobolan (${lateShareGa}% dari total GA).`;
+        }
+      }
+
+      const rawPlayers = Array.from(pStats.values()).map(s => ({
+        ...s,
+        avgRating: s.apps ? U.roundTo(s.ratingSum / s.apps, 2) : 0,
+        subAvgRating: s.subs ? U.roundTo(s.subRatingSum / s.subs, 2) : 0,
+      }));
+      const curList = rawPlayers.filter(p => p.isCurrent);
+      const poolForRank = curList.length >= 6 ? curList : rawPlayers;
+      const teamAvgRt = poolForRank.length
+        ? U.roundTo(poolForRank.reduce((sum, x) => sum + x.avgRating * x.apps, 0) / Math.max(1, poolForRank.reduce((sum, x) => sum + x.apps, 0)), 2)
+        : 6.5;
+      const minApps = games >= 25 ? 4 : (games >= 8 ? 2 : 1);
+      const overperformers = [...poolForRank]
+        .filter(p => p.apps >= minApps)
+        .sort((a, b) => (b.avgRating - a.avgRating) || (b.goals - a.goals))
+        .slice(0, 6);
+      const supersubs = [...poolForRank]
+        .filter(p => p.subs >= (games >= 25 ? 2 : 1))
+        .sort((a, b) => (b.subAvgRating - a.subAvgRating) || (b.subs - a.subs))
+        .slice(0, 6);
+      const underperformers = [...poolForRank]
+        .filter(p => p.apps >= minApps && p.avgRating < teamAvgRt)
+        .sort((a, b) => (a.avgRating - b.avgRating) || (b.force - a.force))
+        .slice(0, 5);
+
+      return {
+        games,
+        wins,
+        draws,
+        losses,
+        winPct: games ? U.roundTo((wins / games) * 100, 1) : 0,
+        ppg: games ? U.roundTo((wins * 3 + draws) / games, 2) : 0,
+        gf,
+        ga,
+        gd: gf - ga,
+        cleanSheets,
+        avgPos: posCnt ? U.roundTo(posSum / posCnt, 1) : 0,
+        avgShotsFor: shCnt ? U.roundTo(shFor / shCnt, 1) : 0,
+        avgShotsAg: shCnt ? U.roundTo(shAg / shCnt, 1) : 0,
+        avgOnTargetFor: shCnt ? U.roundTo(soFor / shCnt, 1) : 0,
+        avgOnTargetAg: shCnt ? U.roundTo(soAg / shCnt, 1) : 0,
+        shotAccPct: shFor ? U.roundTo((soFor / shFor) * 100, 1) : 0,
+        convShotPct: shFor ? U.roundTo((gf / shFor) * 100, 1) : 0,
+        convOtPct: soFor ? U.roundTo((gf / soFor) * 100, 1) : 0,
+        avgPassFor: paCnt ? U.roundTo(paForSum / paCnt, 1) : 0,
+        avgPassAg: paCnt ? U.roundTo(paAgSum / paCnt, 1) : 0,
+        yellows,
+        reds,
+        minuteBuckets,
+        phases: { h1, mid2, orderZone, lateShareGf, lateShareGa },
+        orderVerdict,
+        byFormation: finForm(formMap),
+        vsOppFormation: finForm(oppFormMap).slice(0, 10),
+        playerTelemetry: {
+          teamAvgRating: teamAvgRt,
+          overperformers,
+          supersubs,
+          underperformers,
+          allPlayers: [...rawPlayers].sort((a, b) => b.avgRating - a.avgRating).slice(0, 30),
+        },
+      };
+    }
+
+    return {
+      currentSeason: curS,
+      all: aggregateScope(userMatches),
+      season: aggregateScope(seasonMatches),
+    };
+  }
+
   function buildPriorityAlerts(
     userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
     namingObj, sponsorsObj, ticketMul, shopAudit, memberAudit,
     holes, upcomingMatches, trainAudit, preContracts, userDiv,
     autoGuard = null, bestXi = null, optLigaPrices = null, activeFormation = '4-3-3',
-    bTeamInfo = null
+    bTeamInfo = null, presetAudit = null
   ) {
     const alerts = [];
     const add = (sev, cat, title, action) => alerts.push({ sev, cat, title, action });
@@ -430,6 +699,12 @@
         add('MEDIUM', 'Tim B Gaji Bocor', `${bTeamInfo.zeroMinLeakCount} pemain ${bTeamInfo.bTeamName || 'Tim B'} mencatat 0 menit main (${leakK}K/bln terbuang)!`,
           'Buka Tab 3E (Tim B) untuk audit pemain cadangan Tim B yang makan gaji tanpa bermain.');
       }
+    }
+
+    if (presetAudit && (presetAudit.summaryAlert || presetAudit.runinAlert)) {
+      add('MEDIUM', 'Preset Tiket',
+        presetAudit.summaryAlert || presetAudit.runinAlert,
+        'Buka Tab 5B (Tiket & Preset) untuk mengganti preset aktif & memperbaiki tarif Run-in.');
     }
 
     return alerts;
@@ -1144,6 +1419,15 @@
         }
         const oppStars = oppPool.slice().sort((a, b) => (b.force || 0) - (a.force || 0)).slice(0, 3)
           .map(p => ({ name: p.name, pos: p.pos, force: p.force }));
+        const oppPoolSlim = oppPool
+          .slice()
+          .sort((a, b) => (b.force || 0) - (a.force || 0))
+          .slice(0, 18)
+          .map(p => ({
+            id: p.id, name: p.name, pos: p.pos, force: p.force || 20, effForce: p.effForce || p.force || 20,
+            age: p.age || 24, foot: p.foot || 'D', s1: p.s1 || '', s2: p.s2 || '',
+            stackPct: p.stackPct || 0, nonStack: Boolean(p.nonStack), energy: p.energy ?? 100,
+          }));
         matchPreviews.push({
           ...m,
           autoCond: natAutoCond,
@@ -1159,6 +1443,7 @@
           recStyle: bestCombo.stTry,
           recFocus: bestCombo.fcTry,
           oppStars,
+          oppPoolSlim,
         });
       }
 
@@ -1168,11 +1453,191 @@
       const natXiIds = new Set(uNatBestXi && Array.isArray(uNatBestXi.xi) ? uNatBestXi.xi.map(a => a.player.id) : []);
       const natOrdersAudit = auditMatchOrdersList(natOrdersRaw, natMap, natXiIds);
 
+      // Call-Up Optimizer (#25 dipanggil vs seluruh pool paspor di userRoster + scoutPool)
+      const calledIdsSet = new Set(parsedLineup.map(p => p.id));
+      const rosterIdsSet = new Set(userRoster.map(p => p.id));
+      const scoutById = new Map(scoutPool.map(r => [r[19], r]));
+      const rosterMapById = new Map(userRoster.map(p => [p.id, p]));
+      const natPoolFullMap = new Map();
+      const clubMetaByNat = p => p.clubName || '-';
+
+      for (const p of parsedLineup) {
+        const rp = rosterMapById.get(p.id);
+        const sr = scoutById.get(p.id);
+        const src = rp ? 'roster' : (sr ? 'scout' : '');
+        const resolved = rp || p;
+        natPoolFullMap.set(p.id, {
+          id: resolved.id,
+          name: resolved.name,
+          pos: resolved.pos,
+          age: resolved.age,
+          foot: resolved.foot,
+          nationality: natIso,
+          force: resolved.force,
+          effForce: resolved.effForce || resolved.force,
+          potCap: resolved.potCap || resolved.force,
+          s1: resolved.s1 || '',
+          s2: resolved.s2 || '',
+          stackPct: resolved.stackPct || 0,
+          nonStack: Boolean(resolved.nonStack),
+          energy: resolved.energy ?? 100,
+          injured: Boolean(resolved.injured),
+          injuryDays: resolved.injuryDays || 0,
+          suspended: Boolean(resolved.suspended),
+          clubName: rp ? userName : clubMetaByNat(p),
+          called: true,
+          src,
+        });
+      }
+      for (const p of userRoster) {
+        if (String(p.nationality || '').toUpperCase() !== natIso || natPoolFullMap.has(p.id)) continue;
+        natPoolFullMap.set(p.id, {
+          id: p.id, name: p.name, pos: p.pos, age: p.age, foot: p.foot, nationality: natIso,
+          force: p.force, effForce: p.effForce, potCap: p.potCap,
+          s1: p.s1 || '', s2: p.s2 || '', stackPct: p.stackPct || 0, nonStack: Boolean(p.nonStack),
+          energy: p.energy ?? 100, injured: Boolean(p.injured), injuryDays: p.injuryDays || 0,
+          suspended: Boolean(p.suspended), clubName: userName, called: false, src: 'roster',
+        });
+      }
+      for (const r of scoutPool) {
+        if (String(r[4] || '').toUpperCase() !== natIso || natPoolFullMap.has(r[19])) continue;
+        natPoolFullMap.set(r[19], {
+          id: r[19], name: r[0], pos: r[1] || 'MC', age: r[2] || 22, foot: r[3] || 'D', nationality: natIso,
+          force: r[5] || 20, effForce: r[5] || 20, potCap: r[7] || r[5] || 20,
+          s1: r[8] || '', s2: r[9] || '', stackPct: r[10] || 0, nonStack: Boolean(r[11]),
+          energy: 100, injured: false, injuryDays: 0, suspended: false,
+          clubName: r[16] || '-', called: false, src: 'scout',
+        });
+      }
+      const allNatVals = Array.from(natPoolFullMap.values());
+      const calledNatVals = allNatVals.filter(p => p.called);
+      const uncalledNatVals = allNatVals.filter(p => !p.called)
+        .sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce))
+        .slice(0, 25);
+      const natPoolSorted = calledNatVals.concat(uncalledNatVals)
+        .sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
+
+      const roleFamilyOfNat = pos => {
+        if (pos === 'G') return 'GK';
+        if (['ZD', 'ZE', 'Z', 'ZAG'].includes(pos)) return 'CB';
+        if (['LD', 'LE', 'LAT'].includes(pos)) return 'FB';
+        if (['VOL', 'V'].includes(pos)) return 'DM';
+        if (['PD', 'PE'].includes(pos)) return 'WING';
+        if (['SA', 'ATA', 'A'].includes(pos)) return 'ST';
+        return 'MID';
+      };
+      const validNatForms = ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2', '4-1-2-1-2', '3-4-2-1']
+        .filter(f => (f in C.FORMATIONS) && !(C.FORMATION_BUGS && (f in C.FORMATION_BUGS)));
+      const solveNatBest = pool => {
+        let bestN = null;
+        if (pool.length < 11) return null;
+        for (const fk of validNatForms) {
+          const rXi = T.solveBestXi(pool, fk, 99, '');
+          if (!bestN || rXi.avgScore > bestN.avgScore) bestN = { ...rXi, formation: fk };
+        }
+        return bestN;
+      };
+
+      const calledList = Array.from(natPoolFullMap.values()).filter(p => p.called);
+      const healthyCalled = calledList.filter(p => !p.injured && !p.suspended);
+      const curBestNat = solveNatBest(healthyCalled.length >= 11 ? healthyCalled : calledList);
+      const curBestIds = new Set(curBestNat && Array.isArray(curBestNat.xi) ? curBestNat.xi.map(a => a.player.id) : []);
+      const uncalledAvail = Array.from(natPoolFullMap.values())
+        .filter(p => !p.called && !p.injured && !p.suspended)
+        .sort((a, b) => (b.force - a.force) || (b.effForce - a.effForce));
+
+      const usedInIds = new Set();
+      const usedOutIds = new Set();
+      const swaps = [];
+
+      // 1) Prioritaskan mengganti pemain dipanggil yang cedera atau skorsing
+      for (const cp of calledList.filter(x => x.injured || x.suspended)) {
+        const fam = roleFamilyOfNat(cp.pos);
+        const rep = uncalledAvail.find(u => !usedInIds.has(u.id) && roleFamilyOfNat(u.pos) === fam)
+          || uncalledAvail.find(u => !usedInIds.has(u.id) && u.pos !== 'G');
+        if (rep) {
+          usedInIds.add(rep.id);
+          usedOutIds.add(cp.id);
+          swaps.push({
+            out: cp,
+            in: rep,
+            sector: fam,
+            forceGain: rep.force - cp.force,
+            reason: cp.injured ? `Cedera ${cp.injuryDays}d` : 'Skorsing',
+          });
+        }
+      }
+
+      // 2) Kumpulkan pasangan upgrade per famili posisi (hindari menggusur starter Best XI dengan posisi berbeda!)
+      const swapCandidates = [];
+      for (const up of uncalledAvail) {
+        if (usedInIds.has(up.id)) continue;
+        const uFam = roleFamilyOfNat(up.pos);
+        const outPool = calledList.filter(cp =>
+          !usedOutIds.has(cp.id)
+          && roleFamilyOfNat(cp.pos) === uFam
+          && up.force >= cp.force + 2
+        ).sort((a, b) => ((curBestIds.has(a.id) ? 1 : 0) - (curBestIds.has(b.id) ? 1 : 0)) || (a.force - b.force));
+        for (const cp of outPool.slice(0, 2)) {
+          swapCandidates.push({
+            out: cp,
+            in: up,
+            sector: uFam,
+            forceGain: up.force - cp.force,
+            reason: `+${up.force - cp.force} Force (${uFam})`,
+            priorityScore: (up.force - cp.force) + (cp.pos === up.pos ? 1.5 : 0) + (curBestIds.has(cp.id) ? -1.5 : 3.0),
+          });
+        }
+      }
+      swapCandidates.sort((a, b) => b.priorityScore - a.priorityScore || b.forceGain - a.forceGain);
+
+      let workingPool = [...(healthyCalled.length >= 11 ? healthyCalled : calledList)];
+      let workingAvg = curBestNat ? curBestNat.avgScore : 0;
+      for (const cand of swapCandidates) {
+        if (swaps.length >= 8) break;
+        if (usedInIds.has(cand.in.id) || usedOutIds.has(cand.out.id)) continue;
+        // Uji agar swap tidak menurunkan kekuatan Best XI Timnas
+        const trialPool = workingPool.filter(p => p.id !== cand.out.id).concat([cand.in]);
+        const trialBest = solveNatBest(trialPool);
+        const trialAvg = trialBest ? trialBest.avgScore : workingAvg;
+        if (trialAvg + 0.01 < workingAvg) continue;
+        usedInIds.add(cand.in.id);
+        usedOutIds.add(cand.out.id);
+        workingPool = trialPool;
+        workingAvg = trialAvg;
+        swaps.push({
+          out: cand.out,
+          in: cand.in,
+          sector: cand.sector,
+          forceGain: cand.forceGain,
+          reason: cand.reason,
+        });
+      }
+
+      const optBestNat = solveNatBest(workingPool);
+      const curFormRaw = String((save.nationalTeamTactics && save.nationalTeamTactics.formation) || '');
+      const hasBug343 = curFormRaw.split('~')[0].trim() === '3-4-3';
+
+      const callupAudit = {
+        currentXiAvg: curBestNat ? curBestNat.avgScore : 0,
+        optimalXiAvg: optBestNat ? optBestNat.avgScore : (curBestNat ? curBestNat.avgScore : 0),
+        xiAvgGain: (curBestNat && optBestNat) ? U.roundTo(Math.max(0, optBestNat.avgScore - curBestNat.avgScore), 2) : 0,
+        curForm: curBestNat ? curBestNat.formation : '-',
+        optForm: optBestNat ? optBestNat.formation : (curBestNat ? curBestNat.formation : '-'),
+        swaps,
+        injuredCalled: calledList.filter(p => p.injured || p.suspended).length,
+        hasBug343,
+        curFormRaw,
+        poolCount: natPoolFullMap.size,
+      };
+
       nationInfo = {
         iso: natIso,
         squadCount: rawLineup.length,
         tactics: save.nationalTeamTactics || {},
         lineup: parsedLineup,
+        natPool: natPoolSorted,
+        callupAudit,
         upcomingMatches: natMatches.slice(0, 6),
         matchPreviews: matchPreviews.filter(Boolean),
         matchOrdersAudit: natOrdersAudit,
@@ -1322,11 +1787,33 @@
       roster: bRosterExport,
     };
 
+    const cashflowPayload = E.buildCashflowPayload(
+      cashflowMeta, uTeam, curSim, spContracts, shopAudit, memberAudit,
+      totalPayroll, stadiumOps, userDiv,
+      { country: userCountry, repLvl: repLevel, youthPayroll }
+    );
+    const rawPresets = Array.isArray(save.ticketPresets) ? save.ticketPresets : [];
+    const activePresetId = uTeam.ticketPresetId || save.ticketPresetId || null;
+    const firstHomeFx = upcomingMatches.find(u => u.isHome) || null;
+    const presetAudit = (typeof E.auditTicketPresets === 'function')
+      ? E.auditTicketPresets(
+          rawPresets, activePresetId, sections, fanConf, userDiv, repLevel, userCountry,
+          optLiga, optBig, ticketMul, rawTmb, firstHomeFx
+        )
+      : null;
+    const cashflowCalendar = (typeof E.buildCashflowCalendar12m === 'function')
+      ? E.buildCashflowCalendar12m(
+          currentDate, budget, cashflowPayload, spContracts, uTeam.naming, uTeam,
+          userRoster, bRosterExport
+        )
+      : null;
+    const matchTelemetry = buildMatchTelemetry(save, userId, userRoster, U.safeInt(save.season, 1));
+
     const alerts = buildPriorityAlerts(
       userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
       uTeam.naming, uTeam.sponsors, ticketMul, shopAudit, memberAudit,
       holes, upcomingMatches, trainAudit, preContracts, userDiv,
-      autoGuard, bestXi, optLiga.prices, activeFormation, bTeamInfo
+      autoGuard, bestXi, optLiga.prices, activeFormation, bTeamInfo, presetAudit
     );
 
     const rawLastLineup = (save.lastLineup && typeof save.lastLineup === 'object') ? save.lastLineup : null;
@@ -1461,7 +1948,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.7.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.8.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,
@@ -1510,11 +1997,9 @@
       },
       autoGuard,
       fineSlumpPlayers,
-      cashflow: E.buildCashflowPayload(
-        cashflowMeta, uTeam, curSim, spContracts, shopAudit, memberAudit,
-        totalPayroll, stadiumOps, userDiv,
-        { country: userCountry, repLvl: repLevel, youthPayroll }
-      ),
+      cashflow: cashflowPayload,
+      cashflowCalendar,
+      matchTelemetry,
       deltas,
       alerts,
       holes,
@@ -1546,6 +2031,7 @@
         optLigaSim: optLiga.sim,
         optBigPrices: optBig.prices,
         optBigSim: optBig.sim,
+        presetAudit,
         lastGate: uTeam.lastGate || null,
         construction: uTeam.stadiumConstruction || null,
       },
