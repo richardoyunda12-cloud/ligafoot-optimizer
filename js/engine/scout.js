@@ -50,7 +50,7 @@
     save, userId, clubsMeta, compactTeams, staticPlayers,
     userXi, userSections, fanConf, userDiv, userRep, userRoster,
     activeFormation = '4-3-3', foreignCap = 7, userCountry = '',
-    curTicketMul = null, ticketMulBy = null
+    curTicketMul = null, ticketMulBy = null, staticDb = null
   ) {
     const matches = [];
     const seenKeys = new Set();
@@ -370,9 +370,39 @@
         if (matchup.activeComp) delete matchup.activeComp.bench;
       }
 
+      const Cond = LF.conditions || null;
+      let autoCond = null;
+      let dateStr = String(save.currentDate || '2026-01-01').slice(0, 10);
+      if (Cond && typeof Cond.matchConditions === 'function') {
+        if (typeof fx.day === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fx.day)) {
+          dateStr = fx.day.slice(0, 10);
+        } else if (fx.day !== null && fx.day !== undefined && Number.isFinite(Number(fx.day)) && world.year) {
+          const iso = Cond.dayToIsoDate(world.year, Number(fx.day));
+          if (iso) dateStr = iso;
+        }
+        const homeC = fx.isHome ? userCountry : oppCountry;
+        const awayC = fx.isHome ? oppCountry : userCountry;
+        const compObj = (fx.compId && comps[fx.compId]) ? comps[fx.compId] : {
+          kind: fx.compKind || fx.stageKind || 'league',
+          country: homeC,
+          division: userDiv,
+        };
+        try {
+          autoCond = Cond.matchConditions(
+            fx.homeId, fx.awayId, homeC, awayC, dateStr,
+            Cond.varOfComp(compObj),
+            { world, allTeams: compactTeams, neutral: Boolean(fx.neutral), comp: compObj, staticDb, clubsMeta }
+          );
+        } catch (_) {
+          autoCond = null;
+        }
+      }
+
       const finalAi = (matchup && matchup.aiInfo) || aiInfo;
       enriched.push({
         ...fx,
+        dateStr,
+        autoCond,
         oppName,
         oppCountry,
         oppRep: Math.round(oppRep),

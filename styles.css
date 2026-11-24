@@ -1029,8 +1029,8 @@ tr.mini-sep-row td {
   min-width: 44px;
 }
 .wr-seg-group {
-  display: inline-grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -1038,10 +1038,11 @@ tr.mini-sep-row td {
   padding: 3px;
 }
 .wr-seg-group .btn-sm {
+  flex: 1 1 auto;
   border-color: transparent;
   background: transparent;
   border-radius: 7px;
-  padding: 5px 8px;
+  padding: 4px 7px;
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1208,7 +1209,7 @@ tr.mini-sep-row td {
   .wr-cond-bars { width: 100%; flex-direction: column; align-items: stretch; gap: 5px; }
   .wr-seg-row { width: 100%; display: grid; grid-template-columns: 44px 1fr; gap: 6px; }
   .wr-seg-group { width: 100%; }
-  .wr-seg-group .btn-sm { padding: 5px 4px; font-size: 11px; min-height: 32px; }
+  .wr-seg-group .btn-sm { flex: 1 1 22%; padding: 5px 4px; font-size: 10.5px; min-height: 30px; text-align: center; }
   .wr-cheat-strip { padding: 9px 10px; margin: 8px 0; }
   .wr-jump-btn { font-size: 10.5px; padding: 5px 2px; }
 

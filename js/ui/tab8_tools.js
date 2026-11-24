@@ -452,7 +452,12 @@ function renderTab8Extras() {
       ${natPreviews.length ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;font-size:11.5px">
         <div style="margin-bottom:6px"><b>⚔️ Mini War Room Timnas ${esc(iso)}</b> <span class="c-muted" style="font-size:10.5px">(Terisolasi penuh dari War Room Klub)</span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px">
-          ${natPreviews.map(mp => `<div style="padding:7px 9px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
+          ${natPreviews.map(mp => {
+            const acN = mp.autoCond;
+            const nWIco = { clear: '☀️ Cerah', cloudy: '⛅ Berawan', rain: '🌧️ Hujan', heat: '🔥 Panas', snow: '❄️ Salju' };
+            const nRIco = { strict: '🟥 Ketat', normal: '⚖️ Normal', lenient: '🟩 Longgar', home: '🏠 Pro-Home' };
+            const nCondLine = acN ? `<div class="mono c-muted" style="font-size:10px;margin-top:2px">${nWIco[acN.weather] || acN.weather} · Wasit ${nRIco[acN.refStyle] || acN.refStyle} (${esc(acN.refCountry)}${acN.refName ? ' · ' + esc(acN.refName) : ''}) · 🕒 ${esc(acN.ko)}${acN.varOn ? ' · VAR ON' : ''}</div>` : '';
+            return `<div style="padding:7px 9px;background:var(--bg1);border:1px solid var(--border);border-radius:8px">
             <div class="flex-between" style="gap:6px">
               <b>${esc(mp.home)} vs ${esc(mp.away)}</b>
               <span class="badge ${mp.winPct >= mp.lossPct ? 'b-good' : 'b-warn'} mono">Win ${mp.winPct}%</span>
@@ -460,8 +465,10 @@ function renderTab8Extras() {
             <div class="c-muted mono" style="font-size:10.5px;margin:2px 0">${esc(mp.compName)}${mp.roundName ? ' · ' + esc(mp.roundName) : ''} · Hari ${mp.day}</div>
             <div class="mono" style="font-size:10.5px">${esc(iso)} Avg <b>${mp.uAvg}</b> (${esc(fmtForm(mp.uForm))}) vs ${esc(mp.oppIso)} <b>${mp.oAvg}</b> (${esc(fmtForm(mp.oForm))})</div>
             <div class="mono c-sky" style="font-size:10.5px;margin-top:2px">Saran: <b>${esc(mp.recStyle)}</b> · Fokus <b>${esc(mp.recFocus)}</b> <span class="c-muted">(W ${mp.winPct}% · D ${mp.drawPct}% · L ${mp.lossPct}%)</span></div>
+            ${nCondLine}
             ${mp.oppStars && mp.oppStars.length ? `<div class="c-muted" style="font-size:10px;margin-top:2px">Ancaman ${esc(mp.oppIso)}: ${mp.oppStars.map(s => `${esc(s.name)}(${s.force})`).join(', ')}</div>` : ''}
-          </div>`).join('')}
+          </div>`;
+          }).join('')}
         </div>
       </div>` : ''}
       ${bestNatXi ? `<div style="margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:8px;font-size:11.5px">

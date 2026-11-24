@@ -1455,7 +1455,7 @@
       strict: {
         marking: 'Light (0%)',
         badge: 'b-info',
-        note: 'Wasit Ketat (#21836: +20% risiko pelanggaran/kartu, foulMul 1.20x): pakai Light (0%) atau Order Stay Calm (-25% kartu).',
+        note: 'Wasit Ketat (#21365/#21836: +20% risiko pelanggaran/kartu, cardMul 1.20x): pakai Light (0%) atau Order Stay Calm (-25% kartu).',
       },
       normal: {
         marking: recMarking,
@@ -1465,8 +1465,19 @@
       lenient: {
         marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+8% DEF)' : 'Heavy (+4% DEF)',
         badge: 'b-good',
-        note: 'Wasit Longgar (#21836: -18% risiko kartu, foulMul 0.82x): manfaatkan untuk menaikkan marking demi +4% s.d. +8% DEF!',
+        note: 'Wasit Longgar (#21365/#21836: -18% risiko kartu, cardMul 0.82x): manfaatkan untuk menaikkan marking demi +4% s.d. +8% DEF!',
       },
+      home: isHome
+        ? {
+            marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+8% DEF)' : 'Heavy (+4% DEF)',
+            badge: 'b-good',
+            note: 'Wasit Pro-Kandang (#21365): kartu kita 0.85x (-15%) & lawan 1.20x (+20%) karena bermain di KANDANG! Aman tekan Heavy / Very Heavy (+4%..+8% DEF).',
+          }
+        : {
+            marking: 'Light (0%)',
+            badge: 'b-warn',
+            note: 'Wasit Pro-Kandang (#21365): kartu kita 1.20x (+20%) & tuan rumah 0.85x karena TANDANG! Turunkan ke Light (0%) atau Order Stay Calm.',
+          },
     };
 
     const weatherPlan = {
@@ -1474,17 +1485,21 @@
         label: '☀️ Cerah (Normal)',
         note: 'Kondisi ideal — jalankan fokus serangan & manfaatkan hingga 5 pergantian pemain (#21779) saat energi <60%.',
       },
+      cloudy: {
+        label: '⛅ Berawan (Normal)',
+        note: 'Cuaca sejuk/berawan — penalti miss (1.00x) & kuras stamina (1.00x) sama-sama normal; jalankan taktik optimal.',
+      },
       rain: {
-        label: '🌧️ Hujan (+12% Miss, +8% Kartu)',
-        note: 'Di #21837/#21838, hujan menaikkan missMul 1.12x (+12% tembakan meleset) & foulMul 1.08x: prioritaskan volume peluang (MID tinggi) & bola mati.',
+        label: '🌧️ Hujan (+12% Miss)',
+        note: 'Di #21366/#21837, hujan menaikkan missMul 1.12x (+12% tembakan meleset): prioritaskan volume peluang (MID tinggi) & bola mati.',
       },
       heat: {
         label: '🔥 Panas (+12% Kuras Stamina)',
-        note: 'Di #21839, cuaca panas menaikkan energyDrainMul 1.12x (+12% kuras energi; Altitude juga +18%): rotasikan 5 sub lebih awal mulai menit 55!',
+        note: 'Di #21367/#21839, cuaca panas menaikkan energyDrainMul 1.12x (+12% kuras energi): rotasikan 5 sub lebih awal mulai menit 55!',
       },
       snow: {
-        label: '❄️ Salju (+18% Miss, +5% Kuras Stamina)',
-        note: 'Di #21837/#21839, salju menaikkan missMul 1.18x & energyDrainMul 1.05x: kurangi spekulasi jarak jauh dan jaga kesegaran lini tengah.',
+        label: '❄️ Salju (+18% Miss, +5% Stamina)',
+        note: 'Di #21366/#21367, salju menaikkan missMul 1.18x & energyDrainMul 1.05x: kurangi spekulasi jarak jauh dan jaga kesegaran lini tengah.',
       },
     };
 

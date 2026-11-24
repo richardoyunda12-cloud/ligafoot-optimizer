@@ -821,7 +821,7 @@
     const upcomingMatches = S.extractUpcomingMatches(
       save, userId, clubsMeta, compactTeams, staticPlayers,
       bestXi, sections, fanConf, userDiv, reputation, userRoster,
-      activeFormation, foreignCap, userCountry, ticketMul, rawTmb
+      activeFormation, foreignCap, userCountry, ticketMul, rawTmb, sdb
     );
 
     prog(75, 'Memindai Global Auto-Scout Moneyball (1.185+ klub AI)...');
@@ -961,6 +961,7 @@
                   away: a,
                   isHome: h === natIso,
                   oppIso: h === natIso ? a : h,
+                  neutral: Boolean(fx.neutral),
                 });
               }
             }
@@ -1044,8 +1045,24 @@
         }
         const oppStars = oppPool.slice().sort((a, b) => (b.force || 0) - (a.force || 0)).slice(0, 3)
           .map(p => ({ name: p.name, pos: p.pos, force: p.force }));
+        const Cond = LF.conditions || null;
+        let natAutoCond = null;
+        if (Cond && typeof Cond.matchConditions === 'function') {
+          const wYear = save.world && save.world.year ? save.world.year : Number(currentDate.slice(0, 4));
+          const mDate = Number.isFinite(Number(m.day)) ? (Cond.dayToIsoDate(wYear, Number(m.day)) || currentDate) : currentDate;
+          const mComp = wComps[m.compId] || { kind: 'nations' };
+          try {
+            natAutoCond = Cond.matchConditions(
+              m.home, m.away, m.home, m.away, mDate, Cond.varOfComp(mComp),
+              { world: save.world, allTeams: compactTeams, neutral: Boolean(m.neutral), comp: mComp, staticDb: sdb, clubsMeta }
+            );
+          } catch (_) {
+            natAutoCond = null;
+          }
+        }
         matchPreviews.push({
           ...m,
+          autoCond: natAutoCond,
           uAvg: uNatBestXi.avgScore,
           oAvg: oppXi.avgScore,
           uForm: uNatBestXi.formation,

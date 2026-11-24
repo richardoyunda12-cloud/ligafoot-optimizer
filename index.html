@@ -230,24 +230,30 @@
     <div class="card mb-8">
       <div class="wr-top-head">
         <div>
-          <h2 style="margin:0">⚔️ War Room Matchday</h2>
-          <div class="kpi-sub wr-sub-desk">Pilih jadwal di bawah, lalu cocokkan <b>Wasit</b> &amp; <b>Cuaca</b> sesuai layar pra-pertandingan di game.</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <h2 style="margin:0">⚔️ War Room Matchday</h2>
+            <button type="button" id="wr-cond-auto" class="badge b-good" style="border:none;cursor:pointer;font-size:10.5px" onclick="resetWarCondToAuto()">⚡ Auto-Deteksi</button>
+          </div>
+          <div class="kpi-sub wr-sub-desk">Cuaca &amp; Wasit terdeteksi otomatis 1:1 sesuai engine game; klik tombol jika ingin uji manual.</div>
         </div>
         <div class="wr-cond-bars">
           <div class="wr-seg-row">
             <span class="wr-seg-lbl">Wasit</span>
             <div class="wr-seg-group">
               <button type="button" id="wr-ref-strict" class="btn btn-sm" onclick="setWarCond('ref','strict')">🟥 Ketat</button>
-              <button type="button" id="wr-ref-normal" class="btn btn-sm btn-green" onclick="setWarCond('ref','normal')">🟨 Normal</button>
+              <button type="button" id="wr-ref-normal" class="btn btn-sm btn-green" onclick="setWarCond('ref','normal')">⚖️ Normal</button>
               <button type="button" id="wr-ref-lenient" class="btn btn-sm" onclick="setWarCond('ref','lenient')">🟩 Longgar</button>
+              <button type="button" id="wr-ref-home" class="btn btn-sm" onclick="setWarCond('ref','home')">🏠 Tuan Rmh</button>
             </div>
           </div>
           <div class="wr-seg-row">
             <span class="wr-seg-lbl">Cuaca</span>
             <div class="wr-seg-group">
               <button type="button" id="wr-w-clear" class="btn btn-sm btn-green" onclick="setWarCond('weather','clear')">☀️ Cerah</button>
+              <button type="button" id="wr-w-cloudy" class="btn btn-sm" onclick="setWarCond('weather','cloudy')">⛅ Berawan</button>
               <button type="button" id="wr-w-rain" class="btn btn-sm" onclick="setWarCond('weather','rain')">🌧️ Hujan</button>
               <button type="button" id="wr-w-heat" class="btn btn-sm" onclick="setWarCond('weather','heat')">🔥 Panas</button>
+              <button type="button" id="wr-w-snow" class="btn btn-sm" onclick="setWarCond('weather','snow')">❄️ Salju</button>
             </div>
           </div>
         </div>
@@ -895,6 +901,7 @@
 <!-- 1. Engine Pure JS (Tahap 1 & 2) -->
 <script src="js/engine/config.js"></script>
 <script src="js/engine/utils.js"></script>
+<script src="js/engine/conditions.js"></script>
 <script src="js/engine/economy.js"></script>
 <script src="js/engine/tactics.js"></script>
 <script src="js/engine/roster.js"></script>

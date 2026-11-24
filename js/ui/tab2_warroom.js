@@ -5,22 +5,72 @@ let warSimIsHome = true;
 let warSimIsKo = false;
 let warSimCompKind = 'league';
 let warShoutUsed = {};
+let warCondManual = {};
+let warCondSaveSig = '';
 
-function syncWarCondButtons() {
-  ['strict', 'normal', 'lenient'].forEach(r => {
+const WAR_REF_META = {
+  strict: { ico: '🟥', lbl: 'Ketat' },
+  normal: { ico: '⚖️', lbl: 'Normal' },
+  lenient: { ico: '🟩', lbl: 'Longgar' },
+  home: { ico: '🏠', lbl: 'Pro-Kandang' },
+};
+const WAR_WEATHER_META = {
+  clear: { ico: '☀️', lbl: 'Cerah' },
+  cloudy: { ico: '⛅', lbl: 'Berawan' },
+  rain: { ico: '🌧️', lbl: 'Hujan' },
+  heat: { ico: '🔥', lbl: 'Panas' },
+  snow: { ico: '❄️', lbl: 'Salju' },
+};
+
+function getActiveWarCondKey() {
+  return warSimMode ? 'sim' : ('fx_' + activeMatchIdx);
+}
+
+function resetWarCondToAuto() {
+  const key = getActiveWarCondKey();
+  delete warCondManual[key];
+  showToast('Kondisi Cuaca & Wasit dikembalikan ke Auto-Engine');
+  renderTab2();
+}
+
+function syncWarCondButtons(activeFx) {
+  ['strict', 'normal', 'lenient', 'home'].forEach(r => {
     const el = document.getElementById('wr-ref-' + r);
     if (el) el.className = (warRef === r) ? 'btn btn-sm btn-green' : 'btn btn-sm';
   });
-  ['clear', 'rain', 'heat'].forEach(w => {
+  ['clear', 'cloudy', 'rain', 'heat', 'snow'].forEach(w => {
     const el = document.getElementById('wr-w-' + w);
     if (el) el.className = (warWeather === w) ? 'btn btn-sm btn-green' : 'btn btn-sm';
   });
+  const autoEl = document.getElementById('wr-cond-auto');
+  if (autoEl) {
+    const key = getActiveWarCondKey();
+    const ov = warCondManual[key] || {};
+    const hasAuto = Boolean(!warSimMode && activeFx && activeFx.autoCond);
+    if (hasAuto) {
+      const isOv = Boolean(ov.ref || ov.weather);
+      autoEl.textContent = isOv ? '↩️ Manual · Kembali Auto' : '⚡ Auto-Engine';
+      autoEl.className = isOv ? 'badge b-warn' : 'badge b-good';
+      autoEl.disabled = false;
+    } else {
+      autoEl.textContent = '🧪 Simulasi (Manual)';
+      autoEl.className = 'badge b-accent';
+      autoEl.disabled = true;
+    }
+  }
 }
 
 function setWarCond(kind, val) {
-  if (kind === 'ref') warRef = val;
-  if (kind === 'weather') warWeather = val;
-  syncWarCondButtons();
+  const key = getActiveWarCondKey();
+  if (!warCondManual[key]) warCondManual[key] = {};
+  if (kind === 'ref') {
+    warRef = val;
+    warCondManual[key].ref = val;
+  }
+  if (kind === 'weather') {
+    warWeather = val;
+    warCondManual[key].weather = val;
+  }
   renderTab2();
 }
 
@@ -398,6 +448,16 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
   const rec = m ? m.recommended : null;
   const refObj = m ? (m.refereePlan[warRef] || m.refereePlan.normal) : null;
   const wObj = m ? (m.weatherPlan[warWeather] || m.weatherPlan.clear) : null;
+  const ac = (!fx.isSim && fx.autoCond) ? fx.autoCond : null;
+  const condKey = fx.isSim ? 'sim' : ('fx_' + activeMatchIdx);
+  const ov = warCondManual[condKey] || {};
+  const isManualRef = Boolean(ov.ref && ac && ov.ref !== ac.refStyle);
+  const isManualWeather = Boolean(ov.weather && ac && ov.weather !== ac.weather);
+  const wMeta = WAR_WEATHER_META[warWeather] || WAR_WEATHER_META.clear;
+  const rMeta = WAR_REF_META[warRef] || WAR_REF_META.normal;
+  const refTitle = `${rMeta.ico} ${rMeta.lbl}${(!isManualRef && ac) ? ` (${ac.refCountry}${ac.refName ? ' · ' + ac.refName : ''})` : ''}`;
+  const ourCardMul = warRef === 'strict' ? 1.2 : (warRef === 'lenient' ? 0.82 : (warRef === 'home' ? (fx.isHome ? 0.85 : 1.2) : 1.0));
+  const altExtraPct = ac && ac.altHit > 0 ? Math.round(35 * ac.altHit) : 0;
   const aiFocus = fx.aiFocus || (m && m.aiInfo ? m.aiInfo.aiFocus : 'Mixed');
   const oppSt = findOppStanding(fx.oppId, fx.oppName);
   const oppRankBadge = oppSt
@@ -425,6 +485,11 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
         ${rec && rec.winPct !== undefined ? `<span class="badge ${rec.winPct >= rec.lossPct ? 'b-good' : 'b-warn'} mono" style="font-size:11px">📊 ${rec.winPct}% W · ${rec.drawPct}% D · ${rec.lossPct}% L</span>` : ''}
         <span class="badge b-info" style="font-size:11px">${esc(shortStyle)}</span>
         <span class="badge ${refObj ? refObj.badge : 'b-muted'}" style="font-size:11px">Marking: ${esc(shortMark)}</span>
+        <span class="badge ${isManualWeather ? 'b-warn' : 'b-info'}" style="font-size:11px">${wMeta.ico} ${wMeta.lbl}</span>
+        <span class="badge ${isManualRef ? 'b-warn' : 'b-info'}" style="font-size:11px">${esc(refTitle)}</span>
+        ${ac && ac.ko ? `<span class="badge b-muted mono" style="font-size:11px">🕒 ${esc(ac.ko)}</span>` : ''}
+        ${ac ? `<span class="badge ${ac.varOn ? 'b-good' : 'b-muted'}" style="font-size:11px">📺 ${ac.varOn ? 'VAR ON' : 'VAR OFF'}</span>` : ''}
+        ${ac && ac.alt >= 2000 ? `<span class="badge b-warn mono" style="font-size:11px">⛰️ ${ac.alt}m${altExtraPct ? ` (+${altExtraPct}% A)` : ''}</span>` : ''}
         ${tkt ? `<span class="badge ${tkt.diffs && tkt.diffs.length ? 'b-warn' : 'b-good'} mono" style="font-size:11px">🎟️ ${tktCompact}</span>` : '<span class="badge b-muted" style="font-size:11px">✈️ Tanpa Tiket</span>'}
         <span class="badge ${effEdge >= 1 ? 'b-good' : (effEdge <= -1 ? 'b-crit' : 'b-warn')} mono" style="font-size:11px">Edge ${effEdge >= 0 ? '+' : ''}${effEdge}</span>
       </div>
@@ -508,9 +573,21 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
     </div>` : '';
 
   // Kartu 2: Taktik, Intel AI #23795, Wasit & Cuaca
+  const autoCondBanner = ac ? `
+    <div class="mb-8" style="background:var(--card);border:1px solid ${(isManualRef || isManualWeather) ? 'rgba(245,158,11,.45)' : 'rgba(16,185,129,.4)'};padding:7px 9px;border-radius:8px;font-size:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+        <span><b>⚡ Kondisi Laga Engine (v1.2.0)</b> <span class="mono c-muted">${esc(ac.dateStr)} · 🕒 ${esc(ac.ko || '-')}</span></span>
+        <span class="badge ${(isManualRef || isManualWeather) ? 'b-warn' : 'b-good'}">${(isManualRef || isManualWeather) ? '✏️ Manual Override' : '⚡ Auto-Engine'}</span>
+      </div>
+      <div class="mono" style="line-height:1.5">
+        Cuaca: <b>${wMeta.ico} ${wMeta.lbl}</b> · Wasit: <b>${esc(rMeta.ico + ' ' + rMeta.lbl)}</b> [${esc(ac.refCountry)}${ac.refName ? ' · ' + esc(ac.refName) : ''}, kartu kita <b>${ourCardMul.toFixed(2)}x</b>] · VAR: <b class="${ac.varOn ? 'c-green' : 'c-muted'}">${ac.varOn ? 'ON' : 'OFF'}</b>${ac.alt >= 2000 ? ` · ⛰️ Alt <b>${ac.alt}m</b>${altExtraPct ? ` (+${altExtraPct}% stamina tandang)` : ''}` : ''}
+      </div>
+    </div>` : '';
+
   const tacticBlock = (m && refObj && wObj) ? `
     <div id="wr-sec-tactic" style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:11px;font-size:11px">
       <div class="kpi-lbl mb-8">2. Contekan Taktik, Intel AI (#24016), Wasit &amp; Cuaca</div>
+      ${autoCondBanner}
       <div class="mb-8" style="background:var(--card);padding:6px 8px;border-radius:7px">
         <b>🤖 Prediksi AI Lawan:</b> <span class="badge b-warn">${esc(fx.aiStyle)}</span>
         <span class="badge b-accent">Fokus: ${esc(aiFocus)}</span>
@@ -525,7 +602,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       <div class="mb-8"><b>False Nine (#21822):</b> <span class="badge ${m.falseNine ? 'b-accent' : 'b-muted'}">${m.falseNine && m.falseNineTarget ? `ON: ${esc(m.falseNineTarget.name)}` : 'OFF (Tidak Dipakai)'}</span>
         <div class="c-muted" style="margin-top:2px">${esc(m.falseNineWhy || 'OFF — Mempertahankan 100% bobot lini depan.')}</div>
       </div>
-      <div class="mb-8"><b>Marking (Wasit ${warRef.toUpperCase()}):</b> <span class="badge ${refObj.badge}">${esc(refObj.marking)}</span>
+      <div class="mb-8"><b>Marking (Wasit ${esc(rMeta.lbl)} · ${ourCardMul.toFixed(2)}x):</b> <span class="badge ${refObj.badge}">${esc(refObj.marking)}</span>
         <div class="c-muted" style="margin-top:2px">${esc(refObj.note)}</div>
       </div>
       <div><b>Cuaca (${esc(wObj.label)}):</b> <span class="c-muted">${esc(wObj.note)}</span></div>
@@ -718,10 +795,14 @@ function renderTab2() {
   const mainEl = document.getElementById('t2-active-match');
   if (!selEl || !mainEl) return;
 
-  syncWarCondButtons();
-
   const list = Array.isArray(D.upcoming) ? D.upcoming : [];
   const simOpps = getSimOpponentsList();
+
+  const curSig = `${(D.meta && D.meta.currentDate) || ''}|${(D.meta && D.meta.userId) || ''}|${list.length}`;
+  if (curSig !== warCondSaveSig) {
+    warCondManual = {};
+    warCondSaveSig = curSig;
+  }
 
   if (!list.length) warSimMode = true;
   if (!warSimOppId || !simOpps.some(o => o.id === warSimOppId)) {
@@ -735,14 +816,18 @@ function renderTab2() {
     const effEdge = getEffectiveMatchEdge(fx);
     const edgeCls = effEdge >= 2 ? 'c-green' : (effEdge <= -2 ? 'c-red' : 'c-amber');
     const oppSt = findOppStanding(fx.oppId, fx.oppName);
+    const acP = fx.autoCond;
+    const wIcoP = acP && WAR_WEATHER_META[acP.weather] ? WAR_WEATHER_META[acP.weather].ico : '';
+    const rIcoP = acP && WAR_REF_META[acP.refStyle] ? WAR_REF_META[acP.refStyle].ico : '';
     return `<button type="button" class="match-pill ${isAct ? 'active' : ''}" onclick="selectWarMatch(${idx})">
       <div class="flex-between" style="font-size:10px;margin-bottom:3px">
-        <span class="badge ${idx === 0 ? 'b-good' : 'b-muted'}">${idx === 0 ? 'NEXT' : '#' + (idx + 1)} • ${fx.isHome ? '🏠' : '✈️'}</span>
+        <span class="badge ${idx === 0 ? 'b-good' : 'b-muted'}">${idx === 0 ? 'NEXT' : '#' + (idx + 1)} • ${fx.isHome ? '🏠' : '✈️'}${wIcoP || rIcoP ? ' ' + wIcoP + rIcoP : ''}</span>
         <span class="mono ${edgeCls}"><b>${fx.safeRotate ? 'Rot ' : ''}${effEdge >= 0 ? '+' : ''}${effEdge}</b></span>
       </div>
       <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">vs ${esc(fx.oppName)}${oppSt ? ` <span class="c-muted mono" style="font-size:10px">#${oppSt.pos}</span>` : ''}</div>
       <div class="c-muted" style="font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
         ${esc(fx.compName)}${fx.roundName ? ' · ' + esc(fx.roundName) : ''}
+        ${acP && acP.varOn ? ' <b class="c-green">• VAR</b>' : ''}
         ${tktNeed ? ' <b class="c-amber">• 🎟️</b>' : ''}
         ${fx.yellowRisks && fx.yellowRisks.length ? ' <b class="c-red">• 🟨</b>' : ''}
       </div>
@@ -762,12 +847,15 @@ function renderTab2() {
 
   selEl.innerHTML = officialPills + simPill;
 
-  // 2. Render Konten Utama War Room
+  // 2. Render Konten Utama War Room (+ Sinkronisasi Kondisi Otomatis)
   let activeFx = null;
   let simControlsHtml = '';
 
   if (warSimMode) {
     const chosenOpp = simOpps.find(o => o.id === warSimOppId) || simOpps[0];
+    const ovSim = warCondManual.sim || {};
+    warRef = ovSim.ref || warRef || 'normal';
+    warWeather = ovSim.weather || warWeather || 'clear';
     activeFx = buildSimulatedFixture(chosenOpp, warSimIsHome, warSimIsKo, warSimCompKind);
     simControlsHtml = `
       <div class="wr-sim-bar">
@@ -797,8 +885,17 @@ function renderTab2() {
   } else {
     if (activeMatchIdx >= list.length) activeMatchIdx = 0;
     activeFx = list[activeMatchIdx];
+    const ov = warCondManual['fx_' + activeMatchIdx] || {};
+    if (activeFx && activeFx.autoCond) {
+      warRef = ov.ref || activeFx.autoCond.refStyle || 'normal';
+      warWeather = ov.weather || activeFx.autoCond.weather || 'clear';
+    } else {
+      warRef = ov.ref || 'normal';
+      warWeather = ov.weather || 'clear';
+    }
   }
 
+  syncWarCondButtons(activeFx);
   mainEl.innerHTML = simControlsHtml + renderWarRoomMatchCard(activeFx, !warSimMode && activeMatchIdx === 0);
 
   // 3. Render Halftime Talk & Pelacak 3 Shout

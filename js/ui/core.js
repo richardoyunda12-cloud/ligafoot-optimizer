@@ -1,8 +1,8 @@
 // ==================== STATE & HELPERS (v7.0 Exact Engine Sync) ====================
 let activeTab = 't1';
 let xiMode = 'best';
-let warRef = 'normal';     // strict | normal | lenient
-let warWeather = 'clear';  // clear | rain | heat
+let warRef = 'normal';     // strict | normal | lenient | home
+let warWeather = 'clear';  // clear | cloudy | rain | heat | snow
 let simMode = 'normal';
 let simCompKind = 'league';
 let simPrices = { ...((D && D.stadium && D.stadium.optLigaPrices) || { geral: 12, arquibancada: 19, cadeiras: 47, camarotes: 160 }) };
