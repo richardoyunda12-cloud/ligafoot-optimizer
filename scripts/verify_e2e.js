@@ -160,6 +160,17 @@ function runStage2Engine(savePath) {
   assert(D.matchTelemetry.season.games <= D.matchTelemetry.all.games, 'season.games > all.games');
   assert.strictEqual(D.matchTelemetry.all.minuteBuckets.length, 6, 'minuteBuckets harus 6');
   assert(D.matchTelemetry.all.avgPos >= 0 && D.matchTelemetry.all.avgPos <= 100, 'avgPos di luar 0..100');
+  const sPlayers = D.matchTelemetry.season && D.matchTelemetry.season.playerTelemetry ? D.matchTelemetry.season.playerTelemetry : null;
+  if (sPlayers && Array.isArray(sPlayers.allPlayers)) {
+    for (const sp of sPlayers.allPlayers) {
+      assert(sp.ratedApps <= sp.apps && sp.ratedSubs <= sp.subs, `ratedApps/ratedSubs invalid untuk ${sp.name}`);
+    }
+    for (const up of (sPlayers.underperformers || [])) {
+      if (up.ratedApps > 0) {
+        assert(up.avgRating >= 4.0, `Underperformer avgRating (${up.avgRating} untuk ${up.name}) terlalu rendah — indikasi bug null rating=0`);
+      }
+    }
+  }
 
   // 5. Ticket Presets & 12M Cashflow Calendar
   const rawPresets = Array.isArray(save.ticketPresets) ? save.ticketPresets : [];

@@ -678,7 +678,9 @@
           const nm = String(pl[0] || '').trim();
           const low = nm.toLowerCase();
           const pos = String(pl[1] || '-');
-          const rt = U.safeNum(pl[2], 0);
+          const rawRt = pl[2];
+          const hasRt = typeof rawRt === 'number' && Number.isFinite(rawRt) && rawRt > 0;
+          const rt = hasRt ? rawRt : 0;
           const subMin = pl.length >= 4 ? U.safeInt(pl[3], 0) : 0;
           let st = pStats.get(low);
           if (!st) {
@@ -690,8 +692,10 @@
               force: rp ? rp.force : 0,
               isCurrent: Boolean(rp),
               apps: 0,
+              ratedApps: 0,
               starts: 0,
               subs: 0,
+              ratedSubs: 0,
               ratingSum: 0,
               subRatingSum: 0,
               goals: 0,
@@ -702,11 +706,17 @@
           st.apps++;
           if (subMin > 0) {
             st.subs++;
-            st.subRatingSum += rt;
+            if (hasRt) {
+              st.ratedSubs++;
+              st.subRatingSum += rt;
+            }
           } else {
             st.starts++;
           }
-          st.ratingSum += rt;
+          if (hasRt) {
+            st.ratedApps++;
+            st.ratingSum += rt;
+          }
           st.goals += (pGoalsThisMatch.get(low) || 0);
           st.cards += (pCardsThisMatch.get(low) || 0);
         }
@@ -755,25 +765,26 @@
 
       const rawPlayers = Array.from(pStats.values()).map(s => ({
         ...s,
-        avgRating: s.apps ? U.roundTo(s.ratingSum / s.apps, 2) : 0,
-        subAvgRating: s.subs ? U.roundTo(s.subRatingSum / s.subs, 2) : 0,
+        avgRating: s.ratedApps ? U.roundTo(s.ratingSum / s.ratedApps, 2) : 0,
+        subAvgRating: s.ratedSubs ? U.roundTo(s.subRatingSum / s.ratedSubs, 2) : 0,
       }));
       const curList = rawPlayers.filter(p => p.isCurrent);
       const poolForRank = curList.length >= 6 ? curList : rawPlayers;
-      const teamAvgRt = poolForRank.length
-        ? U.roundTo(poolForRank.reduce((sum, x) => sum + x.avgRating * x.apps, 0) / Math.max(1, poolForRank.reduce((sum, x) => sum + x.apps, 0)), 2)
+      const ratedPool = poolForRank.filter(x => x.ratedApps > 0);
+      const teamAvgRt = ratedPool.length
+        ? U.roundTo(ratedPool.reduce((sum, x) => sum + x.avgRating * x.ratedApps, 0) / Math.max(1, ratedPool.reduce((sum, x) => sum + x.ratedApps, 0)), 2)
         : 6.5;
       const minApps = games >= 25 ? 4 : (games >= 8 ? 2 : 1);
       const overperformers = [...poolForRank]
-        .filter(p => p.apps >= minApps)
+        .filter(p => p.ratedApps >= minApps && p.avgRating > 0)
         .sort((a, b) => (b.avgRating - a.avgRating) || (b.goals - a.goals))
         .slice(0, 6);
       const supersubs = [...poolForRank]
-        .filter(p => p.subs >= (games >= 25 ? 2 : 1))
-        .sort((a, b) => (b.subAvgRating - a.subAvgRating) || (b.subs - a.subs))
+        .filter(p => p.ratedSubs >= (games >= 25 ? 2 : 1) && p.subAvgRating > 0)
+        .sort((a, b) => (b.subAvgRating - a.subAvgRating) || (b.ratedSubs - a.ratedSubs))
         .slice(0, 6);
       const underperformers = [...poolForRank]
-        .filter(p => p.apps >= minApps && p.avgRating < teamAvgRt)
+        .filter(p => p.ratedApps >= minApps && p.avgRating > 0 && p.avgRating < teamAvgRt)
         .sort((a, b) => (a.avgRating - b.avgRating) || (b.force - a.force))
         .slice(0, 5);
 

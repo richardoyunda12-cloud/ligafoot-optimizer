@@ -560,7 +560,7 @@ function renderMatchTelemetry() {
         </div>
         <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:10px;padding:9px 11px">
           <h3 class="c-sky" style="margin-top:0">⚡ Top Supersubs (Rating Sub)</h3>
-          ${pt.supersubs.length ? pt.supersubs.map(p => pRowHtml(p, `<span class="badge b-info">${p.subAvgRating}</span> · ${p.subs} sub`)).join('') : '<div class="c-muted">Belum ada catatan supersub.</div>'}
+          ${pt.supersubs.length ? pt.supersubs.map(p => pRowHtml(p, `<span class="badge b-info">${p.subAvgRating}</span> · ${p.ratedSubs ?? p.subs} sub`)).join('') : '<div class="c-muted">Belum ada catatan supersub.</div>'}
         </div>
         <div style="background:var(--bg2);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:9px 11px">
           <h3 class="c-amber" style="margin-top:0">⚠️ Performa Di Bawah Rata2 Tim</h3>
