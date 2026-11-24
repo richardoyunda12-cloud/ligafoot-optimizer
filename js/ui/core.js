@@ -889,6 +889,9 @@ window.LFResetUIState = function () {
   scoutPreset = 'ALL';
   scoutBlueprintTab = 'UPGRADE';
   if (typeof acadFilter !== 'undefined') acadFilter = 'ALL';
+  if (typeof whatsNewDismissed !== 'undefined') whatsNewDismissed = false;
+  if (typeof wkTrackerFilter !== 'undefined') wkTrackerFilter = 'ALL';
+  if (typeof wkTrackerSelectedId !== 'undefined') wkTrackerSelectedId = null;
   activeDrawer = null;
   if (D && D.stadium && D.stadium.optLigaPrices) {
     simPrices = { ...D.stadium.optLigaPrices };

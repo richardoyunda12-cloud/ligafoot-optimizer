@@ -249,7 +249,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.8.0 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.9.0 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -308,8 +308,18 @@ async function importPwaBackupFile(file) {
       if (typeof renderTab7All === 'function') renderTab7All();
     }
     if (obj.history && typeof obj.history === 'object' && window.LFStorage) {
-      const curH = await window.LFStorage.getHistory();
-      await window.LFStorage.saveHistory({ ...(curH || {}), ...obj.history });
+      const curH = (await window.LFStorage.getHistory()) || {};
+      const merged = { ...curH };
+      for (const [tid, clubHist] of Object.entries(obj.history)) {
+        if (!clubHist || typeof clubHist !== 'object' || Array.isArray(clubHist)) continue;
+        const combined = { ...(merged[tid] && typeof merged[tid] === 'object' ? merged[tid] : {}), ...clubHist };
+        const dates = Object.keys(combined).sort();
+        if (dates.length > 40) {
+          for (const oldD of dates.slice(0, dates.length - 40)) delete combined[oldD];
+        }
+        merged[tid] = combined;
+      }
+      await window.LFStorage.saveHistory(merged);
     }
     renderPwaManager();
     showToast('Backup Shortlist & Delta History berhasil dipulihkan!');
@@ -925,18 +935,19 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.8.0`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.8.0</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.9.0`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.9.0</span>`;
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)}) • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.8.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.9.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],
     ['Tab2', renderTab2],
     ['Tab3', initTab3],
     ['Tab4', renderRosterTable],
+    ['Tab3Growth', renderWonderkidTracker],
     ['Tab3BTeam', renderBTeamPanel],
     ['Tab5', renderTab5],
     ['Tab6', renderTab6],

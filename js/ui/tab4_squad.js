@@ -330,6 +330,216 @@ function renderTrainingAudit() {
     </div>`;
 }
 
+// ==================== PELACAK PROGRESI WONDERKID & MULTI-SAVE (TIER 3) ====================
+let wkTrackerFilter = 'ALL'; // ALL | TRAIN | SENIOR | BTEAM | YOUTH
+let wkTrackerSelectedId = null;
+
+function setWkTrackerFilter(f) {
+  wkTrackerFilter = f || 'ALL';
+  renderWonderkidTracker();
+}
+
+function selectWkTracker(id) {
+  wkTrackerSelectedId = id || null;
+  renderWonderkidTracker();
+}
+
+function renderWonderkidTracker() {
+  const el = document.getElementById('t3-growth-tracker');
+  if (!el) return;
+  const progData = D.progression || {};
+  const allWk = Array.isArray(progData.wonderkids) ? progData.wonderkids : [];
+  const snapCount = progData.snapshotCount || 1;
+  const timeline = Array.isArray(progData.clubTimeline) ? progData.clubTimeline : [];
+
+  const filterMatch = (w) => {
+    if (wkTrackerFilter === 'TRAIN') return Boolean(w.inTrain);
+    if (wkTrackerFilter === 'SENIOR') return w.src === 'roster';
+    if (wkTrackerFilter === 'BTEAM') return w.src === 'bteam';
+    if (wkTrackerFilter === 'YOUTH') return w.src === 'youth';
+    return true;
+  };
+  const filtered = allWk.filter(filterMatch);
+  const poolForSel = filtered.length ? filtered : allWk;
+  let sel = poolForSel.find(w => w.id === wkTrackerSelectedId) || poolForSel[0] || null;
+  if (sel) wkTrackerSelectedId = sel.id;
+
+  const snapBadgeTxt = snapCount >= 2
+    ? `📸 ${snapCount} Snapshot (${progData.oldestDate} → ${progData.latestDate})`
+    : `📸 Snapshot #1 (Baseline + Proyeksi)`;
+
+  const chips = [
+    ['ALL', 'Semua', allWk.length],
+    ['TRAIN', '🏋️ Slot CT', allWk.filter(w => w.inTrain).length],
+    ['SENIOR', 'Senior', allWk.filter(w => w.src === 'roster').length],
+    ['BTEAM', '🅱️ Tim B', allWk.filter(w => w.src === 'bteam').length],
+    ['YOUTH', '🌱 Akademi', allWk.filter(w => w.src === 'youth').length],
+  ];
+  const chipBarHtml = `<div class="quick-chips-bar" style="margin-bottom:8px">${chips.map(([k, lbl, cnt]) =>
+    `<button type="button" class="qchip ${wkTrackerFilter === k ? 'active' : ''} ${cnt === 0 ? 'is-empty' : ''}" onclick="setWkTrackerFilter('${k}')">${lbl} <span class="mono">(${cnt})</span></button>`
+  ).join('')}</div>`;
+
+  let chartHtml = '<div class="c-muted">Belum ada prospek muda yang memenuhi kriteria tracker.</div>';
+  if (sel) {
+    const obsPts = Array.isArray(sel.obsPoints) && sel.obsPoints.length
+      ? sel.obsPoints
+      : [{ date: (D.meta && D.meta.currentDate) || '-', force: sel.force, effForce: sel.effForce, gf: sel.growthFrac }];
+    const projPts = Array.isArray(sel.projectedCurve) ? sel.projectedCurve : [];
+    const lastObs = obsPts[obsPts.length - 1];
+    const allPts = [
+      ...obsPts.map((pt, i) => ({
+        kind: 'obs',
+        lbl: i === 0 && obsPts.length >= 2 ? String(pt.date || '').slice(5) : (i === obsPts.length - 1 ? 'Kini' : String(pt.date || '').slice(5)),
+        val: Number(pt.effForce ?? pt.force) || 0,
+      })),
+      ...projPts.slice(1).map(pt => ({
+        kind: 'proj',
+        lbl: pt.label.replace(' Bln', 'B'),
+        val: Number(pt.eff) || 0,
+      })),
+    ];
+
+    const W = 620, H = 195, padL = 42, padR = 26, padT = 24, padB = 28;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const vals = allPts.map(x => x.val).concat([sel.potCap]);
+    const yMin = Math.max(0, Math.floor(Math.min(...vals) - 2));
+    const yMax = Math.max(yMin + 5, Math.ceil(Math.max(...vals) + 2));
+    const xOf = (idx) => allPts.length <= 1 ? padL + plotW / 2 : (padL + (idx / (allPts.length - 1)) * plotW);
+    const yOf = (v) => padT + plotH - ((v - yMin) / Math.max(1, yMax - yMin)) * plotH;
+
+    const obsCount = obsPts.length;
+    const obsCoords = allPts.slice(0, obsCount).map((p, i) => [xOf(i), yOf(p.val), p]);
+    const projCoords = obsCount >= 1
+      ? [[xOf(obsCount - 1), yOf(allPts[obsCount - 1].val), allPts[obsCount - 1]], ...allPts.slice(obsCount).map((p, i) => [xOf(obsCount + i), yOf(p.val), p])]
+      : [];
+
+    const capY = yOf(sel.potCap);
+    const obsLine = obsCoords.map(c => `${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');
+    const projLine = projCoords.map(c => `${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');
+    const showXIdx = new Set([0, Math.max(0, obsCount - 1), allPts.length - 1]);
+
+    const svgStr = `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:100%;height:auto;display:block;background:var(--bg2);border-radius:10px;border:1px solid var(--border)">
+        <line x1="${padL}" y1="${capY.toFixed(1)}" x2="${W - padR}" y2="${capY.toFixed(1)}" stroke="#f59e0b" stroke-width="1.4" stroke-dasharray="5,4" />
+        <text x="${W - padR}" y="${Math.max(12, capY - 5).toFixed(1)}" text-anchor="end" fill="#fcd34d" font-size="10.5" font-weight="700">PotCap ${sel.potCap}</text>
+        <line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="#243449" stroke-width="1" />
+        <text x="6" y="${padT + 9}" fill="#8ea3bc" font-size="10.5">${yMax}</text>
+        <text x="6" y="${padT + plotH}" fill="#8ea3bc" font-size="10.5">${yMin}</text>
+        ${projCoords.length >= 2 ? `<polyline fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-dasharray="5,4" points="${projLine}" />` : ''}
+        ${obsCoords.length >= 2 ? `<polyline fill="none" stroke="#10b981" stroke-width="2.8" points="${obsLine}" />` : ''}
+        ${projCoords.slice(1).map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3.6" fill="#38bdf8" /><text x="${c[0].toFixed(1)}" y="${Math.max(14, c[1] - 7).toFixed(1)}" text-anchor="middle" fill="#7dd3fc" font-size="9.5">${c[2].val}</text>`).join('')}
+        ${obsCoords.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="4.2" fill="#10b981" stroke="#07131c" stroke-width="1.2" /><text x="${c[0].toFixed(1)}" y="${Math.max(14, c[1] - 8).toFixed(1)}" text-anchor="middle" fill="#6ee7b7" font-size="10" font-weight="700">${c[2].val}</text>`).join('')}
+        ${allPts.map((pt, idx) => (showXIdx.has(idx) || allPts.length <= 6)
+          ? `<text x="${xOf(idx).toFixed(1)}" y="${H - 8}" text-anchor="middle" fill="${pt.kind === 'obs' ? '#a7f3d0' : '#8ea3bc'}" font-size="10">${esc(pt.lbl)}</text>`
+          : '').join('')}
+      </svg>`;
+
+    const paceMap = {
+      AHEAD: { cls: 'b-good', lbl: '🚀 Unggul' },
+      ON_TRACK: { cls: 'b-info', lbl: '✓ On Track' },
+      BEHIND: { cls: 'b-warn', lbl: '⚠ Lambat' },
+      BASELINE: { cls: 'b-muted', lbl: '📌 Baseline' },
+    };
+    const pBadge = paceMap[sel.paceStatus] || paceMap.BASELINE;
+    const rateMob = `+${(sel.estWeeklyRate * 4.33).toFixed(2)}/bln`;
+    const actualTxt = sel.obsWeeklyRate !== null ? `+${sel.obsWeeklyRate.toFixed(3)}/pkn` : 'Belum cukup data';
+    const ctTip = (!sel.inTrain && sel.src === 'roster')
+      ? `<span class="c-sky">Jika masuk Slot CT: +${sel.rateIfTrained.toFixed(3)}/pkn</span>`
+      : (sel.inTrain ? '<span class="c-green">🏋️ Sedang di Slot CT Aktif</span>' : `<span class="c-muted">${sel.src === 'youth' ? `Akademi Dev ${sel.dev || 0}%` : 'Skuat Tim B'}</span>`);
+
+    chartHtml = `
+      <div id="t3-wk-chart">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <select id="t3-wk-select" style="flex:1 1 200px;min-width:0;max-width:100%" onchange="selectWkTracker(this.value)">
+            ${poolForSel.map(w => {
+              const sLbl = w.src === 'bteam' ? '[Tim B] ' : (w.src === 'youth' ? '[Akademi] ' : (w.inTrain ? '[CT] ' : ''));
+              return `<option value="${esc(w.id)}" ${w.id === sel.id ? 'selected' : ''}>${esc(sLbl + w.name)} (${fmtPos(w.pos)} ${w.age}th · F${w.effForce}→${w.potCap})</option>`;
+            }).join('')}
+          </select>
+          <button type="button" class="btn btn-sm" onclick="openPlayerDrawer('${escJs(sel.src)}','${escJs(sel.id)}')">👤 Profil</button>
+        </div>
+        <div style="min-width:0;overflow:hidden;margin-bottom:8px">${svgStr}</div>
+        <div class="t3-mini-strip">
+          <div class="t3-mini-card">
+            <div class="kpi-lbl">Force → PotCap</div>
+            <div class="kpi-val mono c-green">${sel.effForce} → ${sel.potCap}</div>
+            <div class="kpi-sub">Sisa gap +${sel.gap} (${sel.age}th)</div>
+          </div>
+          <div class="t3-mini-card">
+            <div class="kpi-lbl">Laju Target Engine</div>
+            <div class="kpi-val mono c-sky">+${sel.estWeeklyRate.toFixed(3)}</div>
+            <div class="kpi-sub">F/pekan (${rateMob})</div>
+          </div>
+          <div class="t3-mini-card">
+            <div class="kpi-lbl">Laju Aktual (${obsCount} ttk)</div>
+            <div class="kpi-val mono" style="font-size:15px">${sel.obsWeeklyRate !== null ? '+' + sel.obsWeeklyRate.toFixed(3) : 'Baseline'}</div>
+            <div class="kpi-sub"><span class="badge ${pBadge.cls}">${pBadge.lbl}</span></div>
+          </div>
+          <div class="t3-mini-card">
+            <div class="kpi-lbl">ETA +1F &amp; PotCap</div>
+            <div class="kpi-val mono c-amber">~${sel.weeksToNext} pkn</div>
+            <div class="kpi-sub">Cap ~${sel.etaMonthsToCap} bln · ${ctTip}</div>
+          </div>
+        </div>
+        <div class="c-muted" style="font-size:11px;margin-bottom:10px">${esc(sel.paceNote)} <span class="mono">(Hijau = Aktual, Biru Putus = Proyeksi +12 Bln, Kuning = PotCap)</span></div>
+      </div>`;
+  }
+
+  const tblRowsHtml = filtered.length ? filtered.map(w => {
+    const isSel = sel && w.id === sel.id;
+    const srcTag = w.inTrain ? '<span class="badge b-good">CT</span>' : (w.src === 'bteam' ? '<span class="badge b-accent">TIM B</span>' : (w.src === 'youth' ? '<span class="badge b-info">AKAD</span>' : ''));
+    const pBar = Math.min(100, Math.max(8, Math.round((w.effForce / Math.max(1, w.potCap)) * 100)));
+    const obsCol = w.obsWeeklyRate !== null ? `<b class="mono ${w.paceStatus === 'BEHIND' ? 'c-amber' : 'c-green'}">+${w.obsWeeklyRate.toFixed(3)}</b>` : '<span class="c-muted">-</span>';
+    return `<tr style="cursor:pointer;${isSel ? 'background:rgba(16,185,129,.12)' : ''}" onclick="selectWkTracker('${escJs(w.id)}')">
+      <td><b>${esc(w.name)}</b> ${srcTag} <span class="c-muted" style="font-size:10.5px">(${fmtPos(w.pos)} ${w.age}th)</span></td>
+      <td class="mono"><b>${w.effForce}</b>→<b class="c-green">${w.potCap}</b></td>
+      <td class="mono c-sky">+${w.estWeeklyRate.toFixed(3)}</td>
+      <td>${obsCol}</td>
+      <td class="mono col-hide-mob">~${w.etaMonthsToCap} bln</td>
+      <td class="col-hide-mob"><div class="mini-bar-wrap"><div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${pBar}%;background:var(--green)"></div></div><span class="mono" style="font-size:10.5px">${pBar}%</span></div></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="c-muted">Tidak ada prospek di kategori ini.</td></tr>';
+
+  const timelineHtml = timeline.length >= 2 ? `
+    <details class="glossary-inline mt-12">
+      <summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>📅 Linimasa Klub Antar-Save (${timeline.length} Snapshot)</span>
+        <button type="button" class="btn btn-sm" onclick="event.preventDefault();goToView('t6','t6-ext')">💾 Backup / Import →</button>
+      </summary>
+      <div class="tbl-wrap mt-8" style="max-height:220px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Tanggal</th><th>Kas</th><th>Best XI</th><th>Klasemen</th><th>Member</th></tr></thead>
+          <tbody>${timeline.slice().reverse().map(t => `<tr>
+            <td class="mono"><b>${esc(t.date)}</b></td>
+            <td class="mono c-green">${fmtM(t.budget)}</td>
+            <td class="mono">${t.bestXiAvg ?? '-'}</td>
+            <td class="mono">${t.leaguePos ? '#' + t.leaguePos : '-'}</td>
+            <td class="mono">${(t.members || 0).toLocaleString('id-ID')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </details>` : `<div class="flex-between mt-8" style="gap:8px;flex-wrap:wrap;font-size:11px">
+      <span class="c-muted">💡 Muat save berikutnya atau impor backup riwayat lama untuk membandingkan kurva aktual vs target engine.</span>
+      <button type="button" class="btn btn-sm" onclick="goToView('t6','t6-ext')">💾 Backup / Import History →</button>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+      <h2 style="margin:0">📈 Pelacak Progresi Wonderkid &amp; Multi-Save</h2>
+      <span class="badge ${snapCount >= 2 ? 'b-good' : 'b-info'} mono">${esc(snapBadgeTxt)}</span>
+    </div>
+    ${chipBarHtml}
+    ${chartHtml}
+    <div class="tbl-wrap tbl-sticky" style="max-height:250px;overflow-y:auto">
+      <table>
+        <thead><tr><th>Prospek</th><th>F → Cap</th><th>Target/pkn</th><th>Aktual/pkn</th><th class="col-hide-mob">ETA Cap</th><th class="col-hide-mob">Progres</th></tr></thead>
+        <tbody>${tblRowsHtml}</tbody>
+      </table>
+    </div>
+    ${timelineHtml}`;
+}
+
 function exportRosterCsv() {
   const rows = getFilteredRoster();
   const hdr = ['Name','Pos','Age','DeclineAge','Foot','Energy','Force','Pot','PotCap','S1','S2','StackPct','ContractDays','FineSlumpPct','Salary','MarketValue','EstRealSale','Action'];

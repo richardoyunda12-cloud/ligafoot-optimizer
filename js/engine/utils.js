@@ -355,6 +355,112 @@
     return Math.abs(Math.round((ms2 - ms1) / 86400000));
   }
 
+  function daysBetweenIso(d1Str, d2Str) {
+    const ms1 = parseIsoDateUtc(d1Str);
+    const ms2 = parseIsoDateUtc(d2Str);
+    if (ms1 === null || ms2 === null) return 0;
+    return Math.round((ms2 - ms1) / 86400000);
+  }
+
+  /**
+   * Port 1:1 Hermes v1.2.0 (`#18782 weeklyGrowthRate`, `#21716 ctGrowthBonus`, `#21720 trainGrowthBonus`):
+   * Menghitung estimasi laju pertumbuhan mingguan (Force/pekan).
+   */
+  function estimateWeeklyGrowthRate(p, opts = {}) {
+    const pl = (p && typeof p === 'object') ? p : {};
+    const o = (opts && typeof opts === 'object') ? opts : {};
+    const age = safeInt(pl.age, 25);
+    const f = Math.max(1, Math.round(safeNum(pl.force, 25)));
+    const lv = safeInt(o.clubLevel, 15);
+    const ct = clamp(safeInt(o.ctLevel, 1), 1, 10);
+    const played = o.played !== undefined
+      ? Boolean(o.played)
+      : ((safeNum(pl.seasonMinutes, 0) > 0) || (safeInt(pl.gamesPlayed, 0) > 0));
+    const inTrain = Boolean(o.inTrain);
+    const unhappy = o.unhappy !== undefined
+      ? Boolean(o.unhappy)
+      : (pl.mood === 'unhappy' || Boolean(pl.roleSore));
+
+    let rate = 0.02;
+    if (lv >= 19) rate = age < 20 ? 0.16 : (age <= 22 ? 0.12 : (age <= 28 ? 0.10 : 0.08));
+    else if (lv >= 15) rate = age < 18 ? 0.12 : (age <= 20 ? 0.10 : (age <= 28 ? 0.08 : 0.06));
+    else if (lv >= 11) rate = age < 18 ? 0.10 : (age <= 20 ? 0.08 : (age <= 28 ? 0.06 : 0.04));
+    else rate = age < 18 ? 0.08 : (age <= 20 ? 0.06 : (age <= 28 ? 0.04 : 0.02));
+
+    if (played) rate += 0.04;
+    if (f > 70) rate -= 0.05;
+    else if (f > 50) rate -= 0.04;
+    else if (f > 40) rate -= 0.03;
+    else if (f >= 30) rate -= 0.02;
+
+    const dev = safeNum(pl.development, 0);
+    const hashVal = safeInt(pl.hash, 0);
+    if (dev > 0) {
+      if (dev < 50) rate -= 0.05;
+      else if (dev < 70) rate -= 0.02;
+      if (hashVal >= 9) rate += 0.04;
+      else if (hashVal >= 7) rate += 0.02;
+    }
+
+    if (pl.top) rate += 0.02;
+    else if (pl.star) rate += 0.01;
+
+    const c = String(o.country || '').toUpperCase();
+    if (['EN', 'GB', 'ES', 'IT', 'DE', 'FR'].includes(c)) {
+      rate += 0.01;
+    } else if (['PT', 'NL', 'BE'].includes(c)) {
+      if (rate > 0.06) rate -= 0.01;
+    } else if (!['BR', 'AR', 'MX'].includes(c)) {
+      if (rate > 0.06) rate -= 0.02;
+    }
+
+    if (ct >= 4) rate += 0.01;
+    if (ct >= 2 && age <= 23) rate += 0.015;
+    if (inTrain) rate += 0.015 + (ct - 1) * 0.0015;
+    if (unhappy) rate *= 0.4;
+
+    return roundTo(Math.max(0.01, rate), 4);
+  }
+
+  function calcGrowthProjection(p, opts = {}) {
+    const pl = (p && typeof p === 'object') ? p : {};
+    const curForce = safeInt(pl.force, 20);
+    const curGf = safeNum(pl.growthFrac, 0);
+    const curEff = roundTo(
+      pl.effForce !== undefined && pl.effForce !== null
+        ? safeNum(pl.effForce, curForce + curGf)
+        : (curForce + curGf),
+      2
+    );
+    const rawCap = pl.potCap !== undefined && pl.potCap !== null
+      ? pl.potCap
+      : (pl.estPotCap !== undefined && pl.estPotCap !== null ? pl.estPotCap : curForce);
+    const cap = Math.max(curForce, safeInt(rawCap, curForce));
+    const weeklyRate = estimateWeeklyGrowthRate(pl, opts);
+    const rateIfTrained = estimateWeeklyGrowthRate(pl, { ...(opts || {}), inTrain: true });
+
+    const gapToNext = Math.max(0.01, (curForce + 1) - curEff);
+    const weeksToNext = curForce >= cap ? 0 : Math.max(1, Math.ceil(gapToNext / weeklyRate));
+    const remToCap = Math.max(0, cap - curEff);
+    const weeksToCap = remToCap <= 0 ? 0 : Math.max(1, Math.ceil(remToCap / weeklyRate));
+    const etaMonthsToCap = remToCap <= 0 ? 0 : roundTo(weeksToCap / 4.33, 1);
+
+    const projectedCurve = [0, 3, 6, 12].map((m, idx) => ({
+      label: idx === 0 ? 'Kini' : `+${m} Bln`,
+      months: m,
+      eff: roundTo(Math.min(cap, curEff + weeklyRate * (m * 4.33)), 2),
+    }));
+
+    return {
+      weeklyRate,
+      rateIfTrained,
+      weeksToNext,
+      weeksToCap,
+      etaMonthsToCap,
+      projectedCurve,
+    };
+  }
+
   function estimateDivisionFromLeague(leagueId, worldComps = null) {
     if (!leagueId) return 1;
     const lid = String(leagueId);
@@ -694,6 +800,9 @@
     fixedSponsorParcel,
     parseStatementRow,
     daysBetweenDates,
+    daysBetweenIso,
+    estimateWeeklyGrowthRate,
+    calcGrowthProjection,
     estimateDivisionFromLeague,
     normalizeTicketMul,
     formatMatchDay,

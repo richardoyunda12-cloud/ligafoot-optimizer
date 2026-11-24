@@ -1,6 +1,88 @@
 // ==================== RENDER TAB 1: BERANDA (v8.2 — AUDIT FIX COMPLETE) ====================
 let guardExpanded = false;
 let aqFilter = 'ALL'; // 'ALL' | 'CRIT'
+let whatsNewDismissed = false;
+
+function dismissWhatsNew() {
+  whatsNewDismissed = true;
+  renderWhatsNewCard();
+}
+
+function renderWhatsNewCard() {
+  const el = document.getElementById('t1-whats-new');
+  if (!el) return;
+  const dl = D.deltas || {};
+  if (!dl.prevDate || whatsNewDismissed) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const m = D.meta || {};
+  const isDrive = m.loadSource === 'gdrive';
+  const days = dl.daysElapsed || 0;
+  const wks = dl.weeksElapsed || 0;
+
+  const metricPills = [];
+  metricPills.push(`<span class="badge ${dl.budgetDelta >= 0 ? 'b-good' : 'b-crit'} mono">Kas ${dl.budgetDelta >= 0 ? '+' : ''}${fmtM(dl.budgetDelta)}</span>`);
+  metricPills.push(`<span class="badge ${dl.payrollDelta <= 0 ? 'b-good' : 'b-warn'} mono">Gaji ${dl.payrollDelta >= 0 ? '+' : ''}${fmtM(dl.payrollDelta)}</span>`);
+  if (dl.bestXiDelta !== null && dl.bestXiDelta !== undefined) {
+    metricPills.push(`<span class="badge ${dl.bestXiDelta >= 0 ? 'b-good' : 'b-crit'} mono">Best XI ${dl.bestXiDelta >= 0 ? '+' : ''}${dl.bestXiDelta}</span>`);
+  }
+  if (dl.leaguePosDelta !== null && dl.leaguePosDelta !== undefined) {
+    const pTxt = dl.leaguePosDelta === 0 ? 'Rank ±0' : (dl.leaguePosDelta > 0 ? `Rank ↑+${dl.leaguePosDelta}` : `Rank ↓${dl.leaguePosDelta}`);
+    metricPills.push(`<span class="badge ${dl.leaguePosDelta > 0 ? 'b-good' : (dl.leaguePosDelta < 0 ? 'b-crit' : 'b-info')} mono">${pTxt}</span>`);
+  }
+  metricPills.push(`<span class="badge ${dl.membersDelta >= 0 ? 'b-info' : 'b-warn'} mono">Member ${dl.membersDelta >= 0 ? '+' : ''}${dl.membersDelta}</span>`);
+  if (dl.unhappyDelta !== null && dl.unhappyDelta !== undefined && dl.unhappyDelta !== 0) {
+    metricPills.push(`<span class="badge ${dl.unhappyDelta < 0 ? 'b-good' : 'b-crit'} mono">Unhappy ${dl.unhappyDelta > 0 ? '+' : ''}${dl.unhappyDelta}</span>`);
+  }
+
+  const chgChips = [];
+  (dl.forceUpPlayers || []).slice(0, 6).forEach(c => {
+    const fStr = c.forceDelta > 0 ? `F+${c.forceDelta}` : `gf${c.gfDelta >= 0 ? '+' : ''}${Number(c.gfDelta).toFixed(2)}`;
+    const pid = c.id || findRosterIdByName(c.name);
+    const clk = pid ? `onclick="openPlayerDrawer('roster','${escJs(pid)}')"` : '';
+    chgChips.push(`<span class="badge b-good delta-chip" ${clk}>⬆ ${esc(c.name)} <b>${fStr}</b></span>`);
+  });
+  (dl.forceDownPlayers || []).slice(0, 4).forEach(c => {
+    const fStr = c.forceDelta < 0 ? `F${c.forceDelta}` : `gf${Number(c.gfDelta).toFixed(2)}`;
+    const pid = c.id || findRosterIdByName(c.name);
+    const clk = pid ? `onclick="openPlayerDrawer('roster','${escJs(pid)}')"` : '';
+    chgChips.push(`<span class="badge b-crit delta-chip" ${clk}>⬇ ${esc(c.name)} <b>${fStr}</b></span>`);
+  });
+  (dl.addedPlayers || []).slice(0, 4).forEach(c => {
+    const clk = c.id ? `onclick="openPlayerDrawer('roster','${escJs(c.id)}')"` : '';
+    chgChips.push(`<span class="badge b-info delta-chip" ${clk}>🆕 ${esc(c.name)} <b>F${c.force}</b></span>`);
+  });
+  (dl.removedPlayers || []).slice(0, 4).forEach(c => {
+    chgChips.push(`<span class="badge b-muted">📤 ${esc(c.name)} (F${c.force})</span>`);
+  });
+  (dl.bTeamChanges || []).slice(0, 3).forEach(c => {
+    const fStr = c.forceDelta !== 0 ? `F${c.forceDelta > 0 ? '+' : ''}${c.forceDelta}` : `gf${c.gfDelta >= 0 ? '+' : ''}${Number(c.gfDelta).toFixed(2)}`;
+    chgChips.push(`<span class="badge b-accent delta-chip" onclick="openPlayerDrawer('bteam','${escJs(c.id)}')">🅱️ ${esc(c.name)} <b>${fStr}</b></span>`);
+  });
+  (dl.youthChanges || []).slice(0, 3).forEach(c => {
+    const dStr = c.devDelta !== 0 ? `Dev${c.devDelta > 0 ? '+' : ''}${c.devDelta}%` : `F${c.forceDelta > 0 ? '+' : ''}${c.forceDelta}`;
+    chgChips.push(`<span class="badge b-info delta-chip" onclick="openPlayerDrawer('youth','${escJs(c.id)}')">🌱 ${esc(c.name)} <b>${dStr}</b></span>`);
+  });
+
+  el.innerHTML = `
+    <div class="card mb-8" style="border-color:rgba(56,189,248,.45);background:linear-gradient(135deg,rgba(56,189,248,.07),rgba(16,185,129,.05))">
+      <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0">
+          <strong style="font-size:13.5px">🔄 Apa yang Berubah Sejak ${esc(dl.prevDate)}?</strong>
+          <span class="badge b-info mono">${days} hari / ${wks} pkn</span>
+          <span class="badge ${isDrive ? 'b-info' : 'b-muted'}">${isDrive ? '☁️ Google Drive' : '📂 Save Lokal'}</span>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+          <button type="button" class="btn btn-sm btn-green" onclick="goToView('t3','t3-train')">📈 Tracker Wonderkid →</button>
+          <button type="button" class="btn btn-sm" onclick="dismissWhatsNew()" title="Tutup ringkasan">✕</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${metricPills.join('')}</div>
+      ${chgChips.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px">${chgChips.join('')}</div>` : `<div class="c-muted" style="font-size:11.5px">${(dl.summaryBullets || []).map(b => esc(b)).join(' · ') || 'Tidak ada mutasi pemain antara dua save.'}</div>`}
+    </div>`;
+}
 
 function getCheckKey() {
   return 'lf_opt_v8_chk_' + (D.meta && D.meta.userId ? D.meta.userId : 'u') + '_' + (D.meta && D.meta.currentDate ? D.meta.currentDate : 'd');
@@ -247,6 +329,9 @@ function renderTab1() {
       </div>`;
   }
 
+  // 2C. APA YANG BERUBAH SEJAK SAVE TERAKHIR? (Multi-Save Diff)
+  renderWhatsNewCard();
+
   // 3. AUTO-GUARD RINGKAS (Benar-benar 1 baris bila 6/6 aman!)
   renderAutoGuard();
 
@@ -315,18 +400,25 @@ function renderTab1() {
   document.getElementById('t1-pres-goals').innerHTML = pgHtml || '<span class="c-muted">Tidak ada target presiden aktif.</span>';
 
   const dEl = document.getElementById('t1-deltas');
+  const snapCnt = (D.progression && D.progression.snapshotCount) || 1;
+  const wkTrackLink = `<button type="button" class="btn btn-sm" onclick="goToView('t3','t3-train')">📈 Grafik Wonderkid →</button>`;
   if (!dl.prevDate) {
-    dEl.innerHTML = `<div class="c-muted" style="border-top:1px solid var(--border);padding-top:8px">Snapshot awal tersimpan (<b>${esc(m.currentDate || '-')}</b>). Delta otomatis tampil di save berikutnya.</div>`;
+    dEl.innerHTML = `<div class="flex-between" style="border-top:1px solid var(--border);padding-top:8px;gap:8px;flex-wrap:wrap">
+      <div class="c-muted">Snapshot #${snapCnt} tersimpan (<b>${esc(m.currentDate || '-')}</b>). Delta otomatis tampil di save berikutnya.</div>
+      ${wkTrackLink}
+    </div>`;
   } else {
     const chg = (dl.playerChanges || []).slice(0, 8).map(c => {
       const fd = Number(c.forceDelta) || 0;
       const mvd = Number(c.mvDelta) || 0;
+      const gfd = Number(c.gfDelta) || 0;
       const parts = [];
       if (fd !== 0) parts.push(`F${fd > 0 ? '+' : ''}${fd}`);
+      else if (Math.abs(gfd) >= 0.15) parts.push(`gf${gfd > 0 ? '+' : ''}${gfd.toFixed(2)}`);
       if (Math.abs(mvd) >= 50000) parts.push(`MV ${mvd > 0 ? '+' : ''}${fmtM(mvd)}`);
       const metricTxt = parts.join(' · ') || 'Update';
-      const isUp = fd > 0 || (fd === 0 && mvd > 0);
-      const isDown = fd < 0 || (fd === 0 && mvd < 0);
+      const isUp = fd > 0 || (fd === 0 && (gfd > 0 || mvd > 0));
+      const isDown = fd < 0 || (fd === 0 && (gfd < 0 || mvd < 0));
       const bCls = isUp ? 'b-good' : (isDown ? 'b-crit' : 'b-info');
       const pid = c.id || findRosterIdByName(c.name);
       const clickAttr = pid ? `onclick="openPlayerDrawer('roster','${escJs(pid)}')"` : '';
@@ -334,7 +426,10 @@ function renderTab1() {
     }).join(' ');
 
     dEl.innerHTML = `<div style="border-top:1px solid var(--border);padding-top:8px">
-      <div class="mb-8"><b>Delta vs ${esc(dl.prevDate)}:</b> Kas <b class="mono">${dl.budgetDelta >= 0 ? '+' : ''}${fmtM(dl.budgetDelta)}</b> • Gaji <b class="mono">${dl.payrollDelta >= 0 ? '+' : ''}${fmtM(dl.payrollDelta)}</b> • Member <b class="mono">${dl.membersDelta >= 0 ? '+' : ''}${dl.membersDelta}</b></div>
+      <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+        <div><b>Delta vs ${esc(dl.prevDate)} (${snapCnt} snapshot):</b> Kas <b class="mono">${dl.budgetDelta >= 0 ? '+' : ''}${fmtM(dl.budgetDelta)}</b> • Gaji <b class="mono">${dl.payrollDelta >= 0 ? '+' : ''}${fmtM(dl.payrollDelta)}</b> • Member <b class="mono">${dl.membersDelta >= 0 ? '+' : ''}${dl.membersDelta}</b></div>
+        ${wkTrackLink}
+      </div>
       <div class="pill-row" style="margin:0">${chg || '<span class="c-muted">Belum ada perubahan Force / MV signifikan.</span>'}</div>
     </div>`;
   }

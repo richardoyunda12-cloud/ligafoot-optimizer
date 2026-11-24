@@ -290,6 +290,8 @@
       await ST.saveHistory(updatedHistory);
       const source = metaOpts.source || 'local';
       const gdriveMeta = metaOpts.gdriveMeta || null;
+      data.meta.loadSource = source;
+      data.meta.loadedAt = new Date().toISOString();
       await ST.saveLastDashboard(data, { fileName: file.name, source, gdriveMeta });
       cachedLastDashboard = {
         data,
@@ -319,7 +321,13 @@
       mountDashboard(data);
       if (typeof showToast === 'function') {
         const prefix = source === 'gdrive' ? '☁️ ' : '';
-        showToast(`${prefix}Save ${data.meta.teamName} (${data.meta.currentDate}) siap! (${data.meta.parseSec}s)`);
+        let deltaNote = '';
+        if (data.deltas && data.deltas.prevDate) {
+          const dKas = data.deltas.budgetDelta || 0;
+          const upCnt = (data.deltas.forceUpPlayers || []).length;
+          deltaNote = ` • ΔKas ${dKas >= 0 ? '+' : ''}${Engine.utils.fmtMoney(dKas)}` + (upCnt ? ` · ${upCnt}↑ Force` : '');
+        }
+        showToast(`${prefix}Save ${data.meta.teamName} (${data.meta.currentDate}) siap! (${data.meta.parseSec}s)${deltaNote}`);
       }
     } catch (err) {
       console.error('[LigaFoot WebApp Error]', err);

@@ -136,29 +136,166 @@
     const prevDate = prevDates.length ? prevDates[prevDates.length - 1] : null;
     const prevSnap = prevDate ? clubHist[prevDate] : null;
 
+    const daysElapsed = prevDate ? Math.max(1, U.daysBetweenIso(prevDate, currentDate)) : 0;
+    const weeksElapsed = daysElapsed ? U.roundTo(daysElapsed / 7, 1) : 0;
+
+    const optDiff = (curVal, prevVal, precision = 2) => {
+      if (prevVal === undefined || prevVal === null || curVal === undefined || curVal === null) return null;
+      const a = Number(curVal), b = Number(prevVal);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+      return U.roundTo(a - b, precision);
+    };
+
     const deltas = {
       prevDate,
+      daysElapsed,
+      weeksElapsed,
       budgetDelta: 0,
       payrollDelta: 0,
       membersDelta: 0,
+      bestXiDelta: null,
+      leaguePosDelta: null,
+      leaguePtsDelta: null,
+      unhappyDelta: null,
+      repDelta: null,
       playerChanges: [],
+      addedPlayers: [],
+      removedPlayers: [],
+      forceUpPlayers: [],
+      forceDownPlayers: [],
+      youthChanges: [],
+      bTeamChanges: [],
+      summaryBullets: [],
     };
 
     if (prevSnap) {
-      deltas.budgetDelta = Math.round(snapshotData.budget - U.safeNum(prevSnap.budget, 0));
-      deltas.payrollDelta = Math.round(snapshotData.payroll - U.safeNum(prevSnap.payroll, 0));
+      deltas.budgetDelta = Math.round(U.safeNum(snapshotData.budget, 0) - U.safeNum(prevSnap.budget, 0));
+      deltas.payrollDelta = Math.round(U.safeNum(snapshotData.payroll, 0) - U.safeNum(prevSnap.payroll, 0));
       deltas.membersDelta = U.safeInt(snapshotData.members, 0) - U.safeInt(prevSnap.members, 0);
+      deltas.bestXiDelta = optDiff(snapshotData.bestXiAvg, prevSnap.bestXiAvg, 2);
+      if (prevSnap.leaguePos !== undefined && prevSnap.leaguePos !== null && snapshotData.leaguePos !== undefined && snapshotData.leaguePos !== null) {
+        const curPos = Number(snapshotData.leaguePos), pPos = Number(prevSnap.leaguePos);
+        if (Number.isFinite(curPos) && Number.isFinite(pPos)) deltas.leaguePosDelta = pPos - curPos; // positif = naik peringkat
+      }
+      deltas.leaguePtsDelta = optDiff(snapshotData.leaguePts, prevSnap.leaguePts, 0);
+      deltas.unhappyDelta = optDiff(snapshotData.unhappyCount, prevSnap.unhappyCount, 0);
+      deltas.repDelta = optDiff(snapshotData.reputation, prevSnap.reputation, 0);
+
+      const curPls = snapshotData.players || {};
       const prevPls = prevSnap.players || {};
-      for (const [pid, curP] of Object.entries(snapshotData.players || {})) {
+
+      for (const [pid, curP] of Object.entries(curPls)) {
         if (pid in prevPls) {
-          const pp = prevPls[pid];
-          const df = curP.force - U.safeInt(pp.force, curP.force);
-          const dmv = curP.mv - U.safeNum(pp.mv, curP.mv);
-          const dgf = U.roundTo(curP.gf - U.safeNum(pp.gf, curP.gf), 3);
-          if (df !== 0 || Math.abs(dmv) >= 50000) {
-            deltas.playerChanges.push({ id: pid, name: curP.name, forceDelta: df, mvDelta: Math.round(dmv), gfDelta: dgf });
+          const pp = prevPls[pid] || {};
+          const curF = U.safeInt(curP.force, 0);
+          const prevF = U.safeInt(pp.force, curF);
+          const df = curF - prevF;
+          const dmv = Math.round(U.safeNum(curP.mv, 0) - U.safeNum(pp.mv, curP.mv));
+          const dgf = U.roundTo(U.safeNum(curP.gf, 0) - U.safeNum(pp.gf, curP.gf), 3);
+          const chg = {
+            id: pid,
+            name: curP.name,
+            pos: curP.pos || pp.pos || '-',
+            curForce: curF,
+            curPotCap: U.safeInt(curP.potCap, curF),
+            forceDelta: df,
+            mvDelta: dmv,
+            gfDelta: dgf,
+          };
+          if (df !== 0 || Math.abs(dmv) >= 50000 || Math.abs(dgf) >= 0.15) {
+            deltas.playerChanges.push(chg);
+          }
+          if (df > 0 || dgf >= 0.15) deltas.forceUpPlayers.push(chg);
+          else if (df < 0 || dgf <= -0.15) deltas.forceDownPlayers.push(chg);
+        } else {
+          deltas.addedPlayers.push({
+            id: pid,
+            name: curP.name,
+            pos: curP.pos || '-',
+            force: U.safeInt(curP.force, 0),
+            potCap: U.safeInt(curP.potCap, curP.force || 0),
+            mv: Math.round(U.safeNum(curP.mv, 0)),
+          });
+        }
+      }
+
+      for (const [pid, pp] of Object.entries(prevPls)) {
+        if (!(pid in curPls)) {
+          deltas.removedPlayers.push({
+            id: pid,
+            name: (pp && pp.name) || pid,
+            pos: (pp && pp.pos) || '-',
+            force: U.safeInt(pp && pp.force, 0),
+            mv: Math.round(U.safeNum(pp && pp.mv, 0)),
+          });
+        }
+      }
+
+      const rankChg = (a, b) => (
+        (Math.abs(b.forceDelta) * 10 + Math.abs(b.gfDelta) * 2 + Math.abs(b.mvDelta) / 1e6) -
+        (Math.abs(a.forceDelta) * 10 + Math.abs(a.gfDelta) * 2 + Math.abs(a.mvDelta) / 1e6)
+      );
+      deltas.playerChanges.sort(rankChg);
+      deltas.forceUpPlayers.sort(rankChg);
+      deltas.forceDownPlayers.sort(rankChg);
+
+      const prevYouth = prevSnap.youth || {};
+      for (const [yid, curY] of Object.entries(snapshotData.youth || {})) {
+        if (yid in prevYouth) {
+          const py = prevYouth[yid] || {};
+          const devDelta = U.safeInt(curY.dev, 0) - U.safeInt(py.dev, curY.dev || 0);
+          const forceDelta = U.safeInt(curY.force, 0) - U.safeInt(py.force, curY.force || 0);
+          if (devDelta !== 0 || forceDelta !== 0) {
+            deltas.youthChanges.push({
+              id: yid,
+              name: curY.name,
+              pos: curY.pos || '-',
+              curForce: U.safeInt(curY.force, 0),
+              curDev: U.safeInt(curY.dev, 0),
+              devDelta,
+              forceDelta,
+            });
           }
         }
+      }
+
+      const prevB = prevSnap.bTeam || {};
+      for (const [bid, curB] of Object.entries(snapshotData.bTeam || {})) {
+        if (bid in prevB) {
+          const pb = prevB[bid] || {};
+          const forceDelta = U.safeInt(curB.force, 0) - U.safeInt(pb.force, curB.force || 0);
+          const gfDelta = U.roundTo(U.safeNum(curB.gf, 0) - U.safeNum(pb.gf, curB.gf || 0), 3);
+          if (forceDelta !== 0 || Math.abs(gfDelta) >= 0.15) {
+            deltas.bTeamChanges.push({
+              id: bid,
+              name: curB.name,
+              pos: curB.pos || '-',
+              curForce: U.safeInt(curB.force, 0),
+              forceDelta,
+              gfDelta,
+            });
+          }
+        }
+      }
+
+      if (deltas.budgetDelta !== 0) {
+        deltas.summaryBullets.push(`Kas ${deltas.budgetDelta >= 0 ? '+' : ''}${U.fmtMoney(deltas.budgetDelta)} (${daysElapsed} hari vs ${prevDate})`);
+      }
+      if (deltas.bestXiDelta !== null && deltas.bestXiDelta !== 0) {
+        deltas.summaryBullets.push(`Best XI ${deltas.bestXiDelta >= 0 ? '+' : ''}${deltas.bestXiDelta} (${U.safeNum(snapshotData.bestXiAvg, 0)})`);
+      }
+      if (deltas.leaguePosDelta !== null && deltas.leaguePosDelta !== 0) {
+        deltas.summaryBullets.push(`Peringkat liga ${deltas.leaguePosDelta > 0 ? 'naik +' : 'turun '}${deltas.leaguePosDelta} (kini #${snapshotData.leaguePos})`);
+      }
+      if (deltas.forceUpPlayers.length) {
+        const pureUps = deltas.forceUpPlayers.filter(x => x.forceDelta > 0).length;
+        deltas.summaryBullets.push(`${deltas.forceUpPlayers.length} pemain bertumbuh (${pureUps} naik Force)`);
+      }
+      if (deltas.addedPlayers.length || deltas.removedPlayers.length) {
+        deltas.summaryBullets.push(`Mutasi skuad: +${deltas.addedPlayers.length} masuk, -${deltas.removedPlayers.length} keluar`);
+      }
+      if (!deltas.summaryBullets.length) {
+        deltas.summaryBullets.push(`Snapshot diperbarui (${daysElapsed} hari sejak ${prevDate}) tanpa perubahan signifikan.`);
       }
     }
 
@@ -170,7 +307,186 @@
       }
     }
     hist[teamId] = clubHist;
-    return { deltas, updatedHistory: hist };
+    return { deltas, updatedHistory: hist, clubHistory: clubHist };
+  }
+
+  function buildProgressionPayload(clubHist, currentDate, ctx = {}) {
+    const histMap = (clubHist && typeof clubHist === 'object') ? clubHist : {};
+    const dates = Object.keys(histMap).sort();
+    const clubTimeline = dates.map(d => {
+      const s = histMap[d] || {};
+      return {
+        date: d,
+        budget: Math.round(U.safeNum(s.budget, 0)),
+        payroll: Math.round(U.safeNum(s.payroll, 0)),
+        members: U.safeInt(s.members, 0),
+        bestXiAvg: (s.bestXiAvg !== undefined && s.bestXiAvg !== null) ? U.safeNum(s.bestXiAvg, 0) : null,
+        squadAvg: (s.squadAvg !== undefined && s.squadAvg !== null) ? U.safeNum(s.squadAvg, 0) : null,
+        leaguePos: (s.leaguePos !== undefined && s.leaguePos !== null) ? U.safeInt(s.leaguePos, 0) : null,
+        leaguePts: (s.leaguePts !== undefined && s.leaguePts !== null) ? U.safeInt(s.leaguePts, 0) : null,
+        ctLevel: (s.ctLevel !== undefined && s.ctLevel !== null) ? U.safeInt(s.ctLevel, 1) : null,
+        rep: (s.reputation !== undefined && s.reputation !== null) ? Math.round(U.safeNum(s.reputation, 0)) : null,
+      };
+    });
+
+    const userRoster = Array.isArray(ctx.userRoster) ? ctx.userRoster : [];
+    const bRosterExport = Array.isArray(ctx.bRosterExport) ? ctx.bRosterExport : [];
+    const youthRanked = Array.isArray(ctx.youthRanked) ? ctx.youthRanked : [];
+    const trainCurSet = new Set((ctx.trainAudit && Array.isArray(ctx.trainAudit.currentIds)) ? ctx.trainAudit.currentIds : []);
+    const clubLevel = U.safeInt(ctx.clubLevel, 15);
+    const country = String(ctx.userCountry || '').toUpperCase();
+    const ctLevel = U.clamp(U.safeInt(ctx.ctLevel, 1), 1, 10);
+
+    const candidates = [];
+    const seenIds = new Set();
+
+    for (const p of userRoster) {
+      if (!p || !p.id || seenIds.has(p.id)) continue;
+      if (p.potCap > p.force && !p.isDeclining) {
+        seenIds.add(p.id);
+        candidates.push({ src: 'roster', pl: p, inTrain: trainCurSet.has(p.id) });
+      }
+    }
+
+    const bTop = [...bRosterExport]
+      .filter(p => p && p.id && !seenIds.has(p.id) && ((p.potCap || p.force) - p.force) >= 6 && p.age <= 23)
+      .sort((a, b) => (((b.potCap || b.force) - b.force) - ((a.potCap || a.force) - a.force)) || (b.force - a.force))
+      .slice(0, 12);
+    for (const p of bTop) {
+      seenIds.add(p.id);
+      candidates.push({ src: 'bteam', pl: p, inTrain: false });
+    }
+
+    const yTop = [...youthRanked]
+      .filter(y => y && y.id && !seenIds.has(y.id) && y.age <= 20)
+      .sort((a, b) => (b.pipeScore || 0) - (a.pipeScore || 0))
+      .slice(0, 10);
+    for (const y of yTop) {
+      seenIds.add(y.id);
+      candidates.push({ src: 'youth', pl: y, inTrain: false });
+    }
+
+    const wonderkids = candidates.map(({ src, pl, inTrain }) => {
+      const cap = Math.max(U.safeInt(pl.force, 10), U.safeInt(pl.potCap !== undefined ? pl.potCap : pl.estPotCap, pl.force || 10));
+      const curGf = U.roundTo(U.safeNum(pl.growthFrac, 0), 3);
+      const curEff = U.roundTo(pl.effForce !== undefined && pl.effForce !== null ? U.safeNum(pl.effForce, pl.force + curGf) : (pl.force + curGf), 2);
+      const proj = U.calcGrowthProjection({ ...pl, potCap: cap }, {
+        clubLevel,
+        country,
+        ctLevel,
+        inTrain,
+        played: src === 'youth' ? true : ((pl.seasonMinutes || 0) > 0 || (pl.gamesPlayed || 0) > 0),
+        unhappy: pl.mood === 'unhappy' || Boolean(pl.roleSore),
+      });
+
+      const obsPoints = [];
+      for (const d of dates) {
+        const snap = histMap[d] || {};
+        const rec = (snap.players && snap.players[pl.id])
+          || (snap.bTeam && snap.bTeam[pl.id])
+          || (snap.youth && snap.youth[pl.id])
+          || null;
+        if (!rec) continue;
+        const rf = U.safeInt(rec.force, pl.force);
+        const rgf = U.roundTo(U.safeNum(rec.gf, 0), 3);
+        const rEff = U.roundTo(rf + rgf, 2);
+        obsPoints.push({
+          date: d,
+          force: rf,
+          effForce: rEff,
+          gf: rgf,
+          dev: (rec.dev !== undefined && rec.dev !== null) ? U.safeInt(rec.dev, 0) : null,
+          mv: Math.round(U.safeNum(rec.mv, 0)),
+        });
+      }
+
+      if (!obsPoints.length || obsPoints[obsPoints.length - 1].date !== currentDate) {
+        obsPoints.push({
+          date: currentDate,
+          force: U.safeInt(pl.force, 0),
+          effForce: curEff,
+          gf: curGf,
+          dev: src === 'youth' ? U.safeInt(pl.development, 0) : null,
+          mv: Math.round(U.safeNum(pl.marketValue, 0)),
+        });
+      }
+
+      let obsDeltaEff = 0;
+      let obsWeeks = 0;
+      let obsWeeklyRate = null;
+      let paceRatio = null;
+      let paceStatus = 'BASELINE';
+      let paceNote = `Proyeksi engine +${proj.weeklyRate.toFixed(3)} F/pkn — simpan save berikutnya untuk mengukur laju aktual.`;
+
+      if (obsPoints.length >= 2) {
+        const first = obsPoints[0];
+        const last = obsPoints[obsPoints.length - 1];
+        const daysSpan = Math.max(0, U.daysBetweenIso(first.date, last.date));
+        obsWeeks = U.roundTo(daysSpan / 7, 1);
+        obsDeltaEff = U.roundTo(last.effForce - first.effForce, 2);
+        if (obsWeeks >= 0.5) {
+          obsWeeklyRate = U.roundTo(obsDeltaEff / obsWeeks, 4);
+          paceRatio = U.roundTo(obsWeeklyRate / Math.max(0.01, proj.weeklyRate), 2);
+          if (paceRatio >= 1.15) {
+            paceStatus = 'AHEAD';
+            paceNote = `Lebih cepat (${Math.round(paceRatio * 100)}% dari target +${proj.weeklyRate.toFixed(3)}/pkn).`;
+          } else if (paceRatio >= 0.75) {
+            paceStatus = 'ON_TRACK';
+            paceNote = `Sesuai jalur (${Math.round(paceRatio * 100)}% dari target +${proj.weeklyRate.toFixed(3)}/pkn).`;
+          } else {
+            paceStatus = 'BEHIND';
+            paceNote = `Di bawah target (${Math.round(paceRatio * 100)}%) — cek menit main, mood, atau masukkan ke slot CT.`;
+          }
+        }
+      }
+
+      const gap = Math.max(0, cap - U.safeInt(pl.force, 0));
+      return {
+        id: pl.id,
+        src,
+        name: pl.name,
+        pos: pl.pos,
+        age: U.safeInt(pl.age, 20),
+        force: U.safeInt(pl.force, 0),
+        potCap: cap,
+        gap,
+        growthFrac: curGf,
+        effForce: curEff,
+        inTrain,
+        mins: U.safeInt(pl.seasonMinutes, 0),
+        dev: src === 'youth' ? U.safeInt(pl.development, 0) : null,
+        hash: U.safeInt(pl.hash, 0),
+        estWeeklyRate: proj.weeklyRate,
+        rateIfTrained: proj.rateIfTrained,
+        weeksToNext: proj.weeksToNext,
+        weeksToCap: proj.weeksToCap,
+        etaMonthsToCap: proj.etaMonthsToCap,
+        projectedCurve: proj.projectedCurve,
+        obsPoints,
+        obsDeltaEff,
+        obsWeeks,
+        obsWeeklyRate,
+        paceRatio,
+        paceStatus,
+        paceNote,
+      };
+    });
+
+    const srcOrder = { roster: 0, bteam: 1, youth: 2 };
+    wonderkids.sort((a, b) => {
+      if (a.inTrain !== b.inTrain) return a.inTrain ? -1 : 1;
+      const so = (srcOrder[a.src] ?? 9) - (srcOrder[b.src] ?? 9);
+      if (so !== 0) return so;
+      return (b.gap - a.gap) || (a.age - b.age);
+    });
+
+    return {
+      snapshotCount: dates.length,
+      oldestDate: dates.length ? dates[0] : currentDate,
+      latestDate: dates.length ? dates[dates.length - 1] : currentDate,
+      clubTimeline,
+      wonderkids,
+    };
   }
 
   function cleanPresGoals(rawPg, worldComps = null) {
@@ -1183,20 +1499,7 @@
       save, staticPlayers, clubsMeta, userId, userCountry, holePositions, bestXi.avgScore
     );
 
-    prog(90, 'Menyusun Delta Tracker, Alarm Prioritas & Klasemen...');
-    const snapPlayers = {};
-    for (const p of userRoster) {
-      snapPlayers[p.id] = { name: p.name, force: p.force, mv: p.marketValue, gf: p.growthFrac };
-    }
-    const snapNow = {
-      budget: Math.round(budget),
-      payroll: Math.round(totalPayroll),
-      members: memberAudit.n,
-      shopLastRev: Math.round(shopAudit.last_rev),
-      seats: totalSeats,
-      players: snapPlayers,
-    };
-    const { deltas, updatedHistory } = computeDeltasAndHistory(historyStore, currentDate, userId, snapNow);
+    prog(88, 'Menyusun mutasi keuangan, kontrak pinjaman & status timnas...');
 
     const fineSlumpPlayers = userRoster
       .filter(p => (p.fineSlump || 0) > 0)
@@ -1883,6 +2186,79 @@
       });
     });
 
+    prog(94, 'Menyusun Delta Tracker, Progresi Wonderkid & Snapshot...');
+    const userStandRow = standingsRows.find(r => r.isUser) || null;
+    const trainCurIdSet = new Set(trainAudit.currentIds || []);
+    const snapPlayers = {};
+    for (const p of userRoster) {
+      snapPlayers[p.id] = {
+        name: p.name,
+        pos: p.pos,
+        age: p.age,
+        force: p.force,
+        potCap: p.potCap,
+        mv: p.marketValue,
+        gf: p.growthFrac,
+        inTrain: trainCurIdSet.has(p.id),
+        mins: p.seasonMinutes || 0,
+        mood: p.mood || 'ok',
+      };
+    }
+    const snapBTeam = {};
+    for (const bp of bRosterExport) {
+      snapBTeam[bp.id] = {
+        name: bp.name,
+        pos: bp.pos,
+        age: bp.age,
+        force: bp.force,
+        potCap: bp.potCap || bp.force,
+        mv: bp.marketValue,
+        gf: bp.growthFrac,
+      };
+    }
+    const snapYouth = {};
+    for (const yp of youthRanked) {
+      snapYouth[yp.id] = {
+        name: yp.name,
+        pos: yp.pos,
+        age: yp.age,
+        force: yp.force,
+        dev: yp.development,
+        hash: yp.hash,
+        estPotCap: yp.estPotCap || yp.potCap || yp.force,
+      };
+    }
+    const snapNow = {
+      budget: Math.round(budget),
+      payroll: Math.round(totalPayroll),
+      members: memberAudit.n,
+      shopLastRev: Math.round(shopAudit.last_rev),
+      seats: totalSeats,
+      season: U.safeInt(save.season, 1),
+      week: U.safeInt(save.week, 1),
+      bestXiAvg: bestXi.avgScore,
+      squadAvg: U.roundTo(avgTop11Force, 2),
+      leaguePos: userStandRow ? userStandRow.pos : null,
+      leaguePts: userStandRow ? userStandRow.pts : null,
+      reputation: Math.round(reputation),
+      ctLevel,
+      unhappyCount: unhappyCnt,
+      squadCount: userRoster.length,
+      players: snapPlayers,
+      bTeam: snapBTeam,
+      youth: snapYouth,
+    };
+    const { deltas, updatedHistory, clubHistory } = computeDeltasAndHistory(historyStore, currentDate, userId, snapNow);
+    const progression = buildProgressionPayload(clubHistory, currentDate, {
+      userRoster,
+      bRosterExport,
+      youthRanked,
+      trainAudit,
+      clubLevel: userTeamLevel,
+      userCountry,
+      ctLevel,
+    });
+
     function slimXi(xiObj) {
       return {
         ...xiObj,
@@ -1948,7 +2324,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.8.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.9.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,
@@ -2001,6 +2377,7 @@
       cashflowCalendar,
       matchTelemetry,
       deltas,
+      progression,
       alerts,
       holes,
       holePositions,
@@ -2062,6 +2439,7 @@
   LF.club = {
     auditAutoSettings,
     computeDeltasAndHistory,
+    buildProgressionPayload,
     cleanPresGoals,
     buildPriorityAlerts,
     analyzeSave,
