@@ -1003,6 +1003,12 @@
       rawMid *= 1.02;
     }
 
+    // OTA 01a20f1b (#22238 effectiveSectors, #3652 morale: 0.03): hanya sektor MID
+    if (opts.morale !== undefined && opts.morale !== null && Number(opts.morale) !== 0) {
+      const mVal = U.clamp(U.safeNum(opts.morale, 0), -1.0, 1.0);
+      rawMid *= (1.0 + 0.03 * mVal);
+    }
+
     let convBonusPct = 0.0;
     if (style.includes('off') || style.includes('serang')) {
       rawAtk *= 1.08;
@@ -2547,6 +2553,63 @@
     };
   }
 
+  /**
+   * Morale Tim & Bonus Glow (OTA 01a20f1b: buildSide #22235 & effectiveSectors #22238):
+   * - Kumpulkan rating pemain XI (>=6 pemain punya rating > 0; jika < 6 maka baseMorale = 0)
+   * - baseMorale = clamp(-1, +1, (avgRating - 6.3) / 1.2)
+   * - glowV = (bonusGlow && bonusGlow.left > 0) ? Number(bonusGlow.v || 0) : 0
+   * - totalMorale = clamp(-1, +1, baseMorale + glowV) -> rawMid *= (1 + 0.03 * totalMorale)
+   */
+  function computeTeamMoraleV9(xiPlayers, bonusGlow = null, fallbackRatingsMap = null) {
+    const list = Array.isArray(xiPlayers) ? xiPlayers : [];
+    const ratings = [];
+    for (const item of list) {
+      const p = (item && item.player) ? item.player : item;
+      if (!p) continue;
+      let r = U.safeNum(p.avgRating, 0);
+      if (r <= 0 && fallbackRatingsMap) {
+        const keyId = p.id ? String(p.id) : '';
+        const keyNm = p.name ? String(p.name).toLowerCase() : '';
+        const fb = (keyId && fallbackRatingsMap.get(keyId)) || (keyNm && fallbackRatingsMap.get(keyNm)) || 0;
+        r = U.safeNum(fb, 0);
+      }
+      if (r > 0) ratings.push(r);
+    }
+    const ratedCount = ratings.length;
+    const avgRating = ratedCount > 0
+      ? U.roundTo(ratings.reduce((a, b) => a + b, 0) / ratedCount, 2)
+      : 0;
+    const baseMorale = ratedCount >= 6
+      ? U.roundTo(U.clamp((avgRating - 6.3) / 1.2, -1.0, 1.0), 3)
+      : 0.0;
+    const glowLeft = (bonusGlow && typeof bonusGlow === 'object') ? Math.max(0, U.safeInt(bonusGlow.left, 0)) : 0;
+    const glowV = glowLeft > 0 ? U.roundTo(U.safeNum(bonusGlow.v, 0), 3) : 0.0;
+    const totalMorale = U.roundTo(U.clamp(baseMorale + glowV, -1.0, 1.0), 3);
+    const winSimMorale = U.roundTo(U.clamp(baseMorale + 0.30, -1.0, 1.0), 3);
+    const missSimMorale = U.roundTo(U.clamp(baseMorale - 0.20, -1.0, 1.0), 3);
+    const headroom = U.roundTo(Math.max(0, 1.0 - baseMorale), 3);
+    const winGainMorale = U.roundTo(Math.max(0, winSimMorale - baseMorale), 3);
+    return {
+      avgRating,
+      ratedCount,
+      hasEnoughRatings: ratedCount >= 6,
+      baseMorale,
+      glowV,
+      glowLeft,
+      totalMorale,
+      midBoostPct: U.roundTo(totalMorale * 3.0, 2),
+      baseMidBoostPct: U.roundTo(baseMorale * 3.0, 2),
+      headroom,
+      isCapped: baseMorale >= 0.95,
+      winSimMorale,
+      winSimMidBoostPct: U.roundTo(winSimMorale * 3.0, 2),
+      winGainMidPct: U.roundTo(winGainMorale * 3.0, 2),
+      missSimMorale,
+      missSimMidBoostPct: U.roundTo(missSimMorale * 3.0, 2),
+      missDropMidPct: U.roundTo((baseMorale - missSimMorale) * 3.0, 2),
+    };
+  }
+
   LF.tactics = {
     repToLevel,
     evalSkillStacking,
@@ -2556,6 +2619,7 @@
     chemistryMul,
     arriveAtClubInit,
     computeSquadMoodsV9,
+    computeTeamMoraleV9,
     slotCompatFactor,
     isPlayerStar,
     evalPlayerForSlot,

@@ -881,6 +881,7 @@ window.LFResetUIState = function () {
   simCompKind = 'league';
   xiMode = 'best';
   activeMatchIdx = 0;
+  if (typeof warBonusMode !== 'undefined') warBonusMode = 'auto';
   cartOut = {};
   cartIn = {};
   cartInBosman = {};

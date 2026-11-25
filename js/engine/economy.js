@@ -801,6 +801,54 @@
     return { months: m, rate, dp, principal, interestCost, totalFinanced, monthly, totalPay: dp + totalFinanced };
   }
 
+  /**
+   * Plafon Utang Cicilan Transfer Resmi (OTA 01a20f1b: #21652 transferDebtCap / #21653 transferDebtRoom):
+   * cap = Math.max(500000, Math.round(monthlyPayroll * 12 * 0.30))
+   * room = Math.max(0, cap - transferDebtTotal)
+   */
+  function computeTransferDebtRoom(monthlyPayroll, transferDebtTotal = 0) {
+    const payMo = Math.max(0, U.safeNum(monthlyPayroll, 0));
+    const used = Math.max(0, Math.round(U.safeNum(transferDebtTotal, 0)));
+    const cap = Math.max(500000, Math.round(payMo * 12 * 0.30));
+    const room = Math.max(0, cap - used);
+    const usedPct = cap > 0 ? U.roundTo((used / cap) * 100, 1) : 0;
+    return {
+      cap,
+      used,
+      room,
+      usedPct,
+      maxBuy6: Math.floor(room / (0.75 * 1.03)),
+      maxBuy12: Math.floor(room / (0.75 * 1.08)),
+      maxBuy24: Math.floor(room / (0.75 * 1.18)),
+    };
+  }
+
+  /**
+   * Opsi Bonus Kemenangan ("Bicho", OTA 01a20f1b: #3561 MATCH_BONUS / #25644 bonusOptions):
+   * shares = [0.10, 0.25, 0.50] dari gaji bulanan skuad, kelipatan 1.000 (min 5.000).
+   */
+  function computeMatchBonusOptions(monthlyPayroll) {
+    const payMo = Math.max(0, U.safeNum(monthlyPayroll, 0));
+    const tiers = [
+      { key: 'low', share: 0.10, label: '10% Gaji' },
+      { key: 'mid', share: 0.25, label: '25% Gaji' },
+      { key: 'high', share: 0.50, label: '50% Gaji' },
+    ];
+    const seen = new Set();
+    const options = [];
+    for (const t of tiers) {
+      const amount = Math.max(5000, Math.round((payMo * t.share) / 1000) * 1000);
+      if (seen.has(amount)) continue;
+      seen.add(amount);
+      options.push({ ...t, amount });
+    }
+    return {
+      options,
+      winGlow: { v: 0.30, games: 3 },
+      missGlow: { v: -0.20, games: 2 },
+    };
+  }
+
   function computeLoanLimit(country = 'OTHER', division = 1, repLvl = 3) {
     const ref = U.payrollRef(country, division, repLvl);
     return Math.max(250000, Math.floor((ref * 0.25) / 250000) * 250000);
@@ -972,6 +1020,8 @@
     const sponsorOnly = estFixedSponsor + estVarSponsor;
 
     const netMarginPct = estMonthlyRev > 0 ? U.roundTo((estProjectedNet / estMonthlyRev) * 100, 1) : 0.0;
+    const debtRoomInfo = computeTransferDebtRoom(totalPayroll, transferDebtTotal);
+    const transferBanned = Boolean(uTeam && uTeam.transferBanned);
 
     return {
       ...cashflowMeta,
@@ -992,6 +1042,11 @@
       bankLoanParcel,
       transferDebtParcel,
       transferDebtTotal,
+      transferDebtCap: debtRoomInfo.cap,
+      transferDebtRoom: debtRoomInfo.room,
+      transferDebtUsedPct: debtRoomInfo.usedPct,
+      transferDebtMaxBuy24: debtRoomInfo.maxBuy24,
+      transferBanned,
       transferDebtCount: transferDebtItems.length,
       transferDebtItems,
       estMonthlyRev,
@@ -1301,6 +1356,8 @@
     youthCoachMonthly,
     computeMonthlyLoanDue,
     computeInstallmentPlan,
+    computeTransferDebtRoom,
+    computeMatchBonusOptions,
     computeLoanLimit,
     computeCashflow3m,
     buildCashflowPayload,

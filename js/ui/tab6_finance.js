@@ -43,6 +43,9 @@ function renderTab6() {
     const loan = Number(D.meta.bankLoan) || 0;
     const tdParcel = Number(b.transferDebtParcel) || 0;
     const tdTotal = Number(cf.transferDebtTotal) || 0;
+    const debtCap = cf.transferDebtCap ?? Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 12 * 0.30));
+    const debtRoom = cf.transferDebtRoom ?? Math.max(0, debtCap - tdTotal);
+    const debtBanned = Boolean(cf.transferBanned || (D.meta && D.meta.transferBanned));
     const runwayTxt = net >= 0
       ? '<span class="c-green"><b>Surplus ✓</b></span>'
       : `<span class="c-amber"><b>~${Math.max(0, Math.floor((D.meta.budget || 0) / Math.max(1, Math.abs(net))))} bln</b></span>`;
@@ -51,7 +54,8 @@ function renderTab6() {
       <div class="cf-health-strip mono">
         <span>Gaji/Income: <span class="badge ${wageCls}">${wageRatio}% (${wageLbl})</span></span>
         <span>Hutang Bank: <b class="${loan > 0 ? 'c-red' : 'c-green'}">${fmtM(loan)}</b></span>
-        ${tdTotal > 0 ? `<span>Cicilan Transfer: <b class="c-amber">${fmtM(tdTotal)}</b> (${fmtM(tdParcel)}/bln)</span>` : ''}
+        <span>Plafon Cicilan: <span id="t6-debt-room-badge" class="badge ${debtBanned ? 'b-crit' : (debtRoom > 0 ? 'b-info' : 'b-warn')} mono">${debtBanned ? '⛔ BAN' : `Sisa ${fmtM(debtRoom)} / ${fmtM(debtCap)}`}</span></span>
+        ${tdTotal > 0 ? `<span>Cicilan Aktif: <b class="c-amber">${fmtM(tdTotal)}</b> (${fmtM(tdParcel)}/bln)</span>` : ''}
         <span>Runway: ${runwayTxt}</span>
       </div>
       <div class="flex-between mono" style="font-size:11px">
@@ -89,28 +93,29 @@ function renderTab6() {
         </div>
       </div>
       ${(() => {
-        const pay = (D.meta && D.meta.payroll) || 0;
         const bud = (D.meta && D.meta.budget) || 0;
-        const plafonGame = Math.max(500000, Math.round(pay * 0.30));
-        const remPlafon = Math.max(0, plafonGame - tdParcel);
-        const safeMo = Math.max(0, Math.min(remPlafon, Math.round(net * 0.70)));
-        const maxBuy24 = Math.round((safeMo * 24) / (0.75 * 1.18));
-        const dp25Cap = Math.round(maxBuy24 * 0.25);
+        const maxBuyByCap24 = debtBanned ? 0 : (cf.transferDebtMaxBuy24 ?? Math.floor(debtRoom / (0.75 * 1.18)));
+        const safeMo = Math.max(0, Math.round(net * 0.70));
+        const maxBuyByCash24 = Math.floor((safeMo * 24) / (0.75 * 1.18));
+        const effMaxBuy24 = Math.min(maxBuyByCap24, maxBuyByCash24);
+        const dp25Cap = Math.round(effMaxBuy24 * 0.25);
         const ctLv = (D.meta && D.meta.ctLevel) || 1;
         const ctNext = D.ctUpgrade || null;
         let invTip = 'Kas sehat — prioritaskan Bosman 0€ atau cicilan DP 25% untuk upgrade titik lemah XI.';
-        if (ctLv < 9 && ctNext && ctNext.cost && bud >= ctNext.cost * 1.1) {
+        if (debtBanned) {
+          invTip = 'Klub sedang terkena Transfer Ban — cicilan transfer diblokir sementara.';
+        } else if (ctLv < 9 && ctNext && ctNext.cost && bud >= ctNext.cost * 1.1) {
           invTip = `Rekomendasi: CT Lv ${ctLv} → ${ctLv + 1} (${fmtM(ctNext.cost)}) untuk tambah slot/bonus jangka panjang.`;
         } else if (safeMo <= 0) {
           invTip = 'Surplus bulanan tipis/negatif — fokus jual pemain berlebih & optimasi tiket/sponsor dulu sebelum cicil pemain.';
         }
         return `<div style="margin-top:8px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:9px;font-size:11.5px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
-            <b class="c-sky">💳 Budget Cap Aman Belanja &amp; Cicilan (OTA DP 25%)</b>
-            <span class="badge ${safeMo > 0 ? 'b-info' : 'b-warn'} mono">Plafon Aman: ${fmtM(safeMo)}/bln</span>
+            <b class="c-sky">💳 Plafon Utang Cicilan Game (#21652) &amp; Cap Aman Cashflow</b>
+            <span class="badge ${debtBanned ? 'b-crit' : (debtRoom > 0 && safeMo > 0 ? 'b-info' : 'b-warn')} mono">${debtBanned ? '⛔ BAN' : `Sisa Plafon: ${fmtM(debtRoom)}`}</span>
           </div>
           <div class="mono c-muted" style="font-size:11px">
-            Batas cicilan game: <b>${fmtM(remPlafon)}/bln</b>${tdParcel > 0 ? ` (terpakai ${fmtM(tdParcel)}/bln)` : ''} · Daya beli cicilan 24 bln: <b class="c-green">${fmtM(maxBuy24)}</b> (DP 25%: <b>${fmtM(dp25Cap)}</b> vs Kas <b>${fmtM(bud)}</b>)
+            Plafon utang game (30% gaji tahunan, min 500K): <b>${fmtM(debtRoom)}</b> / ${fmtM(debtCap)}${tdTotal > 0 ? ` (terpakai ${fmtM(tdTotal)})` : ''} · Maks beli 24b: <b class="c-green">${fmtM(maxBuyByCap24)}</b>${safeMo > 0 ? ` (Aman cashflow ${fmtM(safeMo)}/bln → <b class="c-sky">${fmtM(effMaxBuy24)}</b>, DP 25%: <b>${fmtM(dp25Cap)}</b> vs Kas <b>${fmtM(bud)}</b>)` : ''}
           </div>
           <div class="c-muted" style="font-size:10.5px;margin-top:3px">Bunga OTA: 6b +3% · 12b +8% · 24b +18%. ${esc(invTip)}</div>
         </div>`;

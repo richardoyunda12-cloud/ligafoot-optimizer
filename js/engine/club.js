@@ -2123,6 +2123,22 @@
         )
       : null;
     const matchTelemetry = buildMatchTelemetry(save, userId, userRoster, U.safeInt(save.season, 1));
+    const ratingFbMap = new Map();
+    const curTel = matchTelemetry && Array.isArray(matchTelemetry.seasons) && matchTelemetry.seasons[0];
+    const telPlayers = curTel && curTel.playerTelemetry && Array.isArray(curTel.playerTelemetry.allPlayers)
+      ? curTel.playerTelemetry.allPlayers
+      : [];
+    for (const tp of telPlayers) {
+      if (!tp || !tp.avgRating) continue;
+      if (tp.id) ratingFbMap.set(String(tp.id), tp.avgRating);
+      if (tp.name) ratingFbMap.set(String(tp.name).toLowerCase(), tp.avgRating);
+    }
+    const moraleInfo = {
+      ...T.computeTeamMoraleV9(bestXi.xi, uTeam.bonusGlow || null, ratingFbMap),
+      ...E.computeMatchBonusOptions(totalPayroll),
+      promisedCount: (save.matchBonus && typeof save.matchBonus === 'object') ? Object.keys(save.matchBonus).length : 0,
+      promisedMap: (save.matchBonus && typeof save.matchBonus === 'object') ? save.matchBonus : {},
+    };
 
     const alerts = buildPriorityAlerts(
       userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
@@ -2336,7 +2352,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.9.3 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.9.4 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,
@@ -2364,6 +2380,9 @@
         ctWork: uTeam.ctWork || null,
         youthCoach,
         bankLoan: Math.round(bankLoan),
+        transferDebtCap: cashflowPayload.transferDebtCap,
+        transferDebtRoom: cashflowPayload.transferDebtRoom,
+        transferBanned: Boolean(cashflowPayload.transferBanned),
         payroll: Math.round(totalPayroll),
         youthPayroll: Math.round(youthPayroll),
         payrollRef: Math.round(payrollRef),
@@ -2387,6 +2406,7 @@
       fineSlumpPlayers,
       cashflow: cashflowPayload,
       cashflowCalendar,
+      morale: moraleInfo,
       matchTelemetry,
       deltas,
       progression,

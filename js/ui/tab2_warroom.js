@@ -7,6 +7,12 @@ let warSimCompKind = 'league';
 let warShoutUsed = {};
 let warCondManual = {};
 let warCondSaveSig = '';
+let warBonusMode = 'auto'; // 'auto' | 'win' (+0.30) | 'miss' (-0.20)
+
+function setWarBonusMode(mode) {
+  warBonusMode = (mode === 'win' || mode === 'miss') ? mode : 'auto';
+  renderTab2();
+}
 
 const WAR_REF_META = {
   strict: { ico: '🟥', lbl: 'Ketat' },
@@ -455,9 +461,9 @@ function renderXiPeekHtml(rec, fx) {
 
 /**
  * Hitung ulang Win% / xG / Style Compare secara live ketika manajer meng-override
- * Cuaca atau Wasit pada laga resmi War Room (#21365/#21366/#21367/#22073).
+ * Cuaca, Wasit, atau simulasi Buff Morale / Bonus Kemenangan (#21365/#22073/#22238).
  */
-function computeLiveWarSim(fx, rec, m, activeWeather, activeRef) {
+function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride = null, baseMoraleRef = null) {
   const Eng = window.LFEngine;
   if (!Eng || !Eng.tactics || !rec || !m || !m.oppPow) return null;
   const Tac = Eng.tactics;
@@ -508,7 +514,13 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef) {
   const oppStyle = (m.aiInfo && m.aiInfo.aiStyle) || fx.aiStyle || 'Balanced';
   const recFocus = m.attackFocus || rec.optFocus || 'Center';
   const f9Id = (m.falseNine && m.falseNineTarget) ? m.falseNineTarget.id : null;
-  const uCondOpts = { altHit: newCondF.altHit, energyMul: newCondF.userEnergyMul, cardMul: newCondF.userCardMul };
+  const hasMoraleOv = moraleOverride !== null && moraleOverride !== undefined && Number.isFinite(Number(moraleOverride));
+  const uCondOpts = {
+    altHit: newCondF.altHit,
+    energyMul: newCondF.userEnergyMul,
+    cardMul: newCondF.userCardMul,
+    ...(hasMoraleOv ? { morale: Number(moraleOverride) } : {}),
+  };
 
   const styleSims = {};
   for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
@@ -537,6 +549,28 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef) {
         isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: newCondF.missMul,
       })
     : styleSims[liveStyle];
+
+  let moraleDelta = null;
+  if (hasMoraleOv) {
+    const refMorale = (baseMoraleRef !== null && baseMoraleRef !== undefined && Number.isFinite(Number(baseMoraleRef)))
+      ? Number(baseMoraleRef)
+      : 0;
+    const basePowM = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
+      isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id,
+      altHit: newCondF.altHit, energyMul: newCondF.userEnergyMul, cardMul: newCondF.userCardMul,
+      morale: refMorale,
+    });
+    const baseSimM = Tac.simulateMatchExpectation(basePowM, oPowLive, {
+      isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: newCondF.missMul,
+    });
+    moraleDelta = {
+      deltaMid: +(finalPowRaw.MID - basePowM.MID).toFixed(2),
+      deltaWin: +(finalSim.winPct - baseSimM.winPct).toFixed(1),
+      deltaPts: +(finalSim.xPts - baseSimM.xPts).toFixed(3),
+      simMorale: Number(moraleOverride),
+      refMorale,
+    };
+  }
 
   const enginePow = { ...finalPowRaw, ATK: finalSim.effAtkUser, atkMod: rec.atkMod || 0, defMod: rec.defMod || 0 };
   const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'].map(stName => ({
@@ -569,6 +603,7 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef) {
     styleCompare,
     enginePow,
     oppPow: oPowLive,
+    moraleDelta,
     condDelta: {
       deltaWin: +(finalSim.winPct - cleanSim.winPct).toFixed(1),
       deltaPts: +(finalSim.xPts - cleanSim.xPts).toFixed(3),
@@ -724,8 +759,13 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
   const ourCardMul = warRef === 'strict' ? 1.2 : (warRef === 'lenient' ? 0.82 : (warRef === 'home' ? (fx.isHome ? 0.85 : 1.2) : 1.0));
   const altExtraPct = ac && ac.altHit > 0 ? Math.round(35 * ac.altHit) : 0;
 
-  const liveSim = (!fx.isSim && (isManualRef || isManualWeather))
-    ? computeLiveWarSim(fx, rec, m, warWeather, warRef)
+  const mo = D.morale || null;
+  const simMoraleVal = mo
+    ? (warBonusMode === 'win' ? mo.winSimMorale : (warBonusMode === 'miss' ? mo.missSimMorale : mo.totalMorale))
+    : null;
+  const needMoraleSim = Boolean(mo && warBonusMode !== 'auto');
+  const liveSim = ((!fx.isSim && (isManualRef || isManualWeather)) || needMoraleSim)
+    ? computeLiveWarSim(fx, rec, m, warWeather, warRef, needMoraleSim ? simMoraleVal : null, mo ? mo.totalMorale : 0)
     : null;
   const viewWin = liveSim ? liveSim.winPct : (rec ? rec.winPct : undefined);
   const viewDraw = liveSim ? liveSim.drawPct : (rec ? rec.drawPct : undefined);
@@ -808,6 +848,63 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       ${renderH2HBars(viewEnginePow, viewOppPow)}
       ${simBar}
     </div>` : '';
+
+  const moraleBlock = mo ? (() => {
+    const fmtSigned = v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}`;
+    const activeMorale = warBonusMode === 'win' ? mo.winSimMorale : (warBonusMode === 'miss' ? mo.missSimMorale : mo.totalMorale);
+    const activeMidPct = +(activeMorale * 3.0).toFixed(2);
+    const opts = Array.isArray(mo.options) ? mo.options : [];
+    const opt10 = opts[0] ? opts[0].amount : 5000;
+    const optsSummary = opts.map(o => `${o.label}: <b>${fmtM(o.amount)}</b>`).join(' · ');
+    const isBig = Boolean((tkt && (tkt.isBig || tkt.isKnockout || tkt.isClassic)) || fx.isKo);
+    let verdictCls = 'b-info';
+    let verdictTxt = `⚖️ OPSIONAL (+${mo.winGainMidPct}% MID 3 laga jika menang)`;
+    let adviceTxt = `Pilih nominal terendah (10% · ${fmtM(opt10)}) jika ingin berburu WinGlow — efek +0.30 morale (3 laga) sama persis di semua tier!`;
+    if (mo.isCapped) {
+      verdictCls = 'b-warn';
+      verdictTxt = '⛔ MORALE MENTOK +1.0 — HEMAT KAS (0% BUFF)';
+      adviceTxt = `Rata-rata rating XI sudah ${mo.avgRating} (morale dasar ${fmtSigned(mo.baseMorale)}). Karena morale di-clamp maks +1.0, bayar bonus kemenangan memberi +0.00% tambahan MID!`;
+    } else if (mo.glowLeft > 0 && mo.glowV > 0) {
+      verdictCls = 'b-good';
+      verdictTxt = `✨ WIN GLOW AKTIF (+${(mo.glowV * 3).toFixed(2)}% MID · ${mo.glowLeft} laga)`;
+      adviceTxt = `Tim sudah memiliki buff WinGlow aktif tersisa ${mo.glowLeft} laga. Tidak perlu bayar bicho lagi sampai habis.`;
+    } else if (mo.glowLeft > 0 && mo.glowV < 0) {
+      verdictCls = 'b-crit';
+      verdictTxt = `❄️ MISS GLOW AKTIF (${(mo.glowV * 3).toFixed(2)}% MID · ${mo.glowLeft} laga)`;
+      adviceTxt = `Tim sedang terkena penalti gagal target bonus sebelumnya. Tunggu pulih atau pakai 10% hanya pada laga peluang menang tinggi.`;
+    } else if (isBig && (viewWin ?? 50) >= 52) {
+      verdictCls = 'b-good';
+      verdictTxt = `✅ LAYAK BICHO 10% (${fmtM(opt10)}) → +${mo.winGainMidPct}% MID`;
+      adviceTxt = `Laga besar & peluang menang kuat (${viewWin ?? '-'}%). Bayar tier termurah 10% (${fmtM(opt10)}) untuk panen +${mo.winGainMidPct}% MID selama 3 laga berikutnya!`;
+    } else if ((viewWin ?? 50) < 45) {
+      verdictCls = 'b-warn';
+      verdictTxt = `⚠ BERISIKO (Gagal: -${mo.missDropMidPct}% MID · 2 laga)`;
+      adviceTxt = `Peluang menang di bawah 45% (${viewWin ?? '-'}%). Jika gagal menang saat pasang bicho, tim kena penalti MissGlow -0.20 morale (-${mo.missDropMidPct}% MID) selama 2 laga.`;
+    }
+    const deltaChip = (liveSim && liveSim.moraleDelta)
+      ? `<span id="wr-morale-delta" class="badge ${liveSim.moraleDelta.deltaWin >= 0 ? 'b-good' : 'b-crit'} mono">Sim ΔMID ${liveSim.moraleDelta.deltaMid >= 0 ? '+' : ''}${liveSim.moraleDelta.deltaMid} · ΔWin ${liveSim.moraleDelta.deltaWin >= 0 ? '+' : ''}${liveSim.moraleDelta.deltaWin}% · ΔxPts ${liveSim.moraleDelta.deltaPts >= 0 ? '+' : ''}${liveSim.moraleDelta.deltaPts}</span>`
+      : '';
+    return `<div id="wr-morale-box" style="background:var(--bg2);border:1px solid ${mo.isCapped ? 'rgba(245,158,11,.4)' : 'rgba(16,185,129,.35)'};border-radius:11px;padding:10px 11px;margin-bottom:10px;font-size:11px">
+      <div class="flex-between" style="gap:6px;flex-wrap:wrap;margin-bottom:5px">
+        <span class="kpi-lbl">🔥 Buff Morale &amp; Bonus Kemenangan (Bicho · #22238)</span>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          <span class="badge ${verdictCls}">${verdictTxt}</span>
+          ${deltaChip}
+        </div>
+      </div>
+      <div class="mono" style="line-height:1.5;margin-bottom:4px">
+        Morale Aktif: <b class="${activeMorale >= 0 ? 'c-green' : 'c-red'}">${fmtSigned(activeMorale)}</b>
+        <span class="c-muted">(${mo.hasEnoughRatings ? `Avg XI ${mo.avgRating} · Base ${fmtSigned(mo.baseMorale)}` : `Rating XI ${mo.ratedCount}/6 → Base 0.00`}${mo.glowLeft > 0 ? ` · Glow ${fmtSigned(mo.glowV)} [${mo.glowLeft}L]` : ''})</span>
+        · Efek Sektor MID: <b class="${activeMidPct >= 0 ? 'c-green' : 'c-red'}">${activeMidPct >= 0 ? '+' : ''}${activeMidPct}%</b>
+      </div>
+      <div class="c-muted" style="line-height:1.45;margin-bottom:6px">${esc(adviceTxt)}${optsSummary ? `<div class="mono" style="margin-top:2px">Opsi Bicho: ${optsSummary}</div>` : ''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button type="button" id="wr-morale-auto" class="btn btn-sm ${warBonusMode === 'auto' ? 'btn-green' : ''}" onclick="setWarBonusMode('auto')">📌 Kondisi Save (${fmtSigned(mo.totalMorale)})</button>
+        <button type="button" id="wr-morale-win" class="btn btn-sm ${warBonusMode === 'win' ? 'btn-green' : ''}" onclick="setWarBonusMode('win')">🔥 Sim WinGlow (+0.30 → ${mo.winSimMidBoostPct >= 0 ? '+' : ''}${mo.winSimMidBoostPct}% MID)</button>
+        <button type="button" id="wr-morale-miss" class="btn btn-sm ${warBonusMode === 'miss' ? 'btn-amber' : ''}" onclick="setWarBonusMode('miss')">❄️ Sim MissGlow (-0.20 → ${mo.missSimMidBoostPct >= 0 ? '+' : ''}${mo.missSimMidBoostPct}% MID)</button>
+      </div>
+    </div>`;
+  })() : '';
 
   const customRecHtml = (m && m.customRec) ? (() => {
     const cr = m.customRec;
@@ -1011,6 +1108,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
     ${cheatStrip}
     ${preMatchDiffHtml}
     ${h2hBlock}
+    ${moraleBlock}
     <div class="grid g2" style="gap:10px">
       ${formBlock}
       ${tacticBlock}

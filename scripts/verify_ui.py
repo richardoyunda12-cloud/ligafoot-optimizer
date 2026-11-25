@@ -172,12 +172,31 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
 
     page.evaluate("() => { goToView('t5', 't5-ov'); }")
     assert len((page.text_content('#t6-calendar-12m') or '').strip()) > 20, 'Kalender 12M kosong'
+    t6_debt_txt = (page.text_content('#t6-debt-room-badge') or '').strip()
+    assert ('Sisa' in t6_debt_txt) or ('BAN' in t6_debt_txt), f'Badge Plafon Cicilan Tab 5A tidak tampil: {t6_debt_txt}'
+
+    # v8.9.4: War Room Buff Morale (Bicho #22238) + Transfer Debt Room Badge (#21652/#21653)
+    page.evaluate("() => { goToView('t2'); }")
+    morale_txt = (page.text_content('#wr-morale-box') or '').strip()
+    assert 'Buff Morale' in morale_txt and 'MID' in morale_txt, f'Kartu Buff Morale War Room tidak tampil: {morale_txt[:120]}'
+    page.locator('#wr-morale-win').click()
+    assert page.locator('#wr-morale-delta').count() > 0, 'Simulasi WinGlow tidak menampilkan #wr-morale-delta'
+    page.locator('#wr-morale-miss').click()
+    miss_delta_txt = (page.text_content('#wr-morale-delta') or '').strip()
+    assert 'ΔMID' in miss_delta_txt, f'Simulasi MissGlow tidak memperbarui #wr-morale-delta: {miss_delta_txt}'
+    page.locator('#wr-morale-auto').click()
+
+    page.evaluate("() => { goToView('t4', 't4-bp'); }")
+    bp_debt_txt = (page.text_content('#t7-debt-room-badge') or '').strip()
+    assert 'Sisa Plafon Cicilan' in bp_debt_txt, f'Badge Sisa Plafon Cicilan di Tab 4A tidak tampil: {bp_debt_txt}'
 
     page.evaluate("() => { goToView('t5', 't5-tkt'); }")
     if page.locator('#t6-preset-audit button:has-text("Tes")').count() > 0:
         page.locator('#t6-preset-audit button:has-text("Tes")').first.click()
 
     page.evaluate("() => { goToView('t4', 't4-cart'); }")
+    cart_debt_txt = (page.text_content('#t7-cart-debt-badge') or '').strip()
+    assert 'Plafon Cicilan' in cart_debt_txt or 'Cicil DP 25%' in cart_debt_txt, f'Badge Plafon Cicilan Cart tidak tampil: {cart_debt_txt}'
     if page.locator('#t7-bteam-pick option').count() > 1:
         b_opt = page.evaluate("() => document.getElementById('t7-bteam-pick').options[0].value")
         page.select_option('#t7-bteam-pick', b_opt)

@@ -505,6 +505,18 @@ function renderScoutBlueprint() {
   const sellable = D.roster.filter(isRecommendedSell);
   const potentialSellCash = sellable.reduce((s, p) => s + p.estRealSale, 0);
 
+  const cf = D.cashflow || {};
+  const ecoRoomFn = window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeTransferDebtRoom;
+  const fallbackRoom = ecoRoomFn
+    ? ecoRoomFn((D.meta && D.meta.payroll) || 0, cf.transferDebtTotal || 0)
+    : { cap: Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 12 * 0.30)), used: cf.transferDebtTotal || 0, room: Math.max(0, Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 12 * 0.30)) - (cf.transferDebtTotal || 0)), maxBuy24: 0 };
+  const debtCap = cf.transferDebtCap ?? fallbackRoom.cap;
+  const debtUsed = cf.transferDebtTotal ?? fallbackRoom.used;
+  const debtRoom = cf.transferDebtRoom ?? fallbackRoom.room;
+  const debtMaxBuy24 = cf.transferDebtMaxBuy24 ?? fallbackRoom.maxBuy24;
+  const debtBanned = Boolean(cf.transferBanned || (D.meta && D.meta.transferBanned));
+  const debtCls = debtBanned ? 'c-red' : (debtRoom <= 0 ? 'c-red' : (debtRoom < debtCap * 0.3 ? 'c-amber' : 'c-green'));
+
   const cartBadge = document.getElementById('t4-cart-cnt');
   if (cartBadge) cartBadge.textContent = String(cm.outCount + cm.inCount);
 
@@ -516,6 +528,10 @@ function renderScoutBlueprint() {
         <div><span class="kpi-lbl">Cart Beli</span><div class="mono c-amber" style="font-size:16px;font-weight:800">-${fmtM(cm.cashOut)}</div></div>
         <div><span class="kpi-lbl">Sisa Daya Beli</span><div class="mono ${cm.projBudget >= 0 ? 'c-green' : 'c-red'}" style="font-size:18px;font-weight:900">${fmtM(cm.projBudget)}</div></div>
         <div><span class="kpi-lbl">Kuota Asing</span><div class="mono ${cm.projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}" style="font-size:16px;font-weight:800">${cm.projForeign}/${D.meta.foreignCap}</div></div>
+        <div id="t7-debt-room-badge" title="Plafon Utang Cicilan OTA (#21652/#21653): max(500K, 30% gaji tahunan). Terpakai ${fmtM(debtUsed)} dari ${fmtM(debtCap)}. Maks harga beli cicil 24b: ${fmtM(debtMaxBuy24)}.">
+          <span class="kpi-lbl">Sisa Plafon Cicilan</span>
+          <div class="mono ${debtCls}" style="font-size:16px;font-weight:800">${debtBanned ? '⛔ BAN' : fmtM(debtRoom)} <span class="c-muted" style="font-size:11px;font-weight:600">/ ${fmtM(debtCap)}</span></div>
+        </div>
       </div>
       <div class="pill-row" style="margin:0">
         <button type="button" class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Pilih ${sellable.length} Layak Jual (+${fmtM(potentialSellCash)})</button>
@@ -525,7 +541,7 @@ function renderScoutBlueprint() {
     <div class="bstrip-mob">
       <div class="mono" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         💰 <b class="${cm.projBudget >= 0 ? 'c-green' : 'c-red'}" style="font-size:13px">${fmtM(cm.projBudget)}</b>
-        <span class="c-muted"> · Asing <b class="${cm.projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}">${cm.projForeign}/${D.meta.foreignCap}</b></span>
+        <span class="c-muted"> · Asing <b class="${cm.projForeign > D.meta.foreignCap ? 'c-amber' : 'c-sky'}">${cm.projForeign}/${D.meta.foreignCap}</b> · 💳 <b class="${debtCls}">${debtBanned ? 'BAN' : fmtM(debtRoom)}</b></span>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
         <button type="button" class="btn btn-sm btn-amber" onclick="selectAllRecommendedSells()">⚡ Jual (${sellable.length})</button>
@@ -1406,15 +1422,22 @@ function renderCart() {
       ? `<span class="badge b-warn">⚠ Kelebihan ${projForeign - D.meta.foreignCap} asing — pertimbangkan jual/rotasi ke Tim B</span>`
       : `<span class="badge b-good">✓ Komposisi Asing &amp; Kas Sehat</span>`;
     const ecoPlan = (window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeInstallmentPlan);
-    const p6 = ecoPlan ? ecoPlan(cashOut, 6) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.03 / 6) };
-    const p12 = ecoPlan ? ecoPlan(cashOut, 12) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.08 / 12) };
-    const p24 = ecoPlan ? ecoPlan(cashOut, 24) : { dp: Math.round(cashOut * 0.25), monthly: Math.ceil(cashOut * 0.75 * 1.18 / 24) };
-    const existingDebtMo = (D.cashflow && Number(D.cashflow.transferDebtParcel)) || 0;
-    const instCapTot = Math.max(0, Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 0.30)) - existingDebtMo);
-    const estSurplus = (D.cashflow && typeof D.cashflow.estProjectedNet === 'number') ? D.cashflow.estProjectedNet : null;
+    const p6 = ecoPlan ? ecoPlan(cashOut, 6) : { dp: Math.round(cashOut * 0.25), totalFinanced: Math.round(cashOut * 0.75 * 1.03), monthly: Math.ceil(cashOut * 0.75 * 1.03 / 6) };
+    const p12 = ecoPlan ? ecoPlan(cashOut, 12) : { dp: Math.round(cashOut * 0.25), totalFinanced: Math.round(cashOut * 0.75 * 1.08), monthly: Math.ceil(cashOut * 0.75 * 1.08 / 12) };
+    const p24 = ecoPlan ? ecoPlan(cashOut, 24) : { dp: Math.round(cashOut * 0.25), totalFinanced: Math.round(cashOut * 0.75 * 1.18), monthly: Math.ceil(cashOut * 0.75 * 1.18 / 24) };
+    const cfCart = D.cashflow || {};
+    const debtCap = cfCart.transferDebtCap ?? Math.max(500000, Math.round(((D.meta && D.meta.payroll) || 0) * 12 * 0.30));
+    const debtUsed = Number(cfCart.transferDebtTotal) || 0;
+    const debtRoom = cfCart.transferDebtRoom ?? Math.max(0, debtCap - debtUsed);
+    const debtMaxBuy24 = cfCart.transferDebtMaxBuy24 ?? Math.floor(debtRoom / (0.75 * 1.18));
+    const debtBanned = Boolean(cfCart.transferBanned || (D.meta && D.meta.transferBanned));
+    const estSurplus = (typeof cfCart.estProjectedNet === 'number') ? cfCart.estProjectedNet : null;
+    const ok24 = !debtBanned && p24.totalFinanced <= debtRoom;
+    const ok6 = !debtBanned && p6.totalFinanced <= debtRoom;
+    const remAfter24 = debtRoom - p24.totalFinanced;
     const instHtml = cashOut > 0
-      ? `<span class="badge ${p24.monthly <= instCapTot ? 'b-info' : 'b-warn'} mono" title="Simulasi OTA TRANSFER_INSTALLMENTS (DP 25% + bunga 6b +3% / 12b +8% / 24b +18%)">💳 Cicil DP 25% (${fmtM(p24.dp)}): 6b ${fmtM(p6.monthly)} · 12b ${fmtM(p12.monthly)} · 24b ${fmtM(p24.monthly)}/bln${estSurplus !== null ? ` (Sisa Net/bln: ${fmtM(estSurplus - p24.monthly - salDelta)})` : ''}</span>`
-      : '';
+      ? `<span id="t7-cart-debt-badge" class="badge ${ok24 ? 'b-info' : (ok6 ? 'b-warn' : 'b-crit')} mono" title="OTA 01a20f1b (#21652/#21653): total cicilan harus <= Sisa Plafon (${fmtM(debtRoom)} / ${fmtM(debtCap)}). DP 25% + bunga 6b +3% / 12b +8% / 24b +18%.">💳 Cicil DP 25% (${fmtM(p24.dp)}): 6b ${fmtM(p6.monthly)} · 12b ${fmtM(p12.monthly)} · 24b ${fmtM(p24.monthly)}/bln · Plafon 24b: ${debtBanned ? '⛔ BAN' : (ok24 ? `✓ Sisa ${fmtM(remAfter24)}` : `⛔ Kurang ${fmtM(-remAfter24)}`)}${estSurplus !== null ? ` (Net/bln: ${fmtM(estSurplus - p24.monthly - salDelta)})` : ''}</span>`
+      : `<span id="t7-cart-debt-badge" class="badge ${debtBanned ? 'b-crit' : (debtRoom > 0 ? 'b-info' : 'b-warn')} mono" title="OTA 01a20f1b (#21652/#21653): Plafon utang cicilan = max(500K, 30% gaji tahunan) - sisa utang berjalan">💳 Plafon Cicilan: ${debtBanned ? '⛔ TRANSFER BAN' : `Sisa ${fmtM(debtRoom)} / ${fmtM(debtCap)}`} · Maks Beli 24b: ${fmtM(debtMaxBuy24)}</span>`;
 
     const simList = Array.isArray(D.simOpponents) ? D.simOpponents : [];
     const strongestOpp = [...simList].sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))[0] || null;
