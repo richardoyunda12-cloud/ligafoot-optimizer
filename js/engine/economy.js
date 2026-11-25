@@ -948,12 +948,26 @@
     const estFixedSponsor = U.fixedSponsorParcel(uTeam && uTeam.fixedSponsor);
 
     // Sponsor variabel: hanya kontrak yang BUKAN upfront (luvas sudah dibayar di awal musim)
+    // Namun amortisasi bulanan luvas tetap dihitung terpisah agar Net Efektif terlihat akurat!
     let estVarSponsor = 0;
+    let estUpfrontSponsorTotal = 0;
+    let estUpfrontSponsorMonthly = 0;
     for (const c of (spContracts || [])) {
-      if (!c || typeof c !== 'object' || c.upfront) continue;
+      if (!c || typeof c !== 'object') continue;
+      if (c.upfront) {
+        const luv = U.safeNum(c.luvas ?? c.total ?? c.value ?? c.amount, 0);
+        const mos = Math.max(1, U.safeInt(c.months, 12));
+        if (luv > 0) {
+          estUpfrontSponsorTotal += luv;
+          estUpfrontSponsorMonthly += luv / mos;
+        }
+        continue;
+      }
       estVarSponsor += U.safeNum(c.monthly ?? c.value ?? c.amount, 0) + U.safeNum(c.bonus, 0) * 0.5;
     }
     estVarSponsor = Math.round(estVarSponsor);
+    estUpfrontSponsorTotal = Math.round(estUpfrontSponsorTotal);
+    estUpfrontSponsorMonthly = Math.round(estUpfrontSponsorMonthly);
 
     const estSponsors = estTvQuota + estFixedSponsor + estVarSponsor;
 
@@ -1011,6 +1025,7 @@
     const estMonthlyRev = Math.round(estTickets + estSponsors + estNaming + estShop + estMember);
     const estMonthlyExp = Math.round(combinedPayroll + stadiumOps + ctCost + youthCost + bankLoanParcel + transferDebtParcel);
     const estProjectedNet = estMonthlyRev - estMonthlyExp;
+    const estEffectiveNet = estProjectedNet + estUpfrontSponsorMonthly;
 
     let avgNet = cashflowMeta ? cashflowMeta.avgOpNet3m : null;
     if (avgNet === null || avgNet === undefined) {
@@ -1031,6 +1046,9 @@
       estTvQuota,
       estFixedSponsor,
       estVarSponsor,
+      estUpfrontSponsorTotal,
+      estUpfrontSponsorMonthly,
+      estEffectiveNet,
       estNaming,
       estShop,
       estMember,

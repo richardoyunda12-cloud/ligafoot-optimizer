@@ -98,6 +98,11 @@ function runStage2Engine(savePath) {
   const dbPath = path.join(REPO_ROOT, 'data', 'static_db.min.json.gz');
   assert(fs.existsSync(dbPath), `Static DB tidak ditemukan: ${dbPath}`);
   const db = JSON.parse(zlib.gunzipSync(fs.readFileSync(dbPath)));
+
+  // Regresi v8.10.1: detectSquadHoles tidak boleh crash ReferenceError saat skuad kurang starter natural
+  const sparseHoles = global.LFEngine.tactics.detectSquadHoles([{ pos: 'G', force: 45, foot: 'D', injured: false }], '4-3-3');
+  assert(sparseHoles && Array.isArray(sparseHoles.holes) && sparseHoles.holes.some(h => h.kind === 'NO_STARTER' && h.desc.includes('4-3-3')),
+    'detectSquadHoles gagal membentuk deskripsi NO_STARTER dengan spec.key');
   const save = JSON.parse(fs.readFileSync(savePath, 'utf8'));
   const uTeam = save.compactTeams && save.compactTeams[save.userTeamId];
   assert(uTeam, 'userTeamId tidak ditemukan di save.compactTeams');

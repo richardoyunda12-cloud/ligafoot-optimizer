@@ -1828,34 +1828,6 @@
       }
     }
 
-    let recStyleWhy = '';
-    if (recStyle === 'Counter-Attack') {
-      recStyleWhy = `Uji simulasi memberi ekspektasi poin tertinggi (${styleSims['Counter-Attack'].winPct}% Win) vs AI ${finalAi.aiStyle}: +6..12% bonus konversi peluang sangat efektif saat transisi cepat.`;
-    } else if (recStyle === 'Offensive') {
-      recStyleWhy = `Uji simulasi unggul di Offensive (${styleSims.Offensive.winPct}% Win, xG ${styleSims.Offensive.xGF} vs Balanced ${styleSims.Balanced.xGF}): +8% ATK memaksimalkan volume gol tanpa mengorbankan dominasi MID.`;
-    } else if (recStyle === 'Defensive') {
-      recStyleWhy = `Uji simulasi unggul di Defensive (${styleSims.Defensive.winPct}% Win · ${styleSims.Defensive.drawPct}% Seri, xGA ${styleSims.Defensive.xGA}): +8% DEF meredam gempuran lawan.`;
-    } else if (finalAi.aiStyle === 'Offensive') {
-      recStyleWhy = `Lawan diprediksi Offensive (+8% ATK, -8% DEF). Balanced menjaga DEF tetap rapat; siapkan Counter-Attack jika tertekan.`;
-    } else {
-      recStyleWhy = `Balanced paling stabil (${styleSims.Balanced.winPct}% Win · ${styleSims.Balanced.drawPct}% Seri · xPts ${styleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive), -8% ATK (Defensive), maupun -6% MID (Counter).`;
-    }
-
-    const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'].map(stName => {
-      const s = styleSims[stName];
-      return {
-        style: stName,
-        winPct: s.winPct,
-        drawPct: s.drawPct,
-        lossPct: s.lossPct,
-        xPts: s.xPts,
-        xGF: s.xGF,
-        xGA: s.xGA,
-        possPct: s.possPct,
-        isRec: stName === recStyle,
-      };
-    });
-
     // Evaluasi opsi False Nine (#21822: f9Atk=0.6, f9MidPlaymaker=0.5, f9MidOther=0.35)
     const baseStyleSim = styleSims[recStyle];
     const atkItems = (bestXiObj.xi || []).filter(it => it.sectorCode === 'A' && it.player);
@@ -1881,16 +1853,62 @@
     }
 
     const useFalseNine = Boolean(bestF9Pick && bestF9Pick.sim.xPts >= baseStyleSim.xPts + 0.005);
+    const finalF9Id = (useFalseNine && bestF9Pick) ? bestF9Pick.player.id : null;
+
+    // Sinkronkan styleCompare dengan konfigurasi False Nine aktif agar konsisten 100% dengan finalRecSim
+    const compareStyleSims = {};
+    for (const stName of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
+      if (!finalF9Id) {
+        compareStyleSims[stName] = styleSims[stName];
+      } else if (stName === recStyle) {
+        compareStyleSims[stName] = bestF9Pick.sim;
+      } else {
+        const pF9St = computeEngineSectorPower(bestXiObj, best.formation, {
+          isHome, crowdOver70: true, style: stName, marking: bestMark, falseNineId: finalF9Id, ...uCondOpts,
+        });
+        compareStyleSims[stName] = simulateMatchExpectation(pF9St, effectiveOppPow, {
+          isHome, neutral: false, focus: best.optFocus, oppFocus, style: stName, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
+        });
+      }
+    }
+
+    let recStyleWhy = '';
+    if (recStyle === 'Counter-Attack') {
+      recStyleWhy = `Uji simulasi memberi ekspektasi poin tertinggi (${compareStyleSims['Counter-Attack'].winPct}% Win) vs AI ${finalAi.aiStyle}: +6..12% bonus konversi peluang sangat efektif saat transisi cepat.`;
+    } else if (recStyle === 'Offensive') {
+      recStyleWhy = `Uji simulasi unggul di Offensive (${compareStyleSims.Offensive.winPct}% Win, xG ${compareStyleSims.Offensive.xGF} vs Balanced ${compareStyleSims.Balanced.xGF}): +8% ATK memaksimalkan volume gol tanpa mengorbankan dominasi MID.`;
+    } else if (recStyle === 'Defensive') {
+      recStyleWhy = `Uji simulasi unggul di Defensive (${compareStyleSims.Defensive.winPct}% Win · ${compareStyleSims.Defensive.drawPct}% Seri, xGA ${compareStyleSims.Defensive.xGA}): +8% DEF meredam gempuran lawan.`;
+    } else if (finalAi.aiStyle === 'Offensive') {
+      recStyleWhy = `Lawan diprediksi Offensive (+8% ATK, -8% DEF). Balanced menjaga DEF tetap rapat; siapkan Counter-Attack jika tertekan.`;
+    } else {
+      recStyleWhy = `Balanced paling stabil (${compareStyleSims.Balanced.winPct}% Win · ${compareStyleSims.Balanced.drawPct}% Seri · xPts ${compareStyleSims.Balanced.xPts}) — menjaga 3 sektor tanpa penalti -8% DEF (Offensive), -8% ATK (Defensive), maupun -6% MID (Counter).`;
+    }
+
+    const styleCompare = ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive'].map(stName => {
+      const s = compareStyleSims[stName];
+      return {
+        style: stName,
+        winPct: s.winPct,
+        drawPct: s.drawPct,
+        lossPct: s.lossPct,
+        xPts: s.xPts,
+        xGF: s.xGF,
+        xGA: s.xGA,
+        possPct: s.possPct,
+        isRec: stName === recStyle,
+      };
+    });
 
     const finalRecPow = computeEngineSectorPower(bestXiObj, best.formation, {
       isHome,
       crowdOver70: true,
       style: recStyle,
       marking: recMarking,
-      falseNineId: (useFalseNine && bestF9Pick) ? bestF9Pick.player.id : null,
+      falseNineId: finalF9Id,
       ...uCondOpts,
     });
-    const finalRecSim = (useFalseNine && bestF9Pick) ? bestF9Pick.sim : baseStyleSim;
+    const finalRecSim = compareStyleSims[recStyle];
     best.winPct = finalRecSim.winPct;
     best.drawPct = finalRecSim.drawPct;
     best.lossPct = finalRecSim.lossPct;
@@ -2221,7 +2239,7 @@
           count: naturalPlayers.length,
           needed: idealDepth,
           bestForce,
-          desc: `Kurang starter natural di ${U.posEn(posCode)} (cuma ${naturalPlayers.length}/${minStarter} untuk ${fk})`,
+          desc: `Kurang starter natural di ${U.posEn(posCode)} (cuma ${naturalPlayers.length}/${minStarter} untuk ${spec.key})`,
         });
         holePositions.add(posCode);
       } else if ((posCode === 'LD' || posCode === 'LE') && footValid.length < minStarter) {

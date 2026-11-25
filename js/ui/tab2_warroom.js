@@ -525,7 +525,7 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
   const styleSims = {};
   for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
     const pTry = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
-      isHome: fx.isHome, crowdOver70: true, style: stTry, marking: liveMarking, ...uCondOpts,
+      isHome: fx.isHome, crowdOver70: true, style: stTry, marking: liveMarking, falseNineId: f9Id, ...uCondOpts,
     });
     styleSims[stTry] = Tac.simulateMatchExpectation(pTry, oPowLive, {
       isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: stTry, oppStyle, missMul: newCondF.missMul,
@@ -544,11 +544,7 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
   const finalPowRaw = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
     isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id, ...uCondOpts,
   });
-  const finalSim = f9Id
-    ? Tac.simulateMatchExpectation(finalPowRaw, oPowLive, {
-        isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: newCondF.missMul,
-      })
-    : styleSims[liveStyle];
+  const finalSim = styleSims[liveStyle];
 
   let moraleDelta = null;
   if (hasMoraleOv) {

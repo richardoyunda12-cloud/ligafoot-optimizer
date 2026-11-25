@@ -50,6 +50,15 @@ function renderTab6() {
       ? '<span class="c-green"><b>Surplus ✓</b></span>'
       : `<span class="c-amber"><b>~${Math.max(0, Math.floor((D.meta.budget || 0) / Math.max(1, Math.abs(net))))} bln</b></span>`;
 
+    const upMo = Number(cf.estUpfrontSponsorMonthly) || 0;
+    const effNet = (cf.estEffectiveNet !== undefined) ? Number(cf.estEffectiveNet) : (net + upMo);
+    const upNoteHtml = upMo > 0
+      ? `<div id="t6-eff-net-pill" class="mono" style="font-size:11px;margin:4px 0 8px;padding:5px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <span class="c-muted">Net Efektif (+Amortisasi Sponsor Upfront <b>+${fmtM(upMo)}/bln</b>):</span>
+          <b class="${effNet >= 0 ? 'c-green' : 'c-amber'}">${effNet >= 0 ? '+' : ''}${fmtM(effNet)}/bln</b>
+        </div>`
+      : '';
+
     cfEl.innerHTML = `
       <div class="cf-health-strip mono">
         <span>Gaji/Income: <span class="badge ${wageCls}">${wageRatio}% (${wageLbl})</span></span>
@@ -67,6 +76,7 @@ function renderTab6() {
         <div class="cf-ratio-in" style="width:${inPct}%"></div>
         <div class="cf-ratio-out" style="width:${outPct}%"></div>
       </div>
+      ${upNoteHtml}
       <div class="grid g2" style="gap:8px">
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:8px 9px;font-size:11.5px">
           <div class="c-green" style="font-weight:700;margin-bottom:4px">📥 Pemasukan Rutin</div>

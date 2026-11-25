@@ -518,6 +518,7 @@
     const xSet = xiIds instanceof Set ? xiIds : new Set();
     let activeOrderCnt = 0;
     let hasTiredSubOrder = false;
+    let elseBranchCnt = 0;
     const orderIssues = [];
     for (const ord of orders) {
       if (!ord || typeof ord !== 'object' || ord.on === false) continue;
@@ -525,29 +526,39 @@
       const oName = String(ord.name || 'Order #' + activeOrderCnt);
       const when = ord.when || {};
       const does = Array.isArray(ord.does) ? ord.does : [];
-      if ((when.redUs || when.redThem) && does.some(a => a && a.kind === 'formation')) {
-        orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Ubah Formasi Diblokir Kartu Merah`, detail: 'Aksi ganti formasi otomatis gagal (formationBlocked) saat kondisi redUs/redThem aktif. Hapus aksi formasi pada order ini.' });
-      }
-      for (const act of does) {
-        if (!act || act.kind !== 'sub') continue;
-        if (act.out && act.out.mode === 'tired') hasTiredSubOrder = true;
-        if (act.out && act.out.mode === 'player' && act.out.id) {
-          const po = rMap.get(act.out.id);
-          if (!po) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Keluar Hilang`, detail: 'Pemain target substitusi keluar sudah tidak ada di skuad — ubah ke mode "The most tired".' });
-          else if (po.injured || po.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${po.name} Cedera/Skorsing`, detail: 'Pemain tidak akan berada di lapangan; pertimbangkan pakai mode "The most tired".' });
-          else if (!xSet.has(po.id)) orderIssues.push({ severity: 'INFO', title: `Order "${oName}": ${po.name} Tidak di Best XI`, detail: 'Sub hanya berjalan jika pemain ini menjadi starter.' });
+      const elseDoes = Array.isArray(ord.elseDoes) ? ord.elseDoes : [];
+      if (elseDoes.length) elseBranchCnt++;
+
+      const inspectBranch = (actions, branchTag) => {
+        const bLbl = branchTag ? ` (${branchTag})` : '';
+        if ((when.redUs || when.redThem) && actions.some(a => a && a.kind === 'formation')) {
+          orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}"${bLbl}: Ubah Formasi Diblokir Kartu Merah`, detail: 'Aksi ganti formasi otomatis gagal (formationBlocked) saat kondisi redUs/redThem aktif. Hapus aksi formasi pada order ini.' });
         }
-        if (act.in && act.in.mode === 'player' && act.in.id) {
-          const pi = rMap.get(act.in.id);
-          if (!pi) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}": Pemain Masuk Hilang`, detail: 'Pemain pengganti sudah tidak ada di skuad — ubah ke mode "Best sub / Same slot".' });
-          else if (pi.injured || pi.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Cedera/Skorsing`, detail: 'Pemain pengganti tidak tersedia untuk masuk.' });
-          else if (xSet.has(pi.id)) orderIssues.push({ severity: 'WARN', title: `Order "${oName}": ${pi.name} Sudah Starter`, detail: 'Starter tidak bisa masuk dari bangku cadangan — ubah ke "Same slot".' });
+        for (const act of actions) {
+          if (!act || act.kind !== 'sub') continue;
+          if (act.out && act.out.mode === 'tired') hasTiredSubOrder = true;
+          if (act.out && act.out.mode === 'player' && act.out.id) {
+            const po = rMap.get(act.out.id);
+            if (!po) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}"${bLbl}: Pemain Keluar Hilang`, detail: 'Pemain target substitusi keluar sudah tidak ada di skuad — ubah ke mode "The most tired".' });
+            else if (po.injured || po.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}"${bLbl}: ${po.name} Cedera/Skorsing`, detail: 'Pemain tidak akan berada di lapangan; pertimbangkan pakai mode "The most tired".' });
+            else if (!xSet.has(po.id)) orderIssues.push({ severity: 'INFO', title: `Order "${oName}"${bLbl}: ${po.name} Tidak di Best XI`, detail: 'Sub hanya berjalan jika pemain ini menjadi starter.' });
+          }
+          if (act.in && act.in.mode === 'player' && act.in.id) {
+            const pi = rMap.get(act.in.id);
+            if (!pi) orderIssues.push({ severity: 'CRITICAL', title: `Order "${oName}"${bLbl}: Pemain Masuk Hilang`, detail: 'Pemain pengganti sudah tidak ada di skuad — ubah ke mode "Best sub / Same slot".' });
+            else if (pi.injured || pi.suspended) orderIssues.push({ severity: 'WARN', title: `Order "${oName}"${bLbl}: ${pi.name} Cedera/Skorsing`, detail: 'Pemain pengganti tidak tersedia untuk masuk.' });
+            else if (xSet.has(pi.id)) orderIssues.push({ severity: 'WARN', title: `Order "${oName}"${bLbl}: ${pi.name} Sudah Starter`, detail: 'Starter tidak bisa masuk dari bangku cadangan — ubah ke "Same slot".' });
+          }
         }
-      }
+      };
+
+      inspectBranch(does, '');
+      if (elseDoes.length) inspectBranch(elseDoes, 'ELSE');
     }
     return {
       count: orders.length,
       activeCount: activeOrderCnt,
+      elseBranchCount: elseBranchCnt,
       hasTiredSub: hasTiredSubOrder,
       issues: orderIssues,
     };
@@ -1021,7 +1032,7 @@
         add('MEDIUM', 'Tim B', `${bTeamInfo.contractAlertCount} pemain ${bTeamInfo.bTeamName || 'Tim B'} masuk Kontrak Kritis / Golden Window!`,
           'Buka Tab 3E (Tim B) untuk cek sisa kontrak & ekspor pemain Tim B agar tidak terlewat.');
       }
-      if ((bTeamInfo.zeroMinPayrollLeak || 0) >= 150000) {
+      if (bTeamInfo.seasonStarted && (bTeamInfo.zeroMinPayrollLeak || 0) >= 150000) {
         const leakK = Math.round(bTeamInfo.zeroMinPayrollLeak / 1000);
         add('MEDIUM', 'Tim B Gaji Bocor', `${bTeamInfo.zeroMinLeakCount} pemain ${bTeamInfo.bTeamName || 'Tim B'} mencatat 0 menit main (${leakK}K/bln terbuang)!`,
           'Buka Tab 3E (Tim B) untuk audit pemain cadangan Tim B yang makan gaji tanpa bermain.');
@@ -2018,11 +2029,16 @@
     let bTeamZeroMinLeak = 0;
     let bTeamZeroMinPayrollLeak = 0;
     let bTeamContractAlerts = 0;
+    let bTeamSeasonStarted = false;
+    const rawBSetup = (save.bSetup && typeof save.bSetup === 'object') ? save.bSetup : null;
+    const bSetupXiSet = new Set(rawBSetup && Array.isArray(rawBSetup.xi) ? rawBSetup.xi.map(String) : []);
+    const bSetupBenchSet = new Set(rawBSetup && Array.isArray(rawBSetup.bench) ? rawBSetup.bench.map(String) : []);
     if (hasBTeam && bTeamObj) {
       const bDiv = U.estimateDivisionFromLeague(bTeamLeague || '', worldComps);
       const bCountry = String((bTeamObj && bTeamObj.country) || userCountry || '').toUpperCase();
       const bExt = R.extractTeamRoster(bTeamObj, staticPlayers, true, bTeamId, bTeamName || `${userName} B`, bCountry, bDiv);
       const rawBRoster = (bExt && Array.isArray(bExt.roster)) ? bExt.roster : [];
+      bTeamSeasonStarted = rawBRoster.some(p => (p.gamesPlayed || 0) > 0 || (p.seasonMinutes || 0) > 0) || teamGames >= 5;
       const minForcePromotion = Math.max(25, Math.round(avgTop11Force - 6));
       bTeamBudget = Math.round(U.safeNum(bTeamObj.budget, 0));
       bTeamRep = Math.round(U.safeNum(bTeamObj.reputation, 0));
@@ -2038,7 +2054,8 @@
         if (isF) bTeamForeignCount++;
         const gap = Math.max(0, (p.potCap || p.force) - (p.force || 0));
         const fillsHole = holePosSet.has(p.pos);
-        const zeroMin = (p.gamesPlayed || 0) === 0 && !p.injured;
+        const zeroMin = bTeamSeasonStarted && (p.gamesPlayed || 0) === 0 && !p.injured;
+        const bLineupRole = bSetupXiSet.has(String(p.id)) ? 'XI' : (bSetupBenchSet.has(String(p.id)) ? 'BENCH' : '');
         const inGolden = p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX && !p.loanedFrom;
         const critContract = p.contractDays <= 30 && !p.loanedFrom;
         if (critContract || inGolden) bTeamContractAlerts++;
@@ -2071,6 +2088,7 @@
           gap,
           fillsHole,
           zeroMin,
+          bLineupRole,
           bAction,
           bCls,
         };
@@ -2096,6 +2114,15 @@
       avgAge: bTeamAvgAge,
       foreignCount: bTeamForeignCount,
       readyPromoteCount: bTeamReadyPromote,
+      seasonStarted: bTeamSeasonStarted,
+      bSetup: rawBSetup ? {
+        formation: String(rawBSetup.formation || ''),
+        playStyle: String(rawBSetup.playStyle || ''),
+        marking: String(rawBSetup.marking || ''),
+        attackFocus: String(rawBSetup.attackFocus || ''),
+        xiCount: bSetupXiSet.size,
+        benchCount: bSetupBenchSet.size,
+      } : null,
       zeroMinLeakCount: bTeamZeroMinLeak,
       zeroMinPayrollLeak: bTeamZeroMinPayrollLeak,
       contractAlertCount: bTeamContractAlerts,
@@ -2407,7 +2434,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.10.1 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,

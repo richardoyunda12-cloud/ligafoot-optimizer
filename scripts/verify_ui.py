@@ -162,6 +162,10 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
         page.locator('#t3b-tbl th[data-sort-col="force"]').click()
         bf_desc = [r['force'] for r in read_audit_rows('#t3b-tbl')]
         assert bf_desc == sorted(bf_desc, reverse=True), f'Tim B Sort Force DESC gagal: {bf_desc[:8]}'
+        has_bsetup_xi = page.evaluate("() => Boolean(D.bTeamInfo && D.bTeamInfo.bSetup && D.bTeamInfo.bSetup.xiCount > 0)")
+        if has_bsetup_xi:
+            bteam_txt = page.text_content('#t3b-tbl') or ''
+            assert 'XI B' in bteam_txt, 'Badge XI B dari save.bSetup tidak tampil di Audit Tim B'
 
     # 2. Tier 2 Controls Spot-Check
     page.evaluate("() => { goToView('t6', 't6-tel'); }")
@@ -174,6 +178,10 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
     assert len((page.text_content('#t6-calendar-12m') or '').strip()) > 20, 'Kalender 12M kosong'
     t6_debt_txt = (page.text_content('#t6-debt-room-badge') or '').strip()
     assert ('Sisa' in t6_debt_txt) or ('BAN' in t6_debt_txt), f'Badge Plafon Cicilan Tab 5A tidak tampil: {t6_debt_txt}'
+    has_upfront_sp = page.evaluate("() => Number((D.finance && D.finance.estUpfrontSponsorMonthly) || 0) > 0")
+    if has_upfront_sp:
+        eff_txt = (page.text_content('#t6-eff-net-pill') or '').strip()
+        assert 'Net Efektif' in eff_txt, f'Pill Net Efektif amortisasi sponsor tidak tampil: {eff_txt}'
 
     # v8.9.4: War Room Buff Morale (Bicho #22238) + Transfer Debt Room Badge (#21652/#21653)
     page.evaluate("() => { goToView('t2'); }")

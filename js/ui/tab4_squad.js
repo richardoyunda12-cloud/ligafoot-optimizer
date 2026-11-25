@@ -744,7 +744,8 @@ function renderBTeamPanel() {
   const list = Array.isArray(bt.roster) ? bt.roster : [];
   const filtered = getFilteredBTeamRoster();
   if (titleEl) {
-    titleEl.innerHTML = `🅱️ Audit Skuad ${esc(bt.bTeamName || 'Tim B')} <span class="c-muted mono" style="font-size:11px;font-weight:500">(${list.length} pemain${bt.bTeamLeague ? ' · ' + esc(bt.bTeamLeague) : ''})</span>`;
+    const setupMeta = (bt.bSetup && bt.bSetup.formation) ? ` · Formasi ${esc(bt.bSetup.formation)}` : '';
+    titleEl.innerHTML = `🅱️ Audit Skuad ${esc(bt.bTeamName || 'Tim B')} <span class="c-muted mono" style="font-size:11px;font-weight:500">(${list.length} pemain${bt.bTeamLeague ? ' · ' + esc(bt.bTeamLeague) : ''}${setupMeta})</span>`;
   }
 
   kpiEl.innerHTML = `
@@ -761,8 +762,8 @@ function renderBTeamPanel() {
       </div>
       <div class="kpi">
         <span class="kpi-lbl">Gaji Bocor (0 Menit)</span>
-        <span class="kpi-val ${(bt.zeroMinLeakCount || 0) > 0 ? 'c-red' : 'c-green'} mono">${bt.zeroMinLeakCount || 0} pem</span>
-        <span class="kpi-sub mono">${fmtM(bt.zeroMinPayrollLeak || 0)}/bln belum main</span>
+        <span class="kpi-val ${(bt.zeroMinLeakCount || 0) > 0 ? 'c-red' : 'c-green'} mono">${bt.seasonStarted === false ? '0 (Awal)' : `${bt.zeroMinLeakCount || 0} pem`}</span>
+        <span class="kpi-sub mono">${bt.seasonStarted === false ? 'Liga Tim B belum mulai laga' : `${fmtM(bt.zeroMinPayrollLeak || 0)}/bln belum main`}</span>
       </div>
       <div class="kpi">
         <span class="kpi-lbl">Promosi &amp; Kontrak</span>
@@ -829,7 +830,7 @@ function renderBTeamPanel() {
     return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.injured ? `<span class="badge b-crit" style="font-size:9px">🏥${p.injuryDays}d</span>` : ''}</div>
-        <div class="origin-meta">${originNoteHtml(p)}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}</div>
+        <div class="origin-meta">${originNoteHtml(p)}${p.bLineupRole === 'XI' ? '<span class="badge b-good origin-note" title="Starter XI di formasi Tim B saat ini">⚡ XI B</span>' : (p.bLineupRole === 'BENCH' ? '<span class="badge b-muted origin-note" title="Cadangan di bangku Tim B">🪑 Bench B</span>' : '')}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}</div>
       </td>
       <td><b>${fmtPos(p.pos)}</b></td>
       <td class="mono"><b>${p.force}</b></td>
