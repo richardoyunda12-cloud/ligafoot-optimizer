@@ -488,7 +488,10 @@ function closePlayerDrawer() {
 
 function buyerDemandBadgeHtml(p, compact = false) {
   if (!p) return '';
-  const tier = p.buyerDemandTier || 'COLD';
+  if (!p.buyerDemandTier) {
+    return `<span class="badge b-muted" title="Muat ulang file save / klik Sync Drive agar jumlah klub peminat AI dihitung">${compact ? '↻ Sync' : '↻ Muat ulang save'}</span>`;
+  }
+  const tier = p.buyerDemandTier;
   const cnt = Number(p.estBuyersCount || 0);
   const tip = esc(p.buyerDemandNote || 'Estimasi klub AI yang mampu membeli');
   if (tier === 'LOCKED') return `<span class="badge b-muted" title="${tip}">🔒 ${compact ? 'Kunci' : 'Terkunci'}</span>`;

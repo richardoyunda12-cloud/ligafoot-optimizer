@@ -277,7 +277,7 @@ function renderRosterActionRadar() {
             <div style="min-width:0">
               <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
               <span class="c-muted mono">(${p.age}th · F${p.force}/${p.potCap})</span>
-              <div><span class="badge b-warn">${esc(x.tag)}</span> <span class="mono c-green">Ctr +40%: ${fmtM(p.estCounter40)}</span></div>
+              <div><span class="badge b-warn">${esc(x.tag)}</span> ${typeof buyerDemandBadgeHtml === 'function' ? buyerDemandBadgeHtml(p, true) : ''} <span class="mono c-green">Ctr +40%: ${fmtM(p.estCounter40)}</span></div>
             </div>
             <button type="button" class="btn btn-sm ${inS ? 'btn-amber' : ''}" onclick="toggleCartOut('${escJs(p.id)}');renderRosterActionRadar()">${inS ? '✓ Cart' : '+Jual'}</button>
           </div>`;
@@ -331,6 +331,7 @@ function renderRosterTable() {
     ${thSort('growthFrac', 'Growth', 'col-hide-mob')}
     ${thSort('stackPct', 'Skill Stack', 'col-hide-mob')}
     ${thSort('marketValue', 'Nilai (Jual)', 'col-hide-mob')}
+    ${thSort('estBuyersCount', 'Peminat', 'col-hide-mob')}
     ${thSort('action', 'Rekomendasi Aksi', 'col-desk-only')}
   </tr></thead><tbody>` + (rows.length ? rows.map(p => {
     const stB = p.nonStack ? 'b-crit' : (p.stackGrade === 'GOD' ? 'b-good' : 'b-muted');
@@ -341,6 +342,8 @@ function renderRosterTable() {
     const loopTag = p.autoRenewLoophole ? `<div class="c-sky" style="font-size:10px" title="${esc(tipFor('LOOPHOLE'))}">💎 Auto-Renew 0%</div>` : '';
     const isF = isRosterForeign(p);
     const gap = Math.max(0, (p.potCap || p.force) - p.force);
+    const demCompact = typeof buyerDemandBadgeHtml === 'function' ? buyerDemandBadgeHtml(p, true) : '';
+    const demFull = typeof buyerDemandBadgeHtml === 'function' ? buyerDemandBadgeHtml(p, false) : '-';
     return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.top ? '👑' : (p.star ? '⭐' : '')} ${p.injured ? `<span class="badge b-crit">🏥${p.injuryDays}d</span>` : ''}${slumpBadge}</div>
@@ -350,6 +353,7 @@ function renderRosterTable() {
         </div>
         <div class="inline-sticky-meta">
           <span class="badge ${actB}">${esc(p.action)}</span>
+          ${demCompact}
         </div>
       </td>
       <td><b>${fmtPos(p.pos)}</b> <span class="c-muted" style="font-size:10px">${fmtFoot(p.foot)}</span></td>
@@ -362,9 +366,10 @@ function renderRosterTable() {
       <td class="col-hide-mob">${growthBarHtml(p.growthFrac, p.nearDrop)}</td>
       <td class="col-hide-mob"><span class="badge ${stB}" title="${esc(p.stackNote || (p.nonStack ? tipFor('NONSTACK') : ''))}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct}%)</span></td>
       <td class="mono col-hide-mob">${fmtM(p.marketValue)} <div class="c-muted" style="font-size:10px">Real ~${fmtM(p.estRealSale)}</div></td>
+      <td class="col-hide-mob">${demFull}</td>
       <td class="col-desk-only"><span class="badge ${actB}">${esc(p.action)}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="12" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="13" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
 
   renderTrainingAudit();
 }
