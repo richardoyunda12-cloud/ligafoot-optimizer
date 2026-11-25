@@ -1,4 +1,4 @@
-# LigaFoot Optimizer v8.9.4 — Web App & PWA
+# LigaFoot Optimizer v8.10.0 — Web App & PWA
 
 Optimizer 360° untuk **LigaFoot Manager** (terkalibrasi penuh dengan Engine `v1.2.0 / economyV=9` / Bytecode v9 Verified) yang berjalan **100% lokal di browser HP/PC tanpa backend server** dan mendukung mode **offline (PWA)**.
 

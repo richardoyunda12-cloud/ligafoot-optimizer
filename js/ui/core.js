@@ -486,6 +486,33 @@ function closePlayerDrawer() {
   if (bg) bg.classList.remove('open');
 }
 
+function buyerDemandBadgeHtml(p, compact = false) {
+  if (!p) return '';
+  const tier = p.buyerDemandTier || 'COLD';
+  const cnt = Number(p.estBuyersCount || 0);
+  const tip = esc(p.buyerDemandNote || 'Estimasi klub AI yang mampu membeli');
+  if (tier === 'LOCKED') return `<span class="badge b-muted" title="${tip}">🔒 ${compact ? 'Kunci' : 'Terkunci'}</span>`;
+  if (tier === 'HOT') return `<span class="badge b-good mono" title="${tip}">🔥 ${compact ? cnt + ' klb' : `Ramai (${cnt} klub)`}</span>`;
+  if (tier === 'WARM') return `<span class="badge b-info mono" title="${tip}">⚖️ ${compact ? cnt + ' klb' : `Sedang (${cnt} klub)`}</span>`;
+  if (tier === 'LOW') return `<span class="badge b-warn mono" title="${tip}">🧊 ${compact ? cnt + ' klb' : `Tipis (${cnt} klub)`}</span>`;
+  return `<span class="badge b-crit mono" title="${tip}">❄️ ${compact ? '0 klb' : 'Sepi (0 klub)'}</span>`;
+}
+
+function calcDrawerCounter(mv = 0, isArab = false) {
+  const inp = document.getElementById('drw-ctr-inp');
+  const unitSel = document.getElementById('drw-ctr-unit');
+  const out = document.getElementById('drw-ctr-out');
+  if (!inp || !out) return;
+  const raw = Math.max(0, parseFloat(inp.value) || 0);
+  const u = (unitSel && unitSel.value) || 'K';
+  const fmtU = v => u === 'M' ? v.toFixed(2) + ' M' : Math.round(v).toLocaleString('id-ID') + ' K';
+  const arabRef = mv > 0 ? (mv / (u === 'M' ? 1e6 : 1e3)) : raw;
+  out.innerHTML = `
+    <div style="margin-top:5px">Counter Aman (<b>+40%</b>): <b class="mono c-green" style="font-size:14px">${fmtU(raw * 1.40)}</b> <span class="badge b-good">0% Batal</span></div>
+    <div class="c-muted mono" style="font-size:10.5px;margin-top:2px">Est. Cair (1.25x): <b>${fmtU(raw * 1.25)}</b> · Batas Batal (1.43x): <span class="c-red">${fmtU(raw * 1.43)}</span></div>
+    ${isArab ? `<div class="c-purple mono" style="font-size:10.5px;margin-top:2px">💎 Tawaran Arab 2.5–3x MV: <b>${fmtU(arabRef * 2.5)} – ${fmtU(arabRef * 3.0)}</b></div>` : ''}`;
+}
+
 function energyPillHtml(en) {
   const v = Number(en ?? 100);
   const cls = v >= 95 ? 'en-hi' : (v >= 85 ? 'en-md' : (v >= 70 ? 'en-lo' : 'en-cr'));
@@ -578,7 +605,7 @@ function openPlayerDrawer(kind, id) {
           if (!eta) return '';
           const trTxt = eta.train.reached ? `<b>${eta.train.peakAge} thn</b> (${eta.train.years} msm)` : `Mentok F${eta.train.endForce} @${p.declineAge}th`;
           const nrTxt = eta.normal.reached ? `${eta.normal.peakAge} thn` : `F${eta.normal.endForce}`;
-          return `<div class="drawer-kv"><span>Est. Capai PotCap (#21499)</span><span class="mono c-green">🏋️ ${trTxt} <span class="c-muted">· Tanpa Slot ${nrTxt}</span></span></div>`;
+          return `<div class="drawer-kv"><span>Est. Capai PotCap</span><span class="mono c-green">🏋️ ${trTxt} <span class="c-muted">· Tanpa Slot ${nrTxt}</span></span></div>`;
         })()}
         ${(() => {
           const ta = D.trainAudit || {};
@@ -600,7 +627,7 @@ function openPlayerDrawer(kind, id) {
       </div>
 
       <div class="drawer-sec">
-        <h3>⚡ Kondisi, Chemistry &amp; Ruang Ganti (#21546 / #21995)</h3>
+        <h3>⚡ Kondisi, Chemistry &amp; Ruang Ganti</h3>
         <div class="drawer-kv"><span>Energi / Stamina</span>${energyPillHtml(p.energy)}</div>
         <div class="drawer-kv"><span>Chemistry Integrasi &amp; Ritme</span><span class="mono">Integrasi <b class="c-green">${p.integration ?? 100}%</b> • Ritme 3 Laga <b>${Math.round((p.rhythm ?? 1) * 100)}%</b> <span class="c-muted">(rx=${p.rx ?? 7})</span></span></div>
         <div class="drawer-kv"><span>Statistik Musim Ini</span><span class="mono"><b>${p.gamesPlayed}</b> laga (${p.seasonMinutes || 0} mnt) • <b>${p.goals}</b> gol • <b>${p.assists}</b> asis • Avg <b>${p.avgRating}</b></span></div>
@@ -611,23 +638,39 @@ function openPlayerDrawer(kind, id) {
       </div>
 
       <div class="drawer-sec">
-        <h3>💰 Kontrak, Salary Cut &amp; Nilai Jual (#3723 / #24161)</h3>
+        <h3>💰 Kontrak, Jual &amp; Mini Kalkulator Counter</h3>
         <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${p.contractDays <= 10 ? 'c-red' : (p.contractDays < 60 ? 'c-amber' : (p.contractDays <= 120 ? 'c-green' : ''))}">${p.contractDays} hari</b></div>
-        <div class="drawer-kv"><span>Status Diskon 3Th (-12%, ≥60d)</span><span class="mono">${p.contractDays <= 10 ? '<b class="c-red">Zona Jebakan — pakai Loophole 0%!</b>' : (p.contractDays < 60 ? '<b class="c-amber">Minta Naik +5–15% (Tunggu ≤10d Loophole)</b>' : (p.contractDays <= 120 ? '<b class="c-green">GOLDEN WINDOW AKTIF (-12% gaji!)</b>' : `Bisa diskon -12% (Golden dalam ~${toGolden}d)`))}</span></div>
+        <div class="drawer-kv"><span>Aksi Kontrak Instan</span><span class="mono">${p.contractDays <= 10
+          ? `<b class="c-red">Loophole 0% → gaji tetap ${fmtM(p.salary)}/bln</b>`
+          : (p.contractDays < 60
+            ? `<b class="c-amber">Tunggu ≤10h (Renew skrg naik ke ~${fmtM(Math.round(p.salary * 1.05))})</b>`
+            : `<b class="c-green">Renew 3Th → ${fmtM(Math.round(p.salary * 0.88))}/bln (hemat ${fmtM(Math.round(p.salary * 0.12))})</b>`)}</span></div>
         <div class="drawer-kv"><span>Gaji Bulanan (Lantai ${Math.round((p.salaryFloorFactor || 0.90) * 100)}%)</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
-        <div class="drawer-kv"><span>Kuota Potong Gaji (salaryCuts)</span><span class="mono ${p.salaryCutLocked ? 'c-red' : 'c-green'}"><b>${p.salaryCuts || 0}/1</b> dipakai ${p.salaryCutLocked ? '(TERKUNCI — maks 1x potong di #24159!)' : '(Masih bisa negosiasi potong 1x)'}</span></div>
-        ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan (#24160)</span><b class="mono c-sky">Cadangan -12% floor → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
+        <div class="drawer-kv"><span>Kuota Potong Gaji</span><span class="mono ${p.salaryCutLocked ? 'c-red' : 'c-green'}"><b>${p.salaryCuts || 0}/1</b> dipakai ${p.salaryCutLocked ? '(Terkunci — maks 1x)' : '(Bisa potong 1x)'}</span></div>
+        ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan</span><b class="mono c-sky">Cadangan -12% floor → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)} ${p.injured ? `<b class="c-red">(Diskon cedera ${Math.round((p.injurySaleMul || 1) * 100)}%)</b>` : ''}</span></div>
-        <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +39%: ${fmtM(p.estCounter39)} · +40%: ${fmtM(p.estCounter40)}</span></b></div>
+        <div class="drawer-kv"><span>Minat Pasar (Peminat AI)</span><span id="drw-buyer-demand">${buyerDemandBadgeHtml(p)}</span></div>
+        <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +40%: ${fmtM(p.estCounter40)}</span></b></div>
         ${(() => {
           const gkCnt = (D.roster || []).filter(x => x.pos === 'G').length;
-          let stTxt = `Auction <b>${fmtM(p.marketValue * 0.55)}–${fmtM(p.marketValue * 0.70)}</b> · Fixed <b>${fmtM(p.marketValue * 0.70)}</b> <span class="c-muted">(Hindari Sell Now 10–15%)</span>`;
+          let stTxt = `Auction <b>${fmtM(p.marketValue * 0.55)}–${fmtM(p.marketValue * 0.70)}</b> · Fixed <b>${fmtM(p.marketValue * 0.70)}</b> <span class="c-muted">(Hindari Sell Now)</span>`;
           if (p.freeSigned) stTxt = '<b class="c-amber">⚠ Terkunci freeNoSale (rekrut gratis)</b>';
-          else if (p.pos === 'G' && gkCnt <= 1) stTxt = '<b class="c-amber">⚠ Terkunci squadMinGk (kiper tunggal)</b>';
-          return `<div class="drawer-kv"><span>🏷️ Strategi Jual (OTA)</span><span class="mono">${stTxt}</span></div>`;
+          else if (p.pos === 'G' && gkCnt <= 1) stTxt = '<b class="c-amber">⚠ Terkunci minimal 1 kiper</b>';
+          return `<div class="drawer-kv"><span>🏷️ Strategi Jual</span><span class="mono">${stTxt}</span></div>`;
         })()}
         <div class="drawer-kv"><span>Biaya Putus Kontrak (${Math.round((p.termFeeRate || 0.5) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
-        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (2.5x–3.0x × 1.39x)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
+        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
+        <div class="drawer-calc-box">
+          <b>🧮 Mini Kalkulator Counter-Offer (+40%)</b>
+          <div class="drawer-calc-row">
+            <input id="drw-ctr-inp" type="number" class="input mono" style="flex:1;min-width:110px;padding:4px 7px;font-size:12px" value="${Math.max(1, Math.round((p.marketValue || 0) / 1000))}" oninput="calcDrawerCounter(${p.marketValue || 0}, ${p.isTop5Arab ? 'true' : 'false'})" placeholder="Tawaran masuk..." />
+            <select id="drw-ctr-unit" style="width:auto;padding:4px 7px;font-size:11.5px" onchange="calcDrawerCounter(${p.marketValue || 0}, ${p.isTop5Arab ? 'true' : 'false'})">
+              <option value="K" selected>Ribu (K)</option>
+              <option value="M">Juta (M)</option>
+            </select>
+          </div>
+          <div id="drw-ctr-out"></div>
+        </div>
       </div>
 
       <div class="pill-row mt-12">
@@ -655,11 +698,11 @@ function openPlayerDrawer(kind, id) {
       <div class="drawer-sec">
         <h3>🌱 Progres Akademi</h3>
         <div class="drawer-kv"><span>Force Saat Ini</span><b class="mono">${y.force}</b></div>
-        <div class="drawer-kv"><span>Est. Pot / PotCap (#22231)</span><b class="mono c-green">${y.estPotCap || y.potCap || y.force}${Array.isArray(y.estPotRange) ? ` (rentang ${y.estPotRange[0]}–${y.estPotRange[1]})` : ''}</b></div>
+        <div class="drawer-kv"><span>Est. Pot / PotCap</span><b class="mono c-green">${y.estPotCap || y.potCap || y.force}${Array.isArray(y.estPotRange) ? ` (rentang ${y.estPotRange[0]}–${y.estPotRange[1]})` : ''}</b></div>
         <div class="drawer-kv"><span>Development</span><b class="mono c-green">${y.development}%</b></div>
         <div class="mini-bar-bg" style="height:9px;margin:4px 0 8px"><div class="mini-bar-fill" style="width:${Math.min(100, y.development)}%;background:var(--green)"></div></div>
-        <div class="drawer-kv"><span>Bonus Tembus Plafon Klub (v9)</span><b class="mono c-sky">${y.ceilBonus ? '+' + y.ceilBonus + ' PotCap' : 'Belum (butuh ★7+ & Dev ≥60)'}</b></div>
-        <div class="drawer-kv"><span>Est. Tawaran Mega Eropa (#23886)</span><b class="mono ${y.isMegaProspect ? 'c-green' : 'c-muted'}">${fmtM(y.estMegaOffer || 0)} ${y.isMegaProspect ? '🔥 (Prospek ★9+)' : ''}</b></div>
+        <div class="drawer-kv"><span>Bonus Tembus Plafon Klub</span><b class="mono c-sky">${y.ceilBonus ? '+' + y.ceilBonus + ' PotCap' : 'Belum (butuh ★7+ & Dev ≥60)'}</b></div>
+        <div class="drawer-kv"><span>Est. Tawaran Mega Eropa</span><b class="mono ${y.isMegaProspect ? 'c-green' : 'c-muted'}">${fmtM(y.estMegaOffer || 0)} ${y.isMegaProspect ? '🔥 (Prospek ★9+)' : ''}</b></div>
         <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></div>
         <div class="drawer-kv"><span>Skor Pipeline Akademi</span><b class="mono">${y.pipeScore}</b></div>
       </div>
@@ -700,7 +743,7 @@ function openPlayerDrawer(kind, id) {
           if (!eta) return '';
           const trTxt = eta.train.reached ? `<b>${eta.train.peakAge} thn</b> (${eta.train.years} msm)` : `Mentok F${eta.train.endForce} @${decAge}th`;
           const nrTxt = eta.normal.reached ? `${eta.normal.peakAge} thn` : `F${eta.normal.endForce}`;
-          return `<div class="drawer-kv"><span>Est. Capai PotCap (#21499)</span><span class="mono c-green">🏋️ ${trTxt} <span class="c-muted">· Tanpa Slot ${nrTxt}</span></span></div>`;
+          return `<div class="drawer-kv"><span>Est. Capai PotCap</span><span class="mono c-green">🏋️ ${trTxt} <span class="c-muted">· Tanpa Slot ${nrTxt}</span></span></div>`;
         })()}
         <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${r[11] ? 'b-crit' : 'b-good'}">${fmtSkills(r[8], r[9])} (+${r[10]}%)</span></div>
         <div class="drawer-kv"><span>Sisa Kontrak</span><b class="mono ${r[15] <= 180 ? 'c-green' : ''}">${r[15]} hari ${r[15] <= 180 ? '(BOSMAN 0€!)' : ''}</b></div>
@@ -791,6 +834,10 @@ function openPlayerDrawer(kind, id) {
       </div>`;
   }
   bg.classList.add('open');
+  if (kind === 'roster') {
+    const pCur = (D.roster || []).find(x => x.id === id);
+    if (pCur) calcDrawerCounter(pCur.marketValue || 0, Boolean(pCur.isTop5Arab));
+  }
 }
 
 // ==================== SHORTLIST PERSISTEN & STICKY CART BAR (v8.0 TAHAP 3) ====================
@@ -903,6 +950,8 @@ window.LFResetUIState = function () {
   if (typeof bTeamFilter !== 'undefined') bTeamFilter = 'ALL';
   if (typeof acadFilter !== 'undefined') acadFilter = 'ALL';
   if (typeof whatsNewDismissed !== 'undefined') whatsNewDismissed = false;
+  if (typeof aqShowAll !== 'undefined') aqShowAll = false;
+  if (typeof bargainOriginFilter !== 'undefined') bargainOriginFilter = 'ALL';
   if (typeof wkTrackerFilter !== 'undefined') wkTrackerFilter = 'ALL';
   if (typeof wkTrackerSelectedId !== 'undefined') wkTrackerSelectedId = null;
   if (typeof bpShowAll !== 'undefined') bpShowAll = false;

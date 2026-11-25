@@ -1,7 +1,13 @@
 // ==================== RENDER TAB 1: BERANDA (v8.2 — AUDIT FIX COMPLETE) ====================
 let guardExpanded = false;
 let aqFilter = 'ALL'; // 'ALL' | 'CRIT'
+let aqShowAll = false;
 let whatsNewDismissed = false;
+
+function toggleAqShowAll() {
+  aqShowAll = !aqShowAll;
+  renderActionQueue();
+}
 
 function dismissWhatsNew() {
   whatsNewDismissed = true;
@@ -606,7 +612,10 @@ function renderActionQueue() {
       <span class="mono c-muted" style="font-size:11px">${doneN}/${totalN} selesai</span>
     </div>` : '';
 
-  const listHtml = visible.length ? visible.map(it => {
+  const shownItems = (aqShowAll || visible.length <= 3) ? visible : visible.slice(0, 3);
+  const hiddenCount = Math.max(0, visible.length - shownItems.length);
+
+  const listHtml = shownItems.length ? shownItems.map(it => {
     const sevCls = it.sev === 'CRITICAL' ? 'b-crit' : (it.sev === 'HIGH' ? 'b-warn' : 'b-info');
     return `<div class="aq-item-v2 ${it.sev} ${it.done ? 'done' : ''}">
       <input type="checkbox" style="margin-top:2px;cursor:pointer;accent-color:#10b981;width:18px;height:18px;flex-shrink:0" ${it.done ? 'checked' : ''} onchange="toggleChk('${escJs(it.id)}')" />
@@ -623,7 +632,11 @@ function renderActionQueue() {
     </div>`;
   }).join('') : '<div class="c-green" style="font-size:12px">Tidak ada alarm kategori Penting (CRITICAL/HIGH).</div>';
 
-  el.innerHTML = toolbarHtml + listHtml;
+  const moreBtnHtml = (visible.length > 3)
+    ? `<button type="button" id="t1-aq-more" class="btn btn-sm" style="width:100%;margin-top:4px" onclick="toggleAqShowAll()">${aqShowAll ? '▲ Ringkas ke Top 3 Aksi' : `▼ Lihat ${hiddenCount} aksi lainnya (${visible.length} total)`}</button>`
+    : '';
+
+  el.innerHTML = toolbarHtml + listHtml + moreBtnHtml;
 }
 
 function toggleChk(id) {

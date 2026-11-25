@@ -2335,10 +2335,64 @@
       };
     }
 
+    // Estimasi jumlah klub AI peminat realistis untuk setiap pemain skuad (budget + buyerForceCeiling + jarak/rep)
+    const aiBuyersPool = [];
+    for (const [tid, tObj] of Object.entries(compactTeams)) {
+      if (!tObj || typeof tObj !== 'object' || tid === userId || String(tid).endsWith('_B')) continue;
+      const cBud = U.safeNum(tObj.budget, 0);
+      if (cBud < 50000) continue;
+      const stC = U.getStaticClub(clubsMeta, tid);
+      const cRep = U.safeNum(tObj.reputation, U.safeNum(stC.rep, 40));
+      const cDiv = U.estimateDivisionFromLeague(tObj.league || '', worldComps) || 1;
+      const cCt = Math.max(1, U.safeInt(tObj.ctLevel, 1));
+      const cCeil = T.buyerForceCeiling(cRep, cDiv, 0, cCt);
+      const cCountry = String(stC.country || tObj.country || '').toUpperCase();
+      aiBuyersPool.push({ bud: cBud, rep: cRep, ceil: cCeil, country: cCountry });
+    }
+    const userGkCount = userRoster.filter(x => x.pos === 'G').length;
+
     const rosterExport = userRoster.map(p => {
       const cp = { ...p };
       delete cp.clubHistory;
       delete cp.moodFrom;
+
+      let estBuyersCount = 0;
+      let buyerDemandTier = 'COLD';
+      let buyerDemandNote = 'Sepi peminat — pertimbangkan Loan atau lepas gratis';
+      if (p.freeSigned) {
+        buyerDemandTier = 'LOCKED';
+        buyerDemandNote = 'Terkunci aturan freeNoSale (baru rekrut gratis)';
+      } else if (p.pos === 'G' && userGkCount <= 1) {
+        buyerDemandTier = 'LOCKED';
+        buyerDemandNote = 'Terkunci aturan minimal 1 kiper (squadMinGk)';
+      } else if (p.injured) {
+        buyerDemandTier = 'LOCKED';
+        buyerDemandNote = 'Sedang cedera — tunggu pulih agar tidak kena potongan valuasi';
+      } else {
+        const minNeedBud = Math.max(50000, Math.round((p.marketValue || 0) * 0.85));
+        const pNat = String(p.nationality || '').toUpperCase();
+        for (let i = 0; i < aiBuyersPool.length; i++) {
+          const b = aiBuyersPool[i];
+          if (b.bud < minNeedBud) continue;
+          if (p.force > b.ceil) continue;
+          if (p.force < Math.max(12, b.ceil - 18)) continue;
+          if (b.country !== pNat && b.country !== userCountry && b.rep < reputation - 12) continue;
+          estBuyersCount++;
+        }
+        if (estBuyersCount >= 15) {
+          buyerDemandTier = 'HOT';
+          buyerDemandNote = `Ramai peminat (~${estBuyersCount} klub AI mampu & cocok level) — aman pasang For Sale + Counter +40%`;
+        } else if (estBuyersCount >= 4) {
+          buyerDemandTier = 'WARM';
+          buyerDemandNote = `Peminat sedang (~${estBuyersCount} klub AI) — pasang For Sale atau Auction 60–70% MV`;
+        } else if (estBuyersCount >= 1) {
+          buyerDemandTier = 'LOW';
+          buyerDemandNote = `Peminat tipis (~${estBuyersCount} klub AI) — bisa agak lama; coba Fixed 70% MV atau Loan`;
+        }
+      }
+      cp.estBuyersCount = estBuyersCount;
+      cp.buyerDemandTier = buyerDemandTier;
+      cp.buyerDemandNote = buyerDemandNote;
       return cp;
     });
 
@@ -2352,7 +2406,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.9.4 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.10.0 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
         generatedAt,
         parseSec,
         userId,

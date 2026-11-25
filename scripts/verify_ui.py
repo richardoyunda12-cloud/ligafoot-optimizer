@@ -190,6 +190,23 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
     bp_debt_txt = (page.text_content('#t7-debt-room-badge') or '').strip()
     assert 'Sisa Plafon Cicilan' in bp_debt_txt, f'Badge Sisa Plafon Cicilan di Tab 4A tidak tampil: {bp_debt_txt}'
 
+    # v8.10.0: Filter Lokal/Asing di Gratis/Diskon, Peminat di Jual Skuad, & Mini Kalkulator Drawer
+    page.evaluate("() => { setBlueprintTab('BARGAIN'); }")
+    assert page.locator('#t7-bargain-origin-bar').count() > 0, 'Filter Lokal/Asing Gratis/Diskon tidak tampil'
+    page.evaluate("() => { setBargainOrigin('LOCAL'); setBargainOrigin('ALL'); setBlueprintTab('SELL'); }")
+    sell_hdr = (page.text_content('#t7-blueprint') or '')
+    assert 'Peminat' in sell_hdr, 'Kolom Peminat di Tab 4A Jual Skuad tidak tampil'
+    page.evaluate("() => { setBlueprintTab('UPGRADE'); }")
+
+    first_pid = page.evaluate("() => (D.roster && D.roster[0] && D.roster[0].id) || ''")
+    assert first_pid, 'Roster kosong untuk uji Player Drawer'
+    page.evaluate("(pid) => { openPlayerDrawer('roster', pid); }", first_pid)
+    assert page.locator('#drw-buyer-demand').count() > 0, 'Badge Minat Pasar tidak tampil di Player Drawer'
+    page.fill('#drw-ctr-inp', '1000')
+    ctr_out = (page.text_content('#drw-ctr-out') or '')
+    assert '1.400 K' in ctr_out or '1,400 K' in ctr_out, f'Mini Kalkulator Counter Drawer tidak menghitung 1.40x: {ctr_out}'
+    page.evaluate("() => { closePlayerDrawer(); }")
+
     page.evaluate("() => { goToView('t5', 't5-tkt'); }")
     if page.locator('#t6-preset-audit button:has-text("Tes")').count() > 0:
         page.locator('#t6-preset-audit button:has-text("Tes")').first.click()

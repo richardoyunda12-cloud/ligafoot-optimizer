@@ -500,6 +500,13 @@ function renderDealCard(it, badgeTitle, badgeCls) {
   </div>`;
 }
 
+let bargainOriginFilter = 'ALL'; // 'ALL' | 'LOCAL' | 'FOREIGN'
+
+function setBargainOrigin(mode) {
+  bargainOriginFilter = (mode === 'LOCAL' || mode === 'FOREIGN') ? mode : 'ALL';
+  renderScoutBlueprint();
+}
+
 function renderScoutBlueprint() {
   const cm = getCartMetrics();
   const sellable = D.roster.filter(isRecommendedSell);
@@ -555,19 +562,22 @@ function renderScoutBlueprint() {
     const injuredSale = D.roster.filter(p => p.injured && p.forSale);
     box.innerHTML = `
       ${injuredSale.length ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">INJURED_SALE</span><div><b>Tarik dari bursa jual:</b> ${injuredSale.map(p => esc(p.name)).join(', ')} — sedang cedera, jual sekarang kena potongan valuasi!</div></div>` : ''}
-      <div class="kpi-sub mb-8">Pemain sehat yang direkomendasikan dijual. Centang atau aktifkan <b>Arab 2.5x</b> untuk langsung menambah Daya Beli!</div>
-      <div class="tbl-wrap tbl-sticky"><table><thead><tr><th>Pemain &amp; Alasan</th><th>Jual</th><th>Arab 2.5x</th><th>Est. Cair (1.25x)</th><th>Pos/Usia</th><th>F/Cap</th><th>Gaji/Bln</th></tr></thead><tbody>` +
+      <div class="kpi-sub mb-8">Pemain sehat yang direkomendasikan dijual. Lihat kolom <b>Peminat</b> (estimasi klub AI mampu beli) atau klik nama untuk kalkulator Counter +40%!</div>
+      <div class="tbl-wrap tbl-sticky"><table><thead><tr><th>Pemain &amp; Alasan</th><th>Peminat</th><th>Jual</th><th>Arab 2.5x</th><th>Est. Cair (1.25x)</th><th>Pos/Usia</th><th>F/Cap</th><th>Gaji/Bln</th></tr></thead><tbody>` +
       (rows.length ? rows.map(p => {
         const sel = cartOut[p.id];
         const pidJs = escJs(p.id);
+        const demBadge = typeof buyerDemandBadgeHtml === 'function' ? buyerDemandBadgeHtml(p, true) : '';
         return `<tr>
           <td>
             <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${pidJs}')"><b>${esc(p.name)}</b></a></div>
             <div class="inline-sticky-meta">
               <span class="badge b-warn">${esc(p.action)}</span>
+              ${demBadge}
               <span class="mono c-green" style="font-size:10px"><b>+${fmtM(sel && sel.arab ? p.estArabLow : p.estRealSale)}</b></span>
             </div>
           </td>
+          <td>${typeof buyerDemandBadgeHtml === 'function' ? buyerDemandBadgeHtml(p, false) : '-'}</td>
           <td><input type="checkbox" style="width:18px;height:18px;accent-color:#10b981;cursor:pointer" ${sel ? 'checked' : ''} onchange="toggleCartOut('${pidJs}')" /></td>
           <td>${p.isTop5Arab ? `<button type="button" class="btn btn-sm ${sel && sel.arab ? 'btn-amber' : ''}" onclick="toggleCartArab('${pidJs}')">${fmtM(p.estArabLow)}</button>` : '<span class="c-muted">-</span>'}</td>
           <td class="mono c-green"><b>+${fmtM(p.estRealSale)}</b> <span class="c-muted" style="font-size:10px">(Ctr ${fmtM(p.estCounter40)})</span></td>
@@ -575,7 +585,7 @@ function renderScoutBlueprint() {
           <td class="mono">${p.force}/${p.potCap}</td>
           <td class="mono">${fmtM(p.salary)}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="7" class="c-green">Skuad sangat ramping — tidak ada deadwood mendesak untuk dijual!</td></tr>') + `</tbody></table></div>`;
+      }).join('') : '<tr><td colspan="8" class="c-green">Skuad sangat ramping — tidak ada deadwood mendesak untuk dijual!</td></tr>') + `</tbody></table></div>`;
     return;
   }
 
@@ -673,10 +683,22 @@ function renderScoutBlueprint() {
       picks.push({ it: x, lbl: `FLIP ROI +${x.roiPct}%`, cls: 'b-accent' });
     }
   } else if (scoutBlueprintTab === 'BARGAIN') {
-    const ranked = cleanPool
+    const bargainAll = cleanPool
       .filter(x => (x.affordCode !== 'EXP' || cartIn[x.r[19]]) && (x.flags.includes('FREE') || x.isBosman || x.flags.includes('UNH')))
       .sort((a, b) => b.smartScore - a.smartScore);
-    for (const x of ranked.slice(0, 6)) {
+    const locCnt = bargainAll.filter(x => !x.isForeign).length;
+    const forCnt = bargainAll.filter(x => x.isForeign).length;
+    moneyballHtml = `
+      <div id="t7-bargain-origin-bar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <button type="button" class="btn btn-sm ${bargainOriginFilter === 'ALL' ? 'btn-green' : ''}" onclick="setBargainOrigin('ALL')">Semua (${bargainAll.length})</button>
+        <button type="button" class="btn btn-sm ${bargainOriginFilter === 'LOCAL' ? 'btn-green' : ''}" onclick="setBargainOrigin('LOCAL')">🏠 Lokal Bebas Kuota (${locCnt})</button>
+        <button type="button" class="btn btn-sm ${bargainOriginFilter === 'FOREIGN' ? 'btn-amber' : ''}" onclick="setBargainOrigin('FOREIGN')">🌐 Asing (${forCnt})</button>
+        <span class="c-muted" style="font-size:11px">Target yang menolak pindah otomatis disembunyikan.</span>
+      </div>`;
+    const ranked = bargainAll.filter(x =>
+      bargainOriginFilter === 'LOCAL' ? !x.isForeign : (bargainOriginFilter === 'FOREIGN' ? x.isForeign : true)
+    );
+    for (const x of ranked.slice(0, 8)) {
       const tag = x.flags.includes('FREE') ? 'FREE AGENT (0€)' : (x.isBosman ? 'BOSMAN 0€ ≤180D' : 'UNHAPPY (-15%)');
       picks.push({ it: x, lbl: tag, cls: 'b-info' });
     }

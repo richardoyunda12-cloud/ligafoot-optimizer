@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
-<title>LigaFoot Optimizer v8.9.4 — Web App &amp; PWA</title>
+<title>LigaFoot Optimizer v8.10.0 — Web App &amp; PWA</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="brand-ico">⚽</div>
         <div>
-          <h1>LigaFoot Optimizer <span class="c-green">v8.9.4 PWA</span></h1>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.10.0 PWA</span></h1>
           <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 (Bytecode v9) • Tanpa Upload</div>
         </div>
       </div>
@@ -165,7 +165,7 @@
         <div class="brand">
           <div class="brand-ico">⚽</div>
           <div>
-            <h1 id="hdr-title">LigaFoot Optimizer v8.9.4</h1>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.10.0</h1>
             <div class="sub" id="hdr-sub">Memuat data...</div>
           </div>
         </div>
@@ -173,9 +173,14 @@
           <button type="button" id="btn-topbar-gdrive" class="btn btn-sky app-hidden" onclick="LFApp.syncGoogleDrive(true)" title="Cek &amp; tarik save terbaru dari Google Drive">☁️ <span class="btn-lbl-long">Sync </span>Drive</button>
           <button type="button" class="btn btn-green" onclick="LFApp.openSavePicker()" title="Muat file save .ligafoot terbaru atau atur Google Drive">📂 <span class="btn-lbl-long">Ganti </span>Save</button>
           <button type="button" class="btn" onclick="openSearch()" title="Cari Cepat (Ctrl+K)">🔍<span class="btn-lbl-mob-hide"> Cari</span></button>
-          <button type="button" class="btn" onclick="openGlossary()" title="Kamus Istilah">📖<span class="btn-lbl-mob-hide"> Kamus</span></button>
-          <button class="btn" id="btn-density" onclick="toggleDensity()" title="Ganti kepadatan tampilan tabel &amp; kartu">↕️ Mode: Lega</button>
-          <span class="badge b-good" id="hdr-badge">v8.9.4 PWA</span>
+          <details class="top-more-menu" id="top-more-menu">
+            <summary class="btn" title="Kamus, Mode Tampilan &amp; Info Versi">⚙️</summary>
+            <div class="top-more-pop">
+              <button type="button" class="btn btn-sm" style="width:100%;text-align:left" onclick="openGlossary();document.getElementById('top-more-menu').removeAttribute('open')">📖 Kamus Istilah</button>
+              <button type="button" class="btn btn-sm" id="btn-density" style="width:100%;text-align:left" onclick="toggleDensity()">↕️ Mode: Lega</button>
+              <div class="top-more-ver"><span class="badge b-good" id="hdr-badge">v8.10.0 PWA</span></div>
+            </div>
+          </details>
         </div>
       </div>
       <nav class="tabs" id="nav-tabs">
@@ -237,7 +242,7 @@
           </div>
           <div class="kpi-sub wr-sub-desk">Cuaca &amp; Wasit terdeteksi otomatis 1:1 sesuai engine game; klik tombol jika ingin uji manual.</div>
         </div>
-        <details id="wr-cond-details" class="mobile-filter-box wr-cond-details" open>
+        <details id="wr-cond-details" class="mobile-filter-box wr-cond-details">
           <summary><span>⚙️ Ubah Manual Cuaca / Wasit</span><span>▼</span></summary>
           <div class="wr-cond-bars mobile-filter-body">
             <div class="wr-seg-row">
@@ -328,7 +333,7 @@
         </div>
       </div>
       <div class="card">
-        <h2 id="t3-form-title">📊 Perbandingan 15 Formasi Resmi (#3492)</h2>
+        <h2 id="t3-form-title">📊 Perbandingan 15 Formasi Resmi</h2>
         <div class="tbl-wrap tbl-sticky"><table id="t3-form-tbl"></table></div>
       </div>
     </div>

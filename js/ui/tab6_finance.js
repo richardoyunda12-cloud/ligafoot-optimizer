@@ -69,24 +69,24 @@ function renderTab6() {
       </div>
       <div class="grid g2" style="gap:8px">
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:8px 9px;font-size:11.5px">
-          <div class="c-green" style="font-weight:700;margin-bottom:4px">📥 Pemasukan Rutin (#21866)</div>
+          <div class="c-green" style="font-weight:700;margin-bottom:4px">📥 Pemasukan Rutin</div>
           <div class="mono">• Tiket Kandang: <b>${fmtM(b.tickets)}</b></div>
-          <div class="mono">• Hak Siar TV (#19879): <b>${fmtM(b.tv)}</b></div>
-          <div class="mono">• Sponsor Tetap (#19869): <b>${fmtM(b.fixedSponsor ?? b.sponsors)}</b></div>
+          <div class="mono">• Hak Siar TV: <b>${fmtM(b.tv)}</b></div>
+          <div class="mono">• Sponsor Tetap: <b>${fmtM(b.fixedSponsor ?? b.sponsors)}</b></div>
           ${b.varSponsor ? `<div class="mono">• Sponsor Bulanan: <b>${fmtM(b.varSponsor)}</b></div>` : ''}
           <div class="mono">• Naming Rights (/12): <b>${fmtM(b.naming)}</b></div>
-          <div class="mono">• Iuran Member (#21330): <b>${fmtM(b.members)}</b></div>
+          <div class="mono">• Iuran Member: <b>${fmtM(b.members)}</b></div>
           <div class="mono">• Club Shop: <b>${fmtM(b.shop)}</b></div>
         </div>
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:8px 9px;font-size:11.5px">
-          <div class="c-amber" style="font-weight:700;margin-bottom:4px">📤 Pengeluaran Rutin (#21866)</div>
+          <div class="c-amber" style="font-weight:700;margin-bottom:4px">📤 Pengeluaran Rutin</div>
           <div class="mono">• Gaji Senior: <b>${fmtM(b.seniorPayroll ?? b.payroll)}</b></div>
           ${b.youthPayroll ? `<div class="mono">• Gaji Akademi: <b>${fmtM(b.youthPayroll)}</b></div>` : ''}
           <div class="mono">• Ops Stadion (&gt;20K): <b>${fmtM(b.stadiumOps)}</b></div>
-          <div class="mono">• Maint. CT (#21495): <b>${fmtM(b.ctCost || 0)}</b></div>
+          <div class="mono">• Maint. CT: <b>${fmtM(b.ctCost || 0)}</b></div>
           <div class="mono">• Pelatih Akademi: <b>${fmtM(b.youthCost || 0)}</b></div>
           ${b.bankLoanParcel ? `<div class="mono">• Cicilan Bank: <b>${fmtM(b.bankLoanParcel)}</b></div>` : ''}
-          ${b.transferDebtParcel ? `<div class="mono c-amber">• Cicilan Transfer (#21511): <b>${fmtM(b.transferDebtParcel)}</b></div>` : ''}
+          ${b.transferDebtParcel ? `<div class="mono c-amber">• Cicilan Transfer: <b>${fmtM(b.transferDebtParcel)}</b></div>` : ''}
           <div class="c-muted" style="font-size:10.5px;margin-top:6px;padding-top:5px;border-top:1px solid var(--border)">
             Sponsor Jersey <i>Upfront (Luvas)</i> sudah cair di awal musim &amp; tidak dihitung ganda.
           </div>
@@ -111,7 +111,7 @@ function renderTab6() {
         }
         return `<div style="margin-top:8px;padding:8px 10px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:9px;font-size:11.5px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
-            <b class="c-sky">💳 Plafon Utang Cicilan Game (#21652) &amp; Cap Aman Cashflow</b>
+            <b class="c-sky" title="Plafon Utang Cicilan Game (#21652): max(500K, 30% gaji tahunan)">💳 Plafon Utang Cicilan &amp; Cap Aman Cashflow</b>
             <span class="badge ${debtBanned ? 'b-crit' : (debtRoom > 0 && safeMo > 0 ? 'b-info' : 'b-warn')} mono">${debtBanned ? '⛔ BAN' : `Sisa Plafon: ${fmtM(debtRoom)}`}</span>
           </div>
           <div class="mono c-muted" style="font-size:11px">
