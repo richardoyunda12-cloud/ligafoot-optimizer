@@ -285,7 +285,7 @@ const BADGE_TIPS = {
   GOD: 'Kombinasi Skill Stack kelas atas (efek kedua skill menumpuk penuh di Match Engine).',
   LOCAL: 'Pemain domestik (satu negara dengan klubmu) — tidak memakan kuota pemain asing & adaptasi 2x lebih cepat!',
   INJ: 'Pemain sedang cedera.',
-  F9: 'False Nine aktif: ≥2 penyerang (ST/SS) di XI punya skill PAS/PLY — memberi bonus kreativitas serangan.',
+  F9: 'False Nine: pasang pada 1 pemain ST/SS/CAM di lini depan untuk turun membantu lini tengah (-40% bobot ATK-nya → +50% ke MID jika punya PAS/PLY, atau +35% tanpa PAS/PLY). Tidak tersedia untuk winger (LW/RW); ideal saat lini depan ≥2 penyerang.',
   SLUMP: 'Fine Slump: penurunan performa (-3% per denda, maks -20%) selama 30 hari karena denda kartu merah >20%.',
   NONSTACK: 'Skill tidak menumpuk (TCK+MRK di bek cuma +5% sekali; PAS+PLY di gelandang cuma +3% sekali).',
   ARAB: 'Arab Watch: pemain Top-5 skuad usia ≥26 thn punya peluang 10% ditawar klub Arab 2.5x–3.0x Market Value!',

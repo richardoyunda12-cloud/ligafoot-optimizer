@@ -670,11 +670,14 @@ function renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, active
     diff: normMark(curMark) !== normMark(recMk),
   });
 
-  if (Boolean(ll.falseNine) !== Boolean(m.falseNine)) {
+  const curF9Id = ll.falseNine ? String(ll.falseNine) : null;
+  const recF9Id = (m.falseNine && m.falseNineTarget && m.falseNineTarget.id) ? String(m.falseNineTarget.id) : null;
+  if (curF9Id !== recF9Id) {
+    const curF9P = curF9Id ? (D.roster || []).find(p => p.id === curF9Id) : null;
     items.push({
       lbl: 'False Nine',
-      cur: ll.falseNine ? 'ON' : 'OFF',
-      target: m.falseNine && m.falseNineTarget ? `ON (${m.falseNineTarget.name})` : 'OFF',
+      cur: curF9Id ? `ON (${curF9P ? curF9P.name : curF9Id})` : 'OFF',
+      target: recF9Id ? `ON (${m.falseNineTarget.name})` : 'OFF',
       diff: true,
     });
   }

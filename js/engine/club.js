@@ -2511,7 +2511,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.3 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.4 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,

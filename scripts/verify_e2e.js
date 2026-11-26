@@ -128,6 +128,31 @@ function runStage2Engine(savePath) {
   assert.strictEqual(D.meta.ctLevel, Math.max(1, Math.round(Number(uTeam.ctLevel || 1))), 'ctLevel mismatch');
   assert(D.roster.length > 0, 'roster kosong');
 
+  // Regresi v8.10.4: False Nine hanya boleh dipasang pada ST/SS/CAM (MA/ATA/SA), tidak boleh winger (LW/RW/PE/PD)
+  for (const fx of (D.upcoming || [])) {
+    const f9t = fx.matchup && fx.matchup.falseNineTarget;
+    if (f9t) {
+      assert(!['LW', 'RW', 'PE', 'PD'].includes(String(f9t.pos || '').toUpperCase()),
+        `False Nine tidak boleh merekomendasikan winger ${f9t.name} (${f9t.pos})`);
+    }
+  }
+  const f9TestRoster = [
+    { id: 'gk', name: 'GK', pos: 'G', force: 50, foot: 'D', energy: 100 },
+    { id: 'd1', name: 'D1', pos: 'LD', force: 50, foot: 'D', energy: 100 },
+    { id: 'd2', name: 'D2', pos: 'ZD', force: 50, foot: 'D', energy: 100 },
+    { id: 'd3', name: 'D3', pos: 'ZE', force: 50, foot: 'E', energy: 100 },
+    { id: 'd4', name: 'D4', pos: 'LE', force: 50, foot: 'E', energy: 100 },
+    { id: 'm1', name: 'M1', pos: 'VOL', force: 50, foot: 'D', energy: 100 },
+    { id: 'm2', name: 'M2', pos: 'MC', force: 50, foot: 'D', energy: 100 },
+    { id: 'm3', name: 'M3', pos: 'MA', force: 50, foot: 'D', energy: 100 },
+    { id: 'm4', name: 'M4', pos: 'MA', force: 50, foot: 'D', energy: 100 },
+    { id: 'a1', name: 'StrikerPM', pos: 'ATA', force: 55, foot: 'D', s1: 'PAS', s2: 'FIN', energy: 100 },
+    { id: 'a2', name: 'WingerPM', pos: 'PE', force: 55, foot: 'E', s1: 'PAS', s2: 'VEL', energy: 100 },
+  ];
+  const f9Xi = global.LFEngine.tactics.solveBestXi(f9TestRoster, '4-4-2', 9, '');
+  assert.strictEqual(f9Xi.falseNine, true, 'solveBestXi harus menandai falseNine=true dengan >=2 penyerang & 1 ST PAS/ARM');
+  assert.deepStrictEqual(f9Xi.falseNinePlayers, ['StrikerPM'], 'falseNinePlayers hanya boleh memuat ST/SS/CAM, bukan winger PE');
+
   // Regresi v8.10.3: buyerAcceptsPlayer (#24933) + findInterestedTeams (#25045) tanpa filter budget palsu
   const topUnlocked = D.roster.find(p => !p.freeSigned && !p.loanedFrom && !(p.pos === 'G' && D.roster.filter(x => x.pos === 'G').length <= 1));
   if (topUnlocked) {
