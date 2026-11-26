@@ -16,7 +16,7 @@
   const KEYS = {
     STATIC_DB: 'static_db_v12',
     STATIC_DB_META: 'static_db_meta_v12',
-    LAST_DASHBOARD: 'last_dashboard_v12',
+    LAST_DASHBOARD: 'last_dashboard_v14',
     HISTORY: 'history_snapshots_v1',
   };
 

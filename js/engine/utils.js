@@ -59,14 +59,44 @@
     return (C.SKILL_PT_TO_EN[skillCode] || skillCode).trim();
   }
 
-  function getDeclineAge(posCode) {
+  function getDeclineAge(posCode, realScale = false) {
+    if (realScale) {
+      const s100 = C.DECLINE_START_AGE_SCALE100 || { G: 35, default: 33 };
+      return String(posCode || '').toUpperCase() === 'G' ? s100.G : s100.default;
+    }
+    const p = String(posCode || '').toUpperCase();
+    if (C.DECLINE_START_AGE && C.DECLINE_START_AGE[p] !== undefined) return C.DECLINE_START_AGE[p];
     const cat = posCategory(posCode);
     return C.DECLINE_AGE_BY_CAT[cat] !== undefined ? C.DECLINE_AGE_BY_CAT[cat] : 33;
   }
 
-  function getSellWarnAge(posCode) {
+  function getSellWarnAge(posCode, realScale = false) {
+    if (realScale) return getDeclineAge(posCode, true) - 1;
     const cat = posCategory(posCode);
     return C.SELL_WARN_AGE_BY_CAT[cat] !== undefined ? C.SELL_WARN_AGE_BY_CAT[cat] : 31;
+  }
+
+  // OTA 2.1.0 (#3611 & #24952 releaseClauseOf): Brasil 1.5x, Eropa 3.0x, Lainnya 2.0x
+  const EXTRA_EU_CODES = new Set(['WL', 'NIR', 'IE', 'HU', 'BG', 'SK', 'SI', 'FI', 'IS', 'CY', 'IL', 'BA', 'ME', 'MK', 'AL', 'EE', 'LV', 'LT', 'BY', 'MD', 'GE', 'AM', 'AZ', 'LU', 'MT', 'FO', 'LI', 'AD', 'SM', 'GI', 'XK']);
+  function releaseClauseMul(countryCode) {
+    const c = String(countryCode || '').trim().toUpperCase();
+    const rc = C.RELEASE_CLAUSE || { europe: 3.0, brazil: 1.5, other: 2.0 };
+    if (c === 'BR' || c === 'BRA' || c === 'BRASIL') return { mult: rc.brazil, region: 'BR', label: 'Brasil 1.5x' };
+    const euList = (C.COUNTRY_GROUPS && C.COUNTRY_GROUPS[0]) || [];
+    if (euList.includes(c) || EXTRA_EU_CODES.has(c)) return { mult: rc.europe, region: 'EU', label: 'Eropa 3.0x' };
+    return { mult: rc.other, region: 'OTHER', label: 'Standar 2.0x' };
+  }
+
+  function releaseClauseOf(marketValue, countryCode, paidInPrice = 0) {
+    const mv = Math.max(0, Math.round(safeNum(marketValue, 0)));
+    const info = releaseClauseMul(countryCode);
+    const byMv = Math.round(mv * info.mult);
+    const floorPaid = Math.max(0, Math.round(safeNum(paidInPrice, 0)));
+    return {
+      ...info,
+      amount: Math.max(byMv, floorPaid),
+      hasPaidFloor: floorPaid > byMv,
+    };
   }
 
   // Bytecode #19854 reputationLevel: <20->0, <35->1, <50->2, <68->3, <82->4, >=82->5
@@ -782,6 +812,8 @@
     skillEn,
     getDeclineAge,
     getSellWarnAge,
+    releaseClauseMul,
+    releaseClauseOf,
     reputationLevel,
     payrollRef,
     estimatePayrollRef,

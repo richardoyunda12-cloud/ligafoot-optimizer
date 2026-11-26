@@ -196,14 +196,20 @@
   const CUSTOM_MID_RULE_ID = { VOL: 6, MC: 8, MA: 12, PD: 11, PE: 14 };
   const CUSTOM_ATK_RULE_ID = { ATA: 16, SA: 15, PD: 15, PE: 15 };
 
-  // Usia mulai regresi spesifik per posisi (v1.2.0 #21447 declineStartAge)
+  // Usia mulai regresi spesifik per posisi (v1.2.0 #21447 & OTA 2.1.0 #22062 declineStartAge)
   const DECLINE_START_AGE = {
-    // #21370 declineStartAge: ATA/SA/PD/PE/MA=31, ZD/ZE=33, G=34, SISANYA=32 (termasuk MO, ZAG, Z)
+    // Classic: ATA/SA/PD/PE/MA=31, ZD/ZE=33, G=34, SISANYA=32 (termasuk MO, ZAG, Z)
     ATA: 31, A: 31, SA: 31, PD: 31, PE: 31, MA: 31,
     LD: 32, LE: 32, LAT: 32, VOL: 32, V: 32, MC: 32, MD: 32, ME: 32, MEI: 32, MO: 32,
     ZD: 33, ZE: 33, ZAG: 32, Z: 32,
     G: 34,
   };
+
+  // OTA 2.1.0 (#22062): saat mode Real Scale 0-100 aktif -> G=35, outfield=33
+  const DECLINE_START_AGE_SCALE100 = { G: 35, default: 33 };
+
+  // OTA 2.1.0 (#3611 & #24952 releaseClauseOf): Klausul rilis per wilayah (ganti buyoutMul flat 2x)
+  const RELEASE_CLAUSE = { europe: 3.0, brazil: 1.5, other: 2.0 };
 
   const DECLINE_AGE_BY_CAT = {
     0: 34, // GK
@@ -890,6 +896,8 @@
       LOAN_OPTION,
       SHOUT_DECAY,
       LIVE_COACH_GUIDE,
+      DECLINE_START_AGE_SCALE100,
+      RELEASE_CLAUSE,
     };
   }
 

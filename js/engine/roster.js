@@ -88,6 +88,7 @@
 
     const boughtPrice = Math.round(U.safeNum(dyn.boughtPrice, 0));
     const boughtDate = dyn.boughtDate || null;
+    const paidIn = (dyn.paidIn && typeof dyn.paidIn === 'object') ? dyn.paidIn : null;
     const cardsByComp = (dyn.cardsByComp && typeof dyn.cardsByComp === 'object' && !Array.isArray(dyn.cardsByComp))
       ? dyn.cardsByComp
       : {};
@@ -95,7 +96,8 @@
 
     const stackInfo = T.evalSkillStacking(pos, s1, s2);
     const cat = U.posCategory(pos);
-    const declineAge = (C.DECLINE_START_AGE && C.DECLINE_START_AGE[pos]) || U.getDeclineAge(pos);
+    const isRealScale = Boolean(C && C._activeRealScale);
+    const declineAge = U.getDeclineAge(pos, isRealScale);
     const sellWarnAge = declineAge - 1;
     const isDeclining = (age >= declineAge) || (growthFrac <= -0.15);
 
@@ -178,6 +180,7 @@
       s1,
       s2,
       stackPct: stackInfo.stackPct,
+      paidIn,
       nonStack: stackInfo.nonStack,
       stackGrade: stackInfo.grade,
       stackNote,

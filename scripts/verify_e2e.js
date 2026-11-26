@@ -103,6 +103,14 @@ function runStage2Engine(savePath) {
   const sparseHoles = global.LFEngine.tactics.detectSquadHoles([{ pos: 'G', force: 45, foot: 'D', injured: false }], '4-3-3');
   assert(sparseHoles && Array.isArray(sparseHoles.holes) && sparseHoles.holes.some(h => h.kind === 'NO_STARTER' && h.desc.includes('4-3-3')),
     'detectSquadHoles gagal membentuk deskripsi NO_STARTER dengan spec.key');
+  // Unit regression OTA 2.1.0: releaseClauseOf regional (BR 1.5x, EU 3.0x, Other 2.0x) & realScale declineStartAge
+  assert.strictEqual(global.LFEngine.utils.releaseClauseOf(1000000, 'BR', 0).amount, 1500000, 'Release clause BR harus 1.5x');
+  assert.strictEqual(global.LFEngine.utils.releaseClauseOf(1000000, 'ES', 0).amount, 3000000, 'Release clause EU harus 3.0x');
+  assert.strictEqual(global.LFEngine.utils.releaseClauseOf(1000000, 'ID', 0).amount, 2000000, 'Release clause Other harus 2.0x');
+  assert.strictEqual(global.LFEngine.utils.releaseClauseOf(1000000, 'BR', 2400000).amount, 2400000, 'Release clause harus respect paidIn floor');
+  assert.strictEqual(global.LFEngine.utils.getDeclineAge('G', true), 35, 'RealScale GK decline harus 35');
+  assert.strictEqual(global.LFEngine.utils.getDeclineAge('ATA', true), 33, 'RealScale outfield decline harus 33');
+  assert.strictEqual(global.LFEngine.utils.getDeclineAge('ATA', false), 31, 'Classic ATA decline harus 31');
   const save = JSON.parse(fs.readFileSync(savePath, 'utf8'));
   const uTeam = save.compactTeams && save.compactTeams[save.userTeamId];
   assert(uTeam, 'userTeamId tidak ditemukan di save.compactTeams');

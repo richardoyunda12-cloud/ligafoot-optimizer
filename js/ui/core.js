@@ -739,7 +739,10 @@ function openPlayerDrawer(kind, id) {
         <h3>🔎 Profil &amp; Potensi</h3>
         <div class="drawer-kv"><span>Force → PotCap Asli</span><b class="mono">${r[5]} → <span class="c-green">${r[7]}</span> <span class="c-muted">(UI Pot: ${r[6]})</span></b></div>
         ${(() => {
-          const decAge = (window.LFEngine && LFEngine.config && LFEngine.config.DECLINE_AGE_BY_CAT) ? (LFEngine.config.DECLINE_AGE_BY_CAT[EXACT_CAT[r[1]] ?? 3] || 32) : 32;
+          const isRs = Boolean(D.meta && D.meta.realScale);
+          const decAge = (window.LFEngine && LFEngine.utils && LFEngine.utils.getDeclineAge)
+            ? LFEngine.utils.getDeclineAge(r[1], isRs)
+            : ((window.LFEngine && LFEngine.config && LFEngine.config.DECLINE_AGE_BY_CAT) ? (LFEngine.config.DECLINE_AGE_BY_CAT[EXACT_CAT[r[1]] ?? 3] || 32) : 32);
           const eta = (window.LFEngine && LFEngine.roster && LFEngine.roster.estimatePeakEta && r[7] > r[5] && r[2] < decAge)
             ? LFEngine.roster.estimatePeakEta(r[2], r[5], r[7], 0, D.meta && D.meta.userTeamLevel, D.meta && D.meta.ctLevel, decAge)
             : null;
@@ -755,6 +758,17 @@ function openPlayerDrawer(kind, id) {
         <h3>💸 Estimasi Harga &amp; Flip ROI</h3>
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(r[13])}</span></div>
         <div class="drawer-kv"><span>Estimasi Beli Riil</span><b class="mono c-amber">${fmtM(r[14])}</b></div>
+        ${(() => {
+          const isFree = flags.includes('FREE') || !r[16] || r[16] === 'Free Agent';
+          if (isFree || !(r[13] > 0)) return '';
+          const clubCountry = r[23] || '';
+          const rcFn = window.LFEngine && LFEngine.utils && LFEngine.utils.releaseClauseOf;
+          const rc = rcFn ? rcFn(r[13], clubCountry, 0) : { mult: 2.0, region: 'OTHER', label: 'Standar 2.0x', amount: Math.round(r[13] * 2.0) };
+          const rcAmt = Number(r[24] || rc.amount || 0);
+          const rcCls = rc.region === 'BR' ? 'b-good' : (rc.region === 'EU' ? 'b-warn' : 'b-info');
+          const rcIco = rc.region === 'BR' ? '🇧🇷' : (rc.region === 'EU' ? '🇪🇺' : '🌍');
+          return `<div class="drawer-kv" id="drw-release-clause" title="Tawaran ≥ klausul rilis otomatis diterima 100%, termasuk pemain kunci yang normalnya ditolak."><span>Klausul Rilis (Auto-Terima)</span><span class="mono"><b>${fmtM(rcAmt)}</b> <span class="badge ${rcCls}">${rcIco} ${rc.label}</span></span></div>`;
+        })()}
         ${(() => {
           if (!(r[14] > 0 && r[15] > 180)) return '';
           const ecoFn = window.LFEngine && window.LFEngine.economy && window.LFEngine.economy.computeInstallmentPlan;

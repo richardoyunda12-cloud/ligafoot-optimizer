@@ -559,7 +559,7 @@
       } else if (pol.code === 'CEIL_2X') {
         flags.push('CEIL_2X');
       }
-      candidates.push({ rel: sc.rel, p, flip: sc.flip, estBuy: sc.estBuy, estResale: sc.estResale, projGain: sc.projGain, flags });
+      candidates.push({ rel: sc.rel, p, flip: sc.flip, estBuy: sc.estBuy, estResale: sc.estResale, projGain: sc.projGain, flags, clubCountry: '', releaseClause: 0 });
     }
 
     // 2. AI Clubs
@@ -664,6 +664,13 @@
           flags.push('CEIL_2X');
         }
 
+        const paidObj = p.paidIn;
+        const curDateStr = String(save.currentDate || '').slice(0, 10);
+        const paidFloor = (paidObj && String(paidObj.teamId || '') === String(cid) && (!paidObj.until || !curDateStr || curDateStr <= String(paidObj.until).slice(0, 10)))
+          ? Math.round(U.safeNum(paidObj.price, 0))
+          : 0;
+        const rcInfo = U.releaseClauseOf(p.marketValue, ccountry, paidFloor);
+
         candidates.push({
           rel: sc.rel,
           p,
@@ -673,6 +680,8 @@
           projGain: sc.projGain,
           flags,
           reachable: isReachable,
+          clubCountry: ccountry,
+          releaseClause: rcInfo.amount,
         });
       }
     }
@@ -686,14 +695,14 @@
       if (seenIds.has(p.id)) continue;
       seenIds.add(p.id);
       const stCode = p.top ? 2 : (p.star ? 1 : 0);
-      // Format kompak 23 elemen: sertakan SELURUH pemain aktif dari save (tanpa dipotong 2.800)
+      // Format kompak 25 elemen (+clubCountry[23], +releaseClause[24] OTA 2.1.0 #24952)
       selected.push([
         p.name, p.pos, p.age, p.foot, p.nationality,
         p.force, p.potential, p.potCap,
         p.s1, p.s2, p.stackPct, p.nonStack ? 1 : 0,
         p.salary, p.marketValue, c.estBuy, p.contractDays,
         p.teamName, c.flip, c.flags.join(','), p.id, stCode,
-        c.estResale, c.projGain,
+        c.estResale, c.projGain, c.clubCountry || '', c.releaseClause || 0,
       ]);
     }
 

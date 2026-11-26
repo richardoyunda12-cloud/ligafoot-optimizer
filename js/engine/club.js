@@ -1077,6 +1077,14 @@
 
     const uTeam = compactTeams[userId];
     const uMeta = U.getStaticClub(clubsMeta, userId);
+    const isRealScale = Boolean(
+      save.realScale
+      || save.forceScale === 100
+      || save.forceScale === '100'
+      || (save.options && save.options.realScale)
+      || (save.config && save.config.realScale)
+    );
+    C._activeRealScale = isRealScale;
     const userName = save.userTeamName || uMeta.name || uTeam.name || userId;
     const userCountry = String(uMeta.country || uTeam.country || '').toUpperCase();
     const currentDate = String(save.currentDate || '2026-01-01').slice(0, 10);
@@ -2434,7 +2442,8 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.1 Web PWA (Engine v1.2.0 • Bytecode v9 Verified)',
+        version: 'v8.10.2 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        realScale: isRealScale,
         generatedAt,
         parseSec,
         userId,

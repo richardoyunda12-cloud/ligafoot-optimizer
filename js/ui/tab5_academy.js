@@ -144,22 +144,30 @@ function renderTab5() {
     const ysLocAll = rawYs.filter(x => x.isLocal);
     const ysFrgAll = rawYs.filter(x => !x.isLocal);
     const ysActive = (yScoutTab === 'FOREIGN' ? ysFrgAll : ysLocAll).slice(0, 10);
-    const renderYsRows = (arr) => arr.length ? arr.map(t => `<tr>
+    const debtRoom = Number((D.meta && D.meta.transferDebtRoom) || 0);
+    const isBanned = Boolean(D.meta && D.meta.transferBanned);
+    const instBadge = isBanned
+      ? `<span class="badge b-crit">⛔ Transfer Ban (Wajib Tunai)</span>`
+      : `<span class="badge b-info mono" title="Bajak junior rival kini bisa dicicil (DP 25% + sisa plafon cicilan klub)">💳 Bisa Cicil DP 25% · Plafon ${fmtM(debtRoom)}</span>`;
+    const renderYsRows = (arr) => arr.length ? arr.map(t => {
+      const dp25 = Math.round((t.scoutPrice || 0) * 0.25);
+      return `<tr>
       <td><a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a></td>
       <td class="mono"><b>${fmtPos(t.pos)}</b> · ${t.age}th · ${fmtFoot(t.foot)}</td>
       <td class="mono"><b>${t.force}</b>→<b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
       <td class="mono c-sky col-hide-mob"><b>+${t.youthScoutGap}</b></td>
       <td class="col-hide-mob"><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
-      <td class="mono c-amber"><b>${fmtM(t.scoutPrice)}</b></td>
+      <td class="mono"><b class="c-amber">${fmtM(t.scoutPrice)}</b><div class="c-sky" style="font-size:10.5px">DP 25%: ${fmtM(dp25)}</div></td>
       <td class="col-hide-mob">${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
-    </tr>`).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat.</td></tr>';
+    </tr>`;
+    }).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat.</td></tr>';
 
     ysBox.innerHTML = rawYs.length ? `
       <div style="border-top:1px solid var(--border);padding-top:12px">
         <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
           <div>
-            <h3 style="margin:0">🎓 Radar Olheiro da Base (#24197 — Bajak U-21 Rival)</h3>
-            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh ≥10 (kuota maks 2/musim; biaya scout -25% di CT Lv 3+).</div>
+            <h3 style="margin:0">🎓 Radar Olheiro da Base — Bajak U-21 Rival</h3>
+            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh ≥10 (kuota maks 2/musim; biaya scout -25% di CT Lv 3+; bisa tunai atau cicilan DP 25%). ${instBadge}</div>
           </div>
           <div class="quick-chips-bar" style="margin:0">
             <button type="button" class="qchip ${yScoutTab === 'LOCAL' ? 'active' : ''}" onclick="setYScoutTab('LOCAL')">🇮🇩 Lokal (${ysLocAll.length})</button>
@@ -167,7 +175,7 @@ function renderTab5() {
           </div>
         </div>
         <div class="tbl-wrap tbl-sticky"><table>
-          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th class="col-hide-mob">Gap</th><th class="col-hide-mob">Skill Stack</th><th>Harga 2.0x MV</th><th class="col-hide-mob">Klub Asal</th></tr></thead>
+          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th class="col-hide-mob">Gap</th><th class="col-hide-mob">Skill Stack</th><th>Harga / DP 25%</th><th class="col-hide-mob">Klub Asal</th></tr></thead>
           <tbody>${renderYsRows(ysActive)}</tbody>
         </table></div>
       </div>` : '';

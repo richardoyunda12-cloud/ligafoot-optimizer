@@ -215,6 +215,22 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
     assert '1.400 K' in ctr_out or '1,400 K' in ctr_out, f'Mini Kalkulator Counter Drawer tidak menghitung 1.40x: {ctr_out}'
     page.evaluate("() => { closePlayerDrawer(); }")
 
+    # v8.10.2: Klausul Rilis regional di Scout Drawer & DP 25% Cicilan di Radar Olheiro da Base
+    scout_pid = page.evaluate("""() => {
+      const row = (D.scoutPool || []).find(r => r && r[13] > 0 && r[16] && r[16] !== 'Free Agent' && !String(r[18] || '').includes('FREE'));
+      return row ? row[19] : '';
+    }""")
+    if scout_pid:
+        page.evaluate("(pid) => { openPlayerDrawer('scout', pid); }", scout_pid)
+        rc_txt = (page.text_content('#drw-release-clause') or '').strip()
+        assert 'Klausul Rilis' in rc_txt and ('1.5x' in rc_txt or '2.0x' in rc_txt or '3.0x' in rc_txt), f'Klausul Rilis regional tidak tampil di Scout Drawer: {rc_txt}'
+        page.evaluate("() => { closePlayerDrawer(); }")
+
+    page.evaluate("() => { goToView('t3', 't3-acad'); }")
+    if page.locator('#t5-yscout-box table').count() > 0:
+        ys_txt = (page.text_content('#t5-yscout-box') or '')
+        assert 'DP 25%' in ys_txt, 'Keterangan Cicilan DP 25% tidak tampil di Radar Olheiro da Base'
+
     page.evaluate("() => { goToView('t5', 't5-tkt'); }")
     if page.locator('#t6-preset-audit button:has-text("Tes")').count() > 0:
         page.locator('#t6-preset-audit button:has-text("Tes")').first.click()
