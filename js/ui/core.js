@@ -652,14 +652,19 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Kuota Potong Gaji</span><span class="mono ${p.salaryCutLocked ? 'c-red' : 'c-green'}"><b>${p.salaryCuts || 0}/1</b> dipakai ${p.salaryCutLocked ? '(Terkunci — maks 1x)' : '(Bisa potong 1x)'}</span></div>
         ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan</span><b class="mono c-sky">Cadangan -12% floor → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)} ${p.injured ? `<b class="c-red">(Diskon cedera ${Math.round((p.injurySaleMul || 1) * 100)}%)</b>` : ''}</span></div>
-        <div class="drawer-kv"><span>Minat Pasar (Peminat AI)</span><span id="drw-buyer-demand">${buyerDemandBadgeHtml(p)}</span></div>
+        <div class="drawer-kv"><span>Minat Pasar (Peminat AI)</span><span id="drw-buyer-demand">${buyerDemandBadgeHtml(p)}${p.estBuyersCount > 0 && p.offerSlotsRange ? ` <span class="c-muted mono" style="font-size:10.5px">(${esc(p.offerSlotsRange)} klub/roll)</span>` : ''}</span></div>
         <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +40%: ${fmtM(p.estCounter40)}</span></b></div>
         ${(() => {
           const gkCnt = (D.roster || []).filter(x => x.pos === 'G').length;
-          let stTxt = `Auction <b>${fmtM(p.marketValue * 0.55)}–${fmtM(p.marketValue * 0.70)}</b> · Fixed <b>${fmtM(p.marketValue * 0.70)}</b> <span class="c-muted">(Hindari Sell Now)</span>`;
-          if (p.freeSigned) stTxt = '<b class="c-amber">⚠ Terkunci freeNoSale (rekrut gratis)</b>';
+          const effMv = p.injured ? Math.round((p.marketValue || 0) * (p.injurySaleMul || 1)) : (p.marketValue || 0);
+          const maxAsk = p.maxAskPrice || Math.round(effMv * 1.10);
+          const maxAuc = p.maxAuctionPrice || Math.round(effMv * 1.20);
+          let stTxt = `Purchase Offers maks <b class="c-green">${fmtM(maxAsk)}</b> (1.10x MV) · Lelang maks <b class="c-sky">${fmtM(maxAuc)}</b> (+20%)`;
+          if (p.loanedFrom) stTxt = '<b class="c-amber">⚠ Pemain pinjaman — tidak bisa dijual</b>';
+          else if (p.freeSigned) stTxt = '<b class="c-amber">⚠ Terkunci freeNoSale (rekrut gratis)</b>';
           else if (p.pos === 'G' && gkCnt <= 1) stTxt = '<b class="c-amber">⚠ Terkunci minimal 1 kiper</b>';
-          return `<div class="drawer-kv"><span>🏷️ Strategi Jual</span><span class="mono">${stTxt}</span></div>`;
+          else if (p.injured) stTxt += ' <span class="c-red">(terpotong cedera!)</span>';
+          return `<div class="drawer-kv" id="drw-sell-ceiling" title="Jika memasang harga di atas 1.10x MV pada Purchase Offers, game tidak memunculkan klub peminat (0 tawaran)."><span>🏷️ Batas Harga Jual</span><span class="mono">${stTxt}</span></div>`;
         })()}
         <div class="drawer-kv"><span>Biaya Putus Kontrak (${Math.round((p.termFeeRate || 0.5) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
         ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}

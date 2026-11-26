@@ -553,6 +553,13 @@
   const SELL_TAX_LOW = 0.10;
   const SELL_TAX_HIGH = 0.15;
 
+  // Bytecode #3886 env[54..56], #24929 minForceFor, #24933 buyerAcceptsPlayer, #25045 findInterestedTeams:
+  // Kelayakan klub AI pembeli TIDAK memeriksa budget kas klub; memakai minForce divisi/rep, REP_CEILING, & veteranFits.
+  const BUYER_MIN_FORCE_BY_DIV = [1, 40, 30, 20, 5, 5];
+  const BUYER_MIN_FORCE_BY_REP = [1, 10, 20, 40, 50, 55];
+  const PURCHASE_OFFER_MAX_ASK_MUL = 1.10;
+  const AUCTION_MAX_MUL = 1.20;
+
   // Bytecode #3541: Salary Cut & Termination Tiers
   // SALARY_FLOOR (#3723) + #24159 salaryCutLocked + #24160 salaryFloorFactor + #24162 salaryCutMinimum
   //   terkunci jika salaryCuts >= maxCuts (1) — renewRefusals TIDAK mengunci.
@@ -887,6 +894,10 @@
       SELL_TAX_THRESHOLD,
       SELL_TAX_LOW,
       SELL_TAX_HIGH,
+      BUYER_MIN_FORCE_BY_DIV,
+      BUYER_MIN_FORCE_BY_REP,
+      PURCHASE_OFFER_MAX_ASK_MUL,
+      AUCTION_MAX_MUL,
       SALARY_CUT,
       TERMINATION_FEE_TIERS,
       INJURED_SALE,

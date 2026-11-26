@@ -128,6 +128,15 @@ function runStage2Engine(savePath) {
   assert.strictEqual(D.meta.ctLevel, Math.max(1, Math.round(Number(uTeam.ctLevel || 1))), 'ctLevel mismatch');
   assert(D.roster.length > 0, 'roster kosong');
 
+  // Regresi v8.10.3: buyerAcceptsPlayer (#24933) + findInterestedTeams (#25045) tanpa filter budget palsu
+  const topUnlocked = D.roster.find(p => !p.freeSigned && !p.loanedFrom && !(p.pos === 'G' && D.roster.filter(x => x.pos === 'G').length <= 1));
+  if (topUnlocked) {
+    assert(topUnlocked.estBuyersCount > 0, `Pemain utama ${topUnlocked.name} seharusnya memiliki peminat AI (estBuyersCount=${topUnlocked.estBuyersCount})`);
+    const expEffMv = topUnlocked.injured ? Math.round((topUnlocked.marketValue || 0) * (topUnlocked.injurySaleMul || 1)) : Math.round(topUnlocked.marketValue || 0);
+    assert.strictEqual(topUnlocked.maxAskPrice, Math.round(expEffMv * 1.10), `maxAskPrice ${topUnlocked.name} harus 1.10x MV efektif`);
+    assert(typeof topUnlocked.offerSlotsRange === 'string' && topUnlocked.offerSlotsRange.includes('–'), 'offerSlotsRange hilang');
+  }
+
   // 2. Best XI & Rotation XI & War Room Matchup Parity
   assert.strictEqual(D.bestXi.xi.length, 11, 'Best XI harus tepat 11 pemain');
   assert.strictEqual(D.rotXi.xi.length, 11, 'Rotation XI harus tepat 11 pemain');

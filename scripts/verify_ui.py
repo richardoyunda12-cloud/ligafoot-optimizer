@@ -210,6 +210,8 @@ def run_desktop_checks(browser, url, save_path, expected_ver):
     assert first_pid, 'Roster kosong untuk uji Player Drawer'
     page.evaluate("(pid) => { openPlayerDrawer('roster', pid); }", first_pid)
     assert page.locator('#drw-buyer-demand').count() > 0, 'Badge Minat Pasar tidak tampil di Player Drawer'
+    sell_ceil_txt = (page.text_content('#drw-sell-ceiling') or '').strip()
+    assert '1.10x' in sell_ceil_txt or 'Terkunci' in sell_ceil_txt or 'pinjaman' in sell_ceil_txt, f'Batas Harga Jual 1.10x tidak tampil di Player Drawer: {sell_ceil_txt}'
     page.fill('#drw-ctr-inp', '1000')
     ctr_out = (page.text_content('#drw-ctr-out') or '')
     assert '1.400 K' in ctr_out or '1,400 K' in ctr_out, f'Mini Kalkulator Counter Drawer tidak menghitung 1.40x: {ctr_out}'
