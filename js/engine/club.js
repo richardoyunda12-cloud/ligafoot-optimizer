@@ -376,7 +376,7 @@
         ctLevel,
         inTrain,
         played: src === 'youth' ? true : ((pl.seasonMinutes || 0) > 0 || (pl.gamesPlayed || 0) > 0),
-        unhappy: pl.mood === 'unhappy' || Boolean(pl.roleSore),
+        unhappy: pl.mood === 'unhappy' || Boolean(pl.roleSore) || Boolean(pl.raiseSore),
       });
 
       const obsPoints = [];
@@ -917,7 +917,7 @@
 
     if (unhappyCnt >= C.LOCKER_UNHAPPY_MIN) {
       add('CRITICAL', 'Ruang Ganti', `${unhappyCnt} pemain UNHAPPY — Penalti Tim -${Math.round(lockerHit * 100)}% AKTIF!`,
-        "Atur pemain cadangan (#12 ke bawah) jadi squadRole = 'reserve' (kebal unhappy di v1.2.0 selama tidak roleSore) atau beri menit main sesuai target kuota.");
+        "Atur pemain cadangan (#12 ke bawah) jadi squadRole = 'reserve' (kebal unhappy selama tidak roleSore / raiseSore) atau beri menit main sesuai target kuota.");
     }
 
     const slumped = userRoster.filter(p => (p.fineSlump || 0) > 0);
@@ -1141,6 +1141,7 @@
       p.reqPct = mi.reqPct || 0.0;
       p.moodImmune = Boolean(mi.immune);
       p.roleSore = Boolean(mi.roleSore);
+      p.raiseSore = Boolean(mi.raiseSore ?? p.raiseSore);
       p.effGames = mi.effGames !== undefined ? mi.effGames : teamGames;
       p.minsNow = mi.minsNow !== undefined ? mi.minsNow : p.seasonMinutes;
       p.minsReq = mi.minsReq !== undefined ? mi.minsReq : 0;
@@ -2542,7 +2543,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.8 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.9 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,

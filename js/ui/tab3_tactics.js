@@ -164,6 +164,7 @@ function renderFormCompareTable() {
 }
 
 function getMoodActionAdvice(p) {
+  if (p.raiseSore) return { txt: '⚠ raiseSore: Kecewa tolak naik gaji (UNHAPPY)', cls: 'b-crit' };
   if (p.injured) return { txt: '🏥 Istirahat Cedera (Kebal)', cls: 'b-muted' };
   if (p.roleSore) return { txt: '⚠ roleSore: Beri menit / tunggu reda', cls: 'b-crit' };
   if (p.mood === 'unhappy') {
@@ -248,12 +249,13 @@ function renderMoodTable() {
             <div class="inline-sticky-meta">
               <span class="badge ${mCls}">${p.mood.toUpperCase()}</span>
               ${p.roleSore ? '<span class="badge b-crit">roleSore!</span>' : ''}
+              ${p.raiseSore ? '<span class="badge b-crit">raiseSore!</span>' : ''}
             </div>
           </td>
           <td><span class="badge ${adv.cls}">${esc(adv.txt)}</span></td>
           <td>${minutesQuotaBarHtml(p.minPct, p.reqPct, p.mood)}</td>
           <td class="mono col-hide-mob"><b>${p.reqPct}%</b>${defTxt}</td>
-          <td class="col-hide-mob"><span class="badge ${p.roleSore ? 'b-crit' : 'b-muted'}">${esc(p.moodReason)}</span></td>
+          <td class="col-hide-mob"><span class="badge ${(p.roleSore || p.raiseSore) ? 'b-crit' : 'b-muted'}">${esc(p.moodReason)}</span></td>
           <td class="col-hide-mob"><b>${fmtPos(p.pos)}</b></td>
         </tr>`;
       }).join('') + `</tbody>`;

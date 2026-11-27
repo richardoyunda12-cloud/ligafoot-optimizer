@@ -170,6 +170,7 @@
     const honors = Array.isArray(dyn.honors) ? dyn.honors : [];
     const moodFrom = dyn.moodFrom || null;
     const roleSore = Boolean(dyn.roleSore);
+    const raiseSore = Boolean(dyn.raiseSore);
     const nearDrop = growthFrac <= -0.75;
     const stackNote = stackInfo.nonStack
       ? 'Skill duplikat (tidak menumpuk di Match Engine v1.2.0)'
@@ -225,6 +226,7 @@
       loanBuyChance,
       squadRole,
       roleSore,
+      raiseSore,
       noAutoRenew,
       salaryCuts,
       renewRefusals,

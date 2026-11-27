@@ -95,7 +95,7 @@ function matchRosterFilter(p, flt) {
   if (flt === 'TRAP') return p.isTrap;
   if (flt === 'GEM') return p.isGem;
   if (flt === 'INJURED') return Boolean(p.injured);
-  if (flt === 'UNHAPPY') return p.mood === 'unhappy' || p.roleSore;
+  if (flt === 'UNHAPPY') return p.mood === 'unhappy' || p.roleSore || p.raiseSore;
   if (flt === 'SLUMP') return (p.fineSlump || 0) > 0;
   if (flt === 'LOOPHOLE') return !!p.autoRenewLoophole;
   return true;
@@ -338,6 +338,7 @@ function renderRosterTable() {
     const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
     const actB = { crit: 'b-crit', warn: 'b-warn', good: 'b-good', accent: 'b-accent', info: 'b-info', muted: 'b-muted' }[p.actionCls] || 'b-muted';
     const slumpBadge = (p.fineSlump > 0) ? ` <span class="badge b-crit" title="${esc(tipFor('SLUMP'))}">SLUMP -${p.fineSlumpPct}%</span>` : '';
+    const soreBadge = p.raiseSore ? ' <span class="badge b-crit" title="Kecewa permintaan naik gaji ditolak (UNHAPPY)">raiseSore</span>' : '';
     const narTag = p.noAutoRenew ? '<div class="c-muted" style="font-size:10px">noAutoRenew ✓</div>' : '';
     const loopTag = p.autoRenewLoophole ? `<div class="c-sky" style="font-size:10px" title="${esc(tipFor('LOOPHOLE'))}">💎 Auto-Renew 0%</div>` : '';
     const isF = isRosterForeign(p);
@@ -346,7 +347,7 @@ function renderRosterTable() {
     const demFull = typeof buyerDemandBadgeHtml === 'function' ? buyerDemandBadgeHtml(p, false) : '-';
     return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
-        <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.top ? '👑' : (p.star ? '⭐' : '')} ${p.injured ? `<span class="badge b-crit">🏥${p.injuryDays}d</span>` : ''}${slumpBadge}</div>
+        <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.top ? '👑' : (p.star ? '⭐' : '')} ${p.injured ? `<span class="badge b-crit">🏥${p.injuryDays}d</span>` : ''}${slumpBadge}${soreBadge}</div>
         <div class="origin-meta">
           ${originNoteHtml(p)}
           ${p.isTrap ? `<span class="badge b-crit origin-note" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isGem ? `<span class="badge b-good origin-note" title="${esc(tipFor('GEM'))}">GEM</span>` : '')}

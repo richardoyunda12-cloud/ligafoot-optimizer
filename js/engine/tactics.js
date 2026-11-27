@@ -266,6 +266,7 @@
       const minRatio = effGames > 0 ? (minsNow / (effGames * 90.0)) : 1.0;
 
       const roleSore = Boolean(p.roleSore);
+      const raiseSore = Boolean(p.raiseSore);
       const mc = C.MOOD_CFG || {};
       const natStarterQuota = mc.starterQuota !== undefined ? mc.starterQuota : 0.25;
       const expStarterQuota = mc.explicitStarterQuota !== undefined ? mc.explicitStarterQuota : 0.40;
@@ -329,6 +330,18 @@
         reason = `Ambang batas menit (${Math.round(minRatio * 100)}% / target ${Math.round(reqRatio * 100)}%)`;
       }
 
+      // OTA 2.1.0 (#22494 squadMoods & #25354 answerRaise): tolak minta naik gaji -> p.raiseSore memaksa UNHAPPY
+      if (raiseSore) {
+        if (mood !== 'unhappy') {
+          mood = 'unhappy';
+          unhappyCount++;
+          nearQuota = false;
+          reason = 'Kecewa kenaikan gaji ditolak (raiseSore — UNHAPPY)';
+        } else {
+          reason = `raiseSore · ${reason}`;
+        }
+      }
+
       moods[pid] = {
         mood,
         nearQuota,
@@ -337,6 +350,7 @@
         reqPct: U.roundTo(reqRatio * 100.0, 1),
         immune,
         roleSore,
+        raiseSore,
         effGames,
         minsNow,
         minsReq,
@@ -1388,8 +1402,10 @@
     const oGkSaveMul = U.safeNum(oPow.gkSaveMul, 1.0);
     const uConvMul = U.safeNum(uPow.conversionMul, 0.965 * U.clamp((uStyle.includes('counter') ? 1.09 : 1.0) * uFinMul, 0.88, 1.12));
     const oConvMul = U.safeNum(oPow.conversionMul, 0.965 * U.clamp((oStyle.includes('counter') ? 1.09 : 1.0) * oFinMul, 0.88, 1.12));
-    const hU = (!neutral && isHome) ? 0.3 : 0.0;
-    const hO = (!neutral && !isHome) ? 0.3 : 0.0;
+    const homeMid = C.MATCH_HOME_MID !== undefined ? C.MATCH_HOME_MID : 0.3;
+    const homeShot = C.MATCH_HOME_SHOT !== undefined ? C.MATCH_HOME_SHOT : 0.0;
+    const hU = (!neutral && isHome) ? homeMid : 0.0;
+    const hO = (!neutral && !isHome) ? homeMid : 0.0;
     const nPerSide = 48; // 96 total lances rata-rata per laga
 
     function sideRates(att, def, attHomeBonus, attIsHome, convMul, defGkSaveMul) {
@@ -1405,8 +1421,8 @@
 
       const diffGk = def.GK - att.shooter;
       const dampGk = diffGk < 0 ? gapDamp(diffGk) : diffGk;
-      // #22476: tandang non-netral mendapat -0.1 (kandang +0.1, netral 0.0)
-      const sideHomeAdj = neutral ? 0.0 : (attIsHome ? 0.1 : -0.1);
+      // #3841 FX.homeShot = 0 & #51163 (_loop5): penalti/bonus kandang pada shot dihapus (0.0)
+      const sideHomeAdj = neutral ? 0.0 : (attIsHome ? homeShot : -homeShot);
       const gkF = Math.max(0.2, 1 + dampGk / 8 + sideHomeAdj) * defGkSaveMul;
       const missF = Math.max(0.2, 1 - dampGk / 8 + sideHomeAdj);
 

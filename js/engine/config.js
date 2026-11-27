@@ -398,6 +398,12 @@
   const SHOP_SIGNING_DAYS = 90;
   const SHOP_SIGNING_BONUS = 0.08;
   const SHOP_STAR_MAX = 0.30;
+  const SHOP_FANS_STADIUM_MIN = 0.85;
+  const SHOP_FANS_STADIUM_MAX = 1.15;
+
+  // Bytecode #3841 FX & #51163 (_loop5): Home MID & Home Shot bonus
+  const MATCH_HOME_MID = 0.3;
+  const MATCH_HOME_SHOT = 0;
 
   const MEMBER_ELAST = { lin: 0.9, up: 1.2, down: 0.8 };
   const MEMBER_PRICE_MIN = 0.5;
@@ -976,6 +982,10 @@
       SHOP_SIGNING_DAYS,
       SHOP_SIGNING_BONUS,
       SHOP_STAR_MAX,
+      SHOP_FANS_STADIUM_MIN,
+      SHOP_FANS_STADIUM_MAX,
+      MATCH_HOME_MID,
+      MATCH_HOME_SHOT,
       MEMBER_ELAST,
       MEMBER_PRICE_MIN,
       MEMBER_PRICE_MAX,

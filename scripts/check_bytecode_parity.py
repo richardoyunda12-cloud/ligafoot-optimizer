@@ -232,17 +232,92 @@ def deep_close(a, b):
     return a == b
 
 
+def find_dynamic_functions(lines):
+    """Temukan prefix fungsi di .hasm berdasarkan nama fungsi / string jangkar unik (kebal geser ID)."""
+    prefixes = {
+        "econ_mod": None,
+        "value_mod": None,
+        "mood_mod": None,
+        "match_mod": None,
+        "injury_tier": None,
+        "squad_moods": None,
+    }
+    i = 0
+    n = len(lines)
+    while i < n:
+        ln = lines[i]
+        if ln.startswith("=> ["):
+            hdr = ln
+            j = i + 1
+            while j < n and not lines[j].startswith("=> ["):
+                j += 1
+            fn_len = j - i
+            if ' "injuryTier" ' in hdr and prefixes["injury_tier"] is None:
+                prefixes["injury_tier"] = (i, j, hdr)
+            elif ' "squadMoods" ' in hdr and prefixes["squad_moods"] is None:
+                prefixes["squad_moods"] = (i, j, hdr)
+            else:
+                blk = "".join(lines[i:j])
+                if prefixes["econ_mod"] is None and "'INJURED_SALE'" in blk and "'PAYROLL_REF'" in blk:
+                    prefixes["econ_mod"] = (i, j, hdr)
+                elif prefixes["value_mod"] is None and fn_len < 300 and "'DEFAULT_VALUE_CONTEXT'" in blk and "'computeMarketValue'" in blk:
+                    prefixes["value_mod"] = (i, j, hdr)
+                elif prefixes["mood_mod"] is None and fn_len < 120 and "'UNHAPPY_GROWTH'" in blk:
+                    prefixes["mood_mod"] = (i, j, hdr)
+                elif prefixes["match_mod"] is None and "'wrongFoot'" in blk and "'orderFitMin'" in blk:
+                    prefixes["match_mod"] = (i, j, hdr)
+            i = j
+        else:
+            i += 1
+    return prefixes
+
+
+def extract_country_groups(lines, span):
+    if not span:
+        return []
+    s_i, e_i, _ = span
+    arrays = []
+    for k in range(s_i, e_i):
+        ln = lines[k]
+        if "NewArrayWithBuffer" in ln and "# Array:" in ln:
+            m = re.search(r"# Array:\s*(.+)$", ln)
+            if m:
+                try:
+                    arr = parse_js_literal(m.group(1))
+                    if isinstance(arr, list) and len(arr) >= 10 and all(isinstance(x, str) for x in arr):
+                        arrays.append(arr)
+                except Exception:
+                    pass
+    return arrays
+
+
 def run_checks(hasm_path):
     with open(hasm_path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
+    locs = find_dynamic_functions(lines)
     getters = index_small_getters(lines)
-    m3611, _ = parse_module_exports_and_slots(lines, "=> [Function #3611 ", getters)
-    m3659, s3659 = parse_module_exports_and_slots(lines, "=> [Function #3659 ", getters)
-    m3678, s3678 = parse_module_exports_and_slots(lines, "=> [Function #3678 ", getters)
-    m3640, _ = parse_module_exports_and_slots(lines, "=> [Function #3640 ", getters)
-    inj_nums = extract_function_consts(lines, "=> [Function #23498 ")
-    mood_nums = extract_function_consts(lines, "=> [Function #22134 ")
+
+    def parse_span(key):
+        sp = locs.get(key)
+        if not sp:
+            return {}, {}
+        pref = sp[2].split(" of ")[0]
+        return parse_module_exports_and_slots(lines, pref, getters)
+
+    def consts_span(key):
+        sp = locs.get(key)
+        if not sp:
+            return []
+        pref = sp[2].split(" of ")[0]
+        return extract_function_consts(lines, pref)
+
+    m_econ, _ = parse_span("econ_mod")
+    m_mood, s_mood = parse_span("mood_mod")
+    m_match, _ = parse_span("match_mod")
+    inj_nums = consts_span("injury_tier")
+    mood_nums = consts_span("squad_moods")
+    cg_arrays = extract_country_groups(lines, locs.get("value_mod"))
     js_cfg = dump_js_config()
 
     mismatches = []
@@ -251,8 +326,12 @@ def run_checks(hasm_path):
         if not deep_close(expected, actual):
             mismatches.append(f"{label}: hasm={expected!r} != js={actual!r}")
 
-    # 1. INJURED_SALE (#3611 & #23498)
-    hasm_inj = m3611.get("INJURED_SALE") or {}
+    for req_key in ("econ_mod", "value_mod", "mood_mod", "match_mod", "injury_tier", "squad_moods"):
+        if not locs.get(req_key):
+            mismatches.append(f"locate.{req_key}: tidak ditemukan di {os.path.basename(hasm_path)}")
+
+    # 1. INJURED_SALE
+    hasm_inj = m_econ.get("INJURED_SALE") or {}
     js_inj = js_cfg.get("INJURED_SALE") or {}
     if isinstance(hasm_inj, dict):
         chk("INJURED_SALE.minorFactor", hasm_inj.get("light"), js_inj.get("minorFactor"))
@@ -264,7 +343,7 @@ def run_checks(hasm_path):
         chk("INJURED_SALE.moderateMaxDays", inj_nums[1], js_inj.get("moderateMaxDays"))
         chk("INJURED_SALE.majorMaxDays", inj_nums[2], js_inj.get("majorMaxDays"))
 
-    # 2. Direct #3611 structured constants vs config.js
+    # 2. Direct economy structured constants vs config.js
     direct_keys = [
         "SELLER_STANCE",
         "BUY_PERSUADE",
@@ -286,10 +365,18 @@ def run_checks(hasm_path):
         "EURO_TOP_MIN_LEVEL",
         "PRECONTRACT_DAYS",
         "RIVAL_JUNIOR_STAR_FLOOR",
+        "SHOP_ELAST",
+        "SHOP_MEGA_DAYS",
+        "SHOP_MEGA_BONUS",
+        "SHOP_SIGNING_DAYS",
+        "SHOP_SIGNING_BONUS",
+        "SHOP_STAR_MAX",
+        "SHOP_FANS_STADIUM_MIN",
+        "SHOP_FANS_STADIUM_MAX",
     ]
     for k in direct_keys:
-        if k in m3611 and m3611[k] is not None:
-            hv = m3611[k]
+        if k in m_econ and m_econ[k] is not None:
+            hv = m_econ[k]
             jv = js_cfg.get(k)
             if isinstance(hv, dict) and isinstance(jv, dict):
                 for sk, sv in hv.items():
@@ -298,25 +385,25 @@ def run_checks(hasm_path):
             else:
                 chk(k, hv, jv)
 
-    # 3. LOAN_OPTION (#3611)
-    if isinstance(m3611.get("LOAN_OPTION"), dict):
-        hl = m3611["LOAN_OPTION"]
+    # 3. LOAN_OPTION
+    if isinstance(m_econ.get("LOAN_OPTION"), dict):
+        hl = m_econ["LOAN_OPTION"]
         jl = js_cfg.get("LOAN_OPTION") or {}
         for sk in ("minMul", "star", "near", "maxMul", "maxChance"):
             if sk in hl:
                 chk(f"LOAN_OPTION.{sk}", hl[sk], jl.get(sk))
 
-    # 4. COUNTRY_GROUPS (#3659 slots 0..5)
+    # 4. COUNTRY_GROUPS (6 grup di modul DEFAULT_VALUE_CONTEXT)
     js_cg = js_cfg.get("COUNTRY_GROUPS") or {}
-    cg_arrays = [v for v in s3659.values() if isinstance(v, list) and len(v) >= 10 and all(isinstance(x, str) for x in v)]
+    chk("COUNTRY_GROUPS.len", 6, len(cg_arrays))
     if len(cg_arrays) >= 6:
         for gi in range(6):
             chk(f"COUNTRY_GROUPS[{gi}]", sorted(cg_arrays[gi]), sorted(js_cg.get(str(gi)) or []))
 
-    # 5. UNHAPPY_GROWTH (#3678) & MOOD_CFG (#22134)
-    unhappy_g = m3678.get("UNHAPPY_GROWTH")
+    # 5. UNHAPPY_GROWTH & MOOD_CFG (squadMoods)
+    unhappy_g = m_mood.get("UNHAPPY_GROWTH")
     if unhappy_g is None:
-        for sv in s3678.values():
+        for sv in s_mood.values():
             if sv == 0.5:
                 unhappy_g = 0.5
     if unhappy_g is not None:
@@ -329,13 +416,17 @@ def run_checks(hasm_path):
         chk("MOOD_CFG.happySub", 0.35, jm.get("happySub"))
         chk("MOOD_CFG.happyRes", 0.15, jm.get("happyRes"))
 
-    # 6. AUCTION_CFG / SHOUT_DECAY
-    if isinstance(m3611.get("AUCTION_CFG"), dict):
-        chk("AUCTION_MAX_MUL", m3611["AUCTION_CFG"].get("maxPct"), js_cfg.get("AUCTION_MAX_MUL"))
-    if isinstance(m3640.get("SHOUT_DECAY"), list):
-        chk("SHOUT_DECAY", m3640["SHOUT_DECAY"], js_cfg.get("SHOUT_DECAY"))
+    # 6. AUCTION_CFG & Match FX (homeMid / homeShot)
+    if isinstance(m_econ.get("AUCTION_CFG"), dict):
+        chk("AUCTION_MAX_MUL", m_econ["AUCTION_CFG"].get("maxPct"), js_cfg.get("AUCTION_MAX_MUL"))
+    fx = m_match.get("FX")
+    if isinstance(fx, dict):
+        chk("MATCH_HOME_MID", fx.get("homeMid"), js_cfg.get("MATCH_HOME_MID"))
+        chk("MATCH_HOME_SHOT", fx.get("homeShot"), js_cfg.get("MATCH_HOME_SHOT"))
+        if isinstance(fx.get("shoutRepeat"), list):
+            chk("SHOUT_DECAY", fx["shoutRepeat"], js_cfg.get("SHOUT_DECAY"))
 
-    return mismatches, len(m3611)
+    return mismatches, len(m_econ)
 
 
 def main():
@@ -359,7 +450,7 @@ def main():
             print("  -", m)
         sys.exit(1)
 
-    print(f"  Bytecode parity OK: 100% cocok dengan {os.path.basename(args.hasm)} ({exported_cnt} konstanta #3611 dipindai).")
+    print(f"  Bytecode parity OK: 100% cocok dengan {os.path.basename(args.hasm)} ({exported_cnt} konstanta ekonomi dipindai, ID dinamis).")
 
 
 if __name__ == "__main__":

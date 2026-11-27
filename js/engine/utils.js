@@ -426,7 +426,7 @@
     const inTrain = Boolean(o.inTrain);
     const unhappy = o.unhappy !== undefined
       ? Boolean(o.unhappy)
-      : (pl.mood === 'unhappy' || Boolean(pl.roleSore));
+      : (pl.mood === 'unhappy' || Boolean(pl.roleSore) || Boolean(pl.raiseSore));
 
     let rate = 0.02;
     if (lv >= 19) rate = age < 20 ? 0.16 : (age <= 22 ? 0.12 : (age <= 28 ? 0.10 : 0.08));
