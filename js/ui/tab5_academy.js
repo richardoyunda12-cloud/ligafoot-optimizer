@@ -95,8 +95,6 @@ function renderTab5() {
     ${acadTh('age', 'Usia', 'col-hide-mob')}
     ${acadTh('force', 'Force')}
     ${acadTh('estPotCap', 'Est. PotCap')}
-    <th class="col-hide-mob">Plafon +</th>
-    <th class="col-hide-mob">Est. Mega Eropa</th>
     <th class="col-hide-mob">Skill Stack</th>
     ${acadTh('pipeScore', 'Skor', 'col-hide-mob')}
     <th class="col-desk-only">Aksi</th>
@@ -104,7 +102,7 @@ function renderTab5() {
     const devPct = Math.min(100, Math.max(0, Math.round(y.development || 0)));
     const devCol = devPct >= 90 ? 'var(--green)' : (devPct >= 60 ? 'var(--sky)' : 'var(--amber)');
     const actCls = y.action.includes('PROMO') ? 'b-good' : (y.action.includes('TAHAN') ? 'b-info' : 'b-muted');
-    const age20Badge = (y.age || 0) > 20 ? '<span class="badge b-crit">⚠ STALLED 21+</span>' : ((y.age || 0) === 20 ? '<span class="badge b-warn">🔥 PUNCAK 20th</span>' : '');
+    const age20Badge = (y.age || 0) > 20 ? '<span class="badge b-crit">⚠ STALLED 21+</span>' : ((y.age || 0) === 20 ? '<span class="badge b-warn">⏳ LAMBAT 20th</span>' : '');
     return `<tr>
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('youth','${escJs(y.id)}')"><b>${esc(y.name)}</b></a></div>
@@ -120,15 +118,13 @@ function renderTab5() {
       <td class="mono col-hide-mob ${y.age >= 20 ? 'c-amber' : ''}"><b>${y.age}</b></td>
       <td class="mono"><b>${y.force}</b></td>
       <td class="mono"><b class="c-green">${y.estPotCap || y.potCap || y.force}</b>${Array.isArray(y.estPotRange) ? `<div class="c-muted" style="font-size:10px">Est ${y.estPotRange[0]}–${y.estPotRange[1]}</div>` : ''}</td>
-      <td class="mono c-green col-hide-mob">${y.ceilBonus ? '+' + y.ceilBonus : '-'}</td>
-      <td class="mono col-hide-mob ${y.isMegaProspect ? 'c-green' : 'c-muted'}"><b>${fmtM(y.estMegaOffer || 0)}</b>${y.isMegaProspect ? ' 🔥' : ''}</td>
       <td class="col-hide-mob"><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></td>
       <td class="mono col-hide-mob"><b>${y.pipeScore}</b></td>
       <td class="col-desk-only"><span class="badge ${actCls}">${esc(y.action)}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="12" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="10" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
 
-  // Panel Baru v8.3: Radar Olheiro da Base (#23984 — Bajak U-21 Rival 2.0x MV, Kuota 2/Musim)
+  // Panel Olheiro da Base Rival Junior (#25334–#25338)
   let ysBox = document.getElementById('t5-yscout-box');
   if (!ysBox) {
     const tblWrap = document.getElementById('t5-tbl') && document.getElementById('t5-tbl').parentNode;
@@ -140,34 +136,49 @@ function renderTab5() {
     }
   }
   if (ysBox) {
-    const rawYs = D.youthScoutTargets || [];
-    const ysLocAll = rawYs.filter(x => x.isLocal);
-    const ysFrgAll = rawYs.filter(x => !x.isLocal);
+    const rawRival = (D.rivalYouthTargets && D.rivalYouthTargets.length) ? D.rivalYouthTargets : (D.youthScoutTargets || []);
+    const isRivalAcad = Boolean(D.rivalYouthTargets && D.rivalYouthTargets.length);
+    const ysLocAll = rawRival.filter(x => x.isLocal);
+    const ysFrgAll = rawRival.filter(x => !x.isLocal);
     const ysActive = (yScoutTab === 'FOREIGN' ? ysFrgAll : ysLocAll).slice(0, 10);
     const debtRoom = Number((D.meta && D.meta.transferDebtRoom) || 0);
     const isBanned = Boolean(D.meta && D.meta.transferBanned);
     const instBadge = isBanned
       ? `<span class="badge b-crit">⛔ Transfer Ban (Wajib Tunai)</span>`
-      : `<span class="badge b-info mono" title="Bajak junior rival kini bisa dicicil (DP 25% + sisa plafon cicilan klub)">💳 Bisa Cicil DP 25% · Plafon ${fmtM(debtRoom)}</span>`;
+      : `<span class="badge b-info mono" title="Bajak junior rival bisa dicicil DP 25% + 6/12/24 bln">💳 Bisa Cicil DP 25% · Plafon ${fmtM(debtRoom)}</span>`;
     const renderYsRows = (arr) => arr.length ? arr.map(t => {
-      const dp25 = Math.round((t.scoutPrice || 0) * 0.25);
+      const priceVal = t.price || t.scoutPrice || 0;
+      const dp25 = t.dp25 || Math.round(priceVal * 0.25);
+      const nameHtml = isRivalAcad
+        ? `<b>${esc(t.name)}</b>`
+        : `<a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>`;
+      const extraCol = isRivalAcad
+        ? `<td class="mono c-sky col-hide-mob"><b>${t.development || 50}%</b></td>`
+        : `<td class="mono c-sky col-hide-mob"><b>+${t.youthScoutGap}</b></td>`;
       return `<tr>
-      <td><a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a></td>
+      <td>${nameHtml}</td>
       <td class="mono"><b>${fmtPos(t.pos)}</b> · ${t.age}th · ${fmtFoot(t.foot)}</td>
       <td class="mono"><b>${t.force}</b>→<b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
-      <td class="mono c-sky col-hide-mob"><b>+${t.youthScoutGap}</b></td>
+      ${extraCol}
       <td class="col-hide-mob"><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
-      <td class="mono"><b class="c-amber">${fmtM(t.scoutPrice)}</b><div class="c-sky" style="font-size:10.5px">DP 25%: ${fmtM(dp25)}</div></td>
+      <td class="mono"><b class="c-amber">${fmtM(priceVal)}</b><div class="c-sky" style="font-size:10.5px">DP 25%: ${fmtM(dp25)}</div></td>
       <td class="col-hide-mob">${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
     </tr>`;
     }).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat.</td></tr>';
 
-    ysBox.innerHTML = rawYs.length ? `
+    const hdrTitle = isRivalAcad
+      ? '🎓 Radar Olheiro da Base — Bajak Akademi Junior Rival (#25335)'
+      : '🎓 Radar Prospek U-21 Rival (#25091)';
+    const hdrSub = isRivalAcad
+      ? `Pemain akademi <code>youthPlayers</code> klub rival ★≥6 (harga 3.5x–8.0x MV + floor divisi/bintang; bisa DP 25% + cicilan 6/12/24 bln; tanpa kuota musim &amp; tanpa diskon CT). ${instBadge}`
+      : `Pemain senior U-21 klub AI dengan margin tumbuh ≥10 (valuasi Olheiro ~2.0x MV; bisa tunai/cicil DP 25%). ${instBadge}`;
+
+    ysBox.innerHTML = rawRival.length ? `
       <div style="border-top:1px solid var(--border);padding-top:12px">
         <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
           <div>
-            <h3 style="margin:0">🎓 Radar Olheiro da Base — Bajak U-21 Rival</h3>
-            <div class="kpi-sub">Pemain U-21 klub AI dengan margin tumbuh ≥10 (kuota maks 2/musim; biaya scout -25% di CT Lv 3+; bisa tunai atau cicilan DP 25%). ${instBadge}</div>
+            <h3 style="margin:0">${hdrTitle}</h3>
+            <div class="kpi-sub">${hdrSub}</div>
           </div>
           <div class="quick-chips-bar" style="margin:0">
             <button type="button" class="qchip ${yScoutTab === 'LOCAL' ? 'active' : ''}" onclick="setYScoutTab('LOCAL')">🇮🇩 Lokal (${ysLocAll.length})</button>
@@ -175,7 +186,7 @@ function renderTab5() {
           </div>
         </div>
         <div class="tbl-wrap tbl-sticky"><table>
-          <thead><tr><th>Target U-21</th><th>Pos / Usia</th><th>F → PotCap</th><th class="col-hide-mob">Gap</th><th class="col-hide-mob">Skill Stack</th><th>Harga / DP 25%</th><th class="col-hide-mob">Klub Asal</th></tr></thead>
+          <thead><tr><th>Target Junior</th><th>Pos / Usia</th><th>F → PotCap</th><th class="col-hide-mob">${isRivalAcad ? 'Dev' : 'Gap'}</th><th class="col-hide-mob">Skill Stack</th><th>Harga / DP 25%</th><th class="col-hide-mob">Klub Asal</th></tr></thead>
           <tbody>${renderYsRows(ysActive)}</tbody>
         </table></div>
       </div>` : '';

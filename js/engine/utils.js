@@ -130,14 +130,14 @@
     return payrollRef(country, division, repLvl);
   }
 
-  // Bytecode #21513 countryGroup
+  // Bytecode #21513/#21904 countryGroup (6 grup resmi 0..5, default -1 jika tidak ditemukan)
   function countryGroup(code) {
-    const c = String(code || '').toUpperCase();
+    const c = String(code || '').trim().toUpperCase();
     const groups = C.COUNTRY_GROUPS || {};
     for (const [gId, list] of Object.entries(groups)) {
       if (Array.isArray(list) && list.includes(c)) return Number(gId);
     }
-    return 5;
+    return -1;
   }
 
   // Bytecode #21515 sameCountry (UK_CODES diperlakukan satu negara)
@@ -150,12 +150,15 @@
     return uk.includes(ca) && uk.includes(cb);
   }
 
-  // Bytecode #21517 hasAffinity
+  // Bytecode #21517 / #24936 hasAffinity (satu negara, satu COUNTRY_GROUP >= 0, atau AFFINITY_CLUSTERS)
   function hasAffinity(a, b) {
     const ca = String(a || '').toUpperCase();
     const cb = String(b || '').toUpperCase();
     if (!ca || !cb) return false;
     if (sameCountry(ca, cb)) return true;
+    const ga = countryGroup(ca);
+    const gb = countryGroup(cb);
+    if (ga >= 0 && ga === gb) return true;
     for (const cl of (C.AFFINITY_CLUSTERS || [])) {
       if (cl.includes(ca) && cl.includes(cb)) return true;
     }
@@ -221,15 +224,15 @@
     return Math.min(1.0, S.cutBase * factor);
   }
 
-  // Bytecode #20971 & #20972 injuryTier & injurySaleFactor (#3724 L806140)
-  // <=10d: minor (0.70), <=30d: moderate (0.55), <=60d: major (0.40), >60d: severe (0.25)
+  // Bytecode #23498 / #20971 & #20972 injuryTier & injurySaleFactor (OTA 2.1.0)
+  // <=10d: minor (0.70), <=28d: moderate (0.55), <=70d: major (0.40), >70d: severe (0.25)
   function injuryTier(days) {
     const d = safeInt(days, 0);
     if (d <= 0) return 'none';
-    const cfg = C.INJURED_SALE || { minorMaxDays: 10, moderateMaxDays: 30, majorMaxDays: 60 };
+    const cfg = C.INJURED_SALE || { minorMaxDays: 10, moderateMaxDays: 28, majorMaxDays: 70 };
     if (d <= (cfg.minorMaxDays || 10)) return 'minor';
-    if (d <= (cfg.moderateMaxDays || 30)) return 'moderate';
-    if (d <= (cfg.majorMaxDays || 60)) return 'major';
+    if (d <= (cfg.moderateMaxDays || 28)) return 'moderate';
+    if (d <= (cfg.majorMaxDays || 70)) return 'major';
     return 'severe';
   }
 
@@ -446,24 +449,107 @@
       else if (hashVal >= 7) rate += 0.02;
     }
 
-    if (pl.top) rate += 0.02;
+    if (pl.top) rate += 0.03;
     else if (pl.star) rate += 0.01;
 
     const c = String(o.country || '').toUpperCase();
-    if (['EN', 'GB', 'ES', 'IT', 'DE', 'FR'].includes(c)) {
-      rate += 0.01;
-    } else if (['PT', 'NL', 'BE'].includes(c)) {
-      if (rate > 0.06) rate -= 0.01;
-    } else if (!['BR', 'AR', 'MX'].includes(c)) {
+    const cg = countryGroup(c);
+    if (cg === 0) {
+      if (['EN', 'GB', 'ES', 'IT', 'DE', 'FR'].includes(c)) rate += 0.01;
+      else if (['PT', 'NL', 'BE'].includes(c)) {
+        if (rate > 0.06) rate -= 0.01;
+      } else if (rate > 0.06) rate -= 0.02;
+    } else if (cg === 1 || cg === 2 || cg === 3) {
+      if (rate > 0.06) rate -= 0.02;
+    } else if (cg === 4) {
+      if (c !== 'MX' && rate > 0.06) rate -= 0.03;
+    } else if (cg === 5) {
+      if (rate > 0.06) rate -= 0.04;
+    } else if (c && !['MX'].includes(c)) {
       if (rate > 0.06) rate -= 0.02;
     }
 
     if (ct >= 4) rate += 0.01;
     if (ct >= 2 && age <= 23) rate += 0.015;
     if (inTrain) rate += 0.015 + (ct - 1) * 0.0015;
-    if (unhappy) rate *= 0.4;
+    if (unhappy) rate *= (C.UNHAPPY_GROWTH || 0.5);
 
     return roundTo(Math.max(0.01, rate), 4);
+  }
+
+  function interpTable(tbl, x, fallback = 1.0) {
+    if (!Array.isArray(tbl) || !tbl.length) return fallback;
+    if (x <= tbl[0][0]) return tbl[0][1];
+    for (let i = 1; i < tbl.length; i++) {
+      const [x0, y0] = tbl[i - 1];
+      const [x1, y1] = tbl[i];
+      if (x <= x1) {
+        const t = x1 === x0 ? 0 : (x - x0) / (x1 - x0);
+        return y0 + (y1 - y0) * t;
+      }
+    }
+    return tbl[tbl.length - 1][1];
+  }
+
+  // Bytecode #21911 computeMarketValue (formula kuadratik 4 * force^2 * K_adj * lowLevelMul)
+  function computeMarketValue(p, clubCtx = {}) {
+    const pl = (p && typeof p === 'object') ? p : {};
+    const ctx = (clubCtx && typeof clubCtx === 'object') ? clubCtx : {};
+    const f = Math.max(1, Math.round(safeNum(pl.force, 20)));
+    const pot = Math.max(f, safeNum(pl.potCap !== undefined ? pl.potCap : pl.potential, f));
+    const age = Math.max(16, safeInt(pl.age, 22));
+    const lv = clamp(safeInt(ctx.level !== undefined ? ctx.level : pl.clubLevel, 15), 1, 25);
+    const cgClub = countryGroup(ctx.country || pl.clubCountry || '');
+    const cgNat = countryGroup(pl.nationality || '');
+    const isStar = Boolean(pl.star || pl.starAwarded);
+
+    const kRows = C.VALUE_K_BY_LEVEL || [[21, 750], [20, 600], [18, 500], [12, 400], [0, 366]];
+    const foundK = kRows.find(row => lv >= row[0]);
+    let k = foundK ? foundK[1] : kRows[kRows.length - 1][1];
+
+    const craque = C.VALUE_CRAQUE_MUL || { europeElite: 3, europeBig: 2, default: 1.7 };
+    if (isStar) {
+      if (cgNat === 0 && lv >= 22) k = k * (craque.europeElite || 3);
+      else if (cgNat === 0 && lv >= 21) k = k * (craque.europeBig || 2);
+      else k = Math.round(k * (craque.default || 1.7));
+    } else if (pl.top) {
+      k = Math.round(k * (C.VALUE_WORLDTOP_MUL || 1.6));
+    }
+
+    const pos = String(pl.pos || pl.position || '').toUpperCase();
+    if (['ATA', 'PD', 'PE', 'SA', 'ST', 'SS', 'RW', 'LW'].includes(pos)) {
+      k = Math.round(k * (C.VALUE_ATTACKER_MUL || 1.3));
+    }
+    if (!pl.isYouth && (pl.highlight === true || pl.status === 1)) {
+      k = Math.round(k * (C.VALUE_HIGHLIGHT_MUL || 1.2));
+    }
+
+    const ageTerms = C.VALUE_AGE_TERMS || [[19, 32, 27], [25, 32, 22], [31, 32, 15], [33, 34, 10]];
+    const foundAge = ageTerms.find(r => age <= r[0]);
+    const ageAdj = foundAge ? (foundAge[1] - age) * foundAge[2] : -(age - 34) * (C.VALUE_AGE_OLD_CUT || 50);
+    k = Math.max(C.VALUE_K_MIN || 60, k + ageAdj);
+
+    const lowMul = interpTable(C.VALUE_LOW_LEVEL_MUL || [[0, 0.08], [12, 1]], lv, 1.0);
+    const base = 4 * f * f * k * lowMul;
+
+    const oldRows = C.VALUE_OLD_MUL || [];
+    const foundOld = oldRows.find(r => age >= r[0]);
+    let ageMul = 1.0;
+    if (foundOld) {
+      ageMul = foundOld[1];
+    } else {
+      const yb = C.VALUE_YOUNG_BONUS || { perPoint: 0.018, max: 0.4, weights: [[19, 1], [21, 0.8], [23, 0.55], [25, 0.3]] };
+      const wRow = (yb.weights || []).find(r => age <= r[0]);
+      if (wRow) {
+        const bonus = Math.min(yb.max || 0.4, Math.max(0, pot - f) * (yb.perPoint || 0.018) * wRow[1]);
+        ageMul = 1 + bonus;
+      }
+    }
+    const euroBonus = (ctx.europeTop5 && lv >= (C.EURO_TOP_MIN_LEVEL || 21) && !pl.isYouth && (isStar || pl.top))
+      ? (C.EURO_TOP_BONUS || 1.4)
+      : 1.0;
+    const clubCountryFactor = (cgClub >= 0 && cgClub !== 0 && lv >= 12) ? 1.0 : 1.0;
+    return Math.max(50000, Math.round(base * ageMul * euroBonus * clubCountryFactor));
   }
 
   function calcGrowthProjection(p, opts = {}) {
@@ -850,6 +936,7 @@
     daysBetweenIso,
     estimateWeeklyGrowthRate,
     calcGrowthProjection,
+    computeMarketValue,
     estimateDivisionFromLeague,
     normalizeTicketMul,
     formatMatchDay,

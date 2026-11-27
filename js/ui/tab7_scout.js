@@ -331,7 +331,8 @@ function findBestReplacement(r, cm) {
 
     if (!best || replaceScore > best.replaceScore) {
       const repSale = p.injured ? 0 : p.estRealSale;
-      const sal3y = Math.round(r[12] * 0.95);
+      const salMul = String(r[18] || '').includes('CEIL_2X') ? 2.0 : 1.0;
+      const sal3y = Math.round(r[12] * salMul * 0.95);
       const reasons = [];
       if (matchKind === 'CAT' && D.holePositions.includes(tPos)) reasons.push(`Tambal lubang ${fmtPos(tPos)}`);
       if (pWrongFoot && (!prefFoot || tFoot === prefFoot)) reasons.push('Hapus penalti salah kaki -5%');
@@ -359,7 +360,7 @@ function enrichScoutRow(r, cm) {
   const flags = r[18] || '';
   const isBosman = isBosmanTarget(r);
   const estBuy = r[14];
-  const sal3y = Math.round(r[12] * 0.95);
+  const sal3y = Math.round(r[12] * (flags.includes('CEIL_2X') ? 2.0 : 1.0) * 0.95);
   const estResale = r[21] || Math.round(r[13] * 1.25);
   const projGain = r[22] || 0;
   const estProfit = estResale - estBuy;

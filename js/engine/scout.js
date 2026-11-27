@@ -463,10 +463,31 @@
     const holesSet = new Set(holePositions || []);
     const candidates = [];
     const youthScoutCandidates = [];
+    const rivalYouthTargets = [];
     let aiUnhappyTotal = 0;
     let aiBosmanTotal = 0;
 
-    function scoreTarget(p, isFree = false, isUnhappy = false, isScarce = false, clubCashCrisis = false, pol = null, persuadable = false, isReachableBosman = false) {
+    // #25603: Hitung sisa hari ke akhir musim dari jadwal liga / seasonEnd / seasonStartDate (+345 hari)
+    const curDateStr = String(save.currentDate || '2026-01-01').slice(0, 10);
+    let seasonEndIso = String((save.world && save.world.seasonEnd) || save.seasonEnd || '').slice(0, 10);
+    if (!seasonEndIso && Array.isArray(save.leagueSchedule) && save.leagueSchedule.length) {
+      let maxD = '';
+      for (const m of save.leagueSchedule) {
+        const md = String((m && (m.date || m.d)) || '').slice(0, 10);
+        if (md > maxD) maxD = md;
+      }
+      if (maxD) seasonEndIso = maxD;
+    }
+    if (!seasonEndIso && save.seasonStartDate) {
+      const baseMs = Date.parse(String(save.seasonStartDate).slice(0, 10) + 'T12:00:00Z');
+      if (Number.isFinite(baseMs)) seasonEndIso = new Date(baseMs + 345 * 86400000).toISOString().slice(0, 10);
+    }
+    const daysToSeasonEnd = seasonEndIso ? U.daysBetweenIso(curDateStr, seasonEndIso) : 999;
+
+    const divFloorTbl = C.RIVAL_JUNIOR_DIV_FLOOR || [50000, 300000, 200000, 120000, 80000, 50000];
+    const starFloorTbl = C.RIVAL_JUNIOR_STAR_FLOOR || { 8: 600000, 9: 1500000, 10: 3000000 };
+
+    function scoreTarget(p, isFree = false, isUnhappy = false, isScarce = false, clubCashCrisis = false, pol = null, persuadable = false, isReachableBosman = false, sellerClubCtx = null, stance = null) {
       const gap = Math.max(0, p.potCap - p.force);
       let flip = 0.0;
       if (p.cat === 4) flip += 18.0;
@@ -494,25 +515,14 @@
 
       let estBuy = isFree ? 0 : p.marketValue;
       if (!isFree) {
-        let mul = 1.0;
+        let mul = (stance && stance.mult) ? stance.mult : ((pol && pol.mult) ? pol.mult : 1.0);
         if (isUnhappy) mul *= 0.85;
-        if (clubCashCrisis) mul *= 0.88;
-        if (p.contractDays <= C.PRECONTRACT_DAYS) mul *= 0.92;
-        if (p.forSale) mul *= 0.90;
-        if (isScarce) mul *= 1.15;
         if (p.injured && p.injurySaleMul < 1.0) mul *= p.injurySaleMul;
-        if (persuadable) {
-          mul = Math.max(mul, 1.50);
-        } else if (pol && pol.status === 'OK' && pol.ceilMult > 1.0) {
-          mul *= pol.ceilMult;
-        }
+        if (persuadable) mul = Math.max(mul, 1.50);
         estBuy = Math.round(p.marketValue * mul);
+        if (stance && stance.buyout && stance.buyout > estBuy) estBuy = stance.buyout;
       }
 
-      let baseMv = p.marketValue;
-      if (baseMv <= 0) {
-        baseMv = Math.max(100000, Math.round(45000 * Math.pow(1.115, Math.max(1, p.force - 15))));
-      }
       let projGain = 0;
       if (p.age <= 19) projGain = Math.min(gap, 7);
       else if (p.age <= 21) projGain = Math.min(gap, 5);
@@ -520,8 +530,15 @@
       else if (p.age <= 26) projGain = Math.min(gap, 1);
 
       const futAge = p.age + (projGain >= 4 ? 2 : 1);
-      const ageResaleMul = futAge >= p.declineAge ? 0.76 : ((p.age <= 21 && gap >= 5) ? 1.12 : 1.00);
-      const estResale = Math.round(baseMv * Math.pow(1.11, projGain) * ageResaleMul * C.COUNTER_AVG_REALIZED);
+      // #21911: Estimasi resale memakai formula kuadratik resmi computeMarketValue
+      const futClubCtx = sellerClubCtx || { level: userLevel, country: userCountry, europeTop5: U.countryGroup(userCountry) === 0 && userLevel >= 21 };
+      const futMvNow = U.computeMarketValue({ ...p, isYouth: false }, futClubCtx);
+      const futMvGain = U.computeMarketValue({ ...p, force: p.force + projGain, age: futAge, isYouth: false }, futClubCtx);
+      const scaleAnchor = (p.marketValue > 0 && futMvNow > 0) ? (futMvGain / futMvNow) : 1.0;
+      const baseResaleMv = (p.marketValue > 0 && projGain > 0)
+        ? Math.round(Math.max(futMvGain, p.marketValue * scaleAnchor))
+        : (p.marketValue > 0 ? p.marketValue : futMvGain);
+      const estResale = Math.round(baseResaleMv * C.COUNTER_AVG_REALIZED);
       const rel = flip
         + (p.force - userAvgForce) * 1.3
         + (p.nationality === userCountry ? 10.0 : 0.0)
@@ -532,6 +549,7 @@
         estBuy,
         estResale,
         projGain,
+        salaryMul: (pol && pol.salaryMul) || 1.0,
         rel: U.roundTo(rel, 1),
       };
     }
@@ -562,18 +580,34 @@
       candidates.push({ rel: sc.rel, p, flip: sc.flip, estBuy: sc.estBuy, estResale: sc.estResale, projGain: sc.projGain, flags, clubCountry: '', releaseClause: 0 });
     }
 
+    const buyerClubCtx = { level: userLevel, division: userDiv, country: userCountry };
+    const ownBId = String(uTeam.bTeamId || save.bTeamId || `userb-${userId}`);
+
     // 2. AI Clubs
     for (const [cid, cobj] of Object.entries(compactTeams)) {
-      if (cid === userId || !cobj || typeof cobj !== 'object') continue;
+      if (cid === userId || cid === ownBId || !cobj || typeof cobj !== 'object') continue;
       const cm = U.getStaticClub(clubsMeta, cid);
       const cname = cm.name || cobj.name || cid;
       const ccountry = String(cm.country || cobj.country || '').toUpperCase();
       const cDiv = U.estimateDivisionFromLeague(cobj.league || '', worldComps);
       const sellerLevel = U.teamLevelOf(cobj, cDiv, cm.level);
+      const sellerRep = U.safeNum(cobj.reputation, cm.rep || 50);
       const cashCrisis = U.safeNum(cobj.budget, 1000000) < 0;
 
-      const { roster: cRoster } = R.extractTeamRoster(cobj, staticPlayers, false, cid, cname, ccountry);
-      if (!cRoster.length) continue;
+      const { roster: cRoster, youth: cYouth } = R.extractTeamRoster(cobj, staticPlayers, false, cid, cname, ccountry);
+      if (!cRoster.length && !cYouth.length) continue;
+
+      const sellerClubCtx = {
+        id: cid,
+        level: sellerLevel,
+        division: cDiv,
+        country: ccountry,
+        budget: cobj.budget,
+        captain: cobj.captain || '',
+        players: cRoster,
+        bPlayers: [],
+        europeTop5: U.countryGroup(ccountry) === 0 && sellerLevel >= 21,
+      };
 
       const posStock = {};
       for (const p of cRoster) {
@@ -590,18 +624,37 @@
         const pRankInClub = cRankMap.get(p.id) || 99;
         if (isUnh) aiUnhappyTotal++;
 
-        const pExtra = { ...userExtra, rankInClub: pRankInClub, isUnhappy: isUnh };
+        const pExtra = {
+          ...userExtra,
+          rankInClub: pRankInClub,
+          isUnhappy: isUnh,
+          sellerRep,
+          sellerDiv: cDiv,
+        };
         const pol = T.userBuyPolicy(
           p, ccountry, userCountry, sellerLevel, userLevel,
-          userRep, userDiv, null, posStock[p.pos] || 1, false, pExtra
+          userRep, userDiv, cRoster, posStock[p.pos] || 1, false, pExtra
         );
         const persuadable = (pol.status === 'REFUSE')
           ? T.buyPersuadable(p, ccountry, userCountry, sellerLevel, userLevel, pol, pExtra)
           : false;
         const isReachable = (pol.status === 'OK') || persuadable;
+        const stance = typeof T.sellerStance === 'function' ? T.sellerStance(p, sellerClubCtx, buyerClubCtx) : null;
 
-        // Bosman Pre-Contract (#24136 & #24715): AI selalu memperpanjang otomatis pemain (top || star || rank<=3) yang mood !== 'unhappy'!
-        const inBosmanWindow = (p.contractDays > 0 && p.contractDays <= C.PRECONTRACT_DAYS && !p.loanedFrom);
+        // #25603 preContractInfo: endOfSeason window <= 180 hari (atau hash%3===0 saat mendekati akhir musim) & keyLock (top/star/keyTop)
+        const idSum = String(p.id || '').split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+        const endsThisSeason = Boolean(
+          p.contractDays > 0 && (
+            p.contractDays <= Math.max(daysToSeasonEnd, C.PRECONTRACT_DAYS)
+            || ((idSum + U.safeInt(save.season, 1)) % 3 === 0 && p.contractDays <= 365)
+          )
+        );
+        const inBosmanWindow = Boolean(
+          p.contractDays > 0
+          && (daysToSeasonEnd <= C.PRECONTRACT_DAYS || p.contractDays <= C.PRECONTRACT_DAYS)
+          && endsThisSeason
+          && !p.loanedFrom
+        );
         const isKeyLocked = Boolean(
           inBosmanWindow
           && !isUnh
@@ -610,7 +663,7 @@
         const isBosman = Boolean(inBosmanWindow && !isKeyLocked && isReachable);
         if (isBosman) aiBosmanTotal++;
 
-        // Youth Scout Olheiro da Base (#23984): U-21, gap >= 10, reachable, 1.5x MV
+        // Youth Scout U-21 (#25091): pemain U-21 dengan margin >= 10
         if (p.youthScoutEligible && isReachable) {
           youthScoutCandidates.push({
             id: p.id,
@@ -639,7 +692,7 @@
 
         const localFlag = Boolean(userCountry && p.nationality === userCountry);
 
-        const sc = scoreTarget(p, false, isUnh, isScarce, cashCrisis, pol, persuadable, isBosman);
+        const sc = scoreTarget(p, false, isUnh, isScarce, cashCrisis, pol, persuadable, isBosman, sellerClubCtx, stance);
         const flags = [];
         if (isUnh) flags.push('UNH');
         if (isBosman) flags.push('BOSMAN');
@@ -665,7 +718,6 @@
         }
 
         const paidObj = p.paidIn;
-        const curDateStr = String(save.currentDate || '').slice(0, 10);
         const paidFloor = (paidObj && String(paidObj.teamId || '') === String(cid) && (!paidObj.until || !curDateStr || curDateStr <= String(paidObj.until).slice(0, 10)))
           ? Math.round(U.safeNum(paidObj.price, 0))
           : 0;
@@ -683,6 +735,41 @@
           clubCountry: ccountry,
           releaseClause: rcInfo.amount,
         });
+      }
+
+      // #25334–#25338 Olheiro da Base Rival Junior: pindai youthPlayers milik klub AI non-timnas
+      if (!cobj.isNational && cYouth.length) {
+        const dIdx = U.clamp(U.safeInt(cDiv, 1), 0, divFloorTbl.length - 1);
+        const divFloor = divFloorTbl[dIdx] || 50000;
+        for (const y of cYouth) {
+          if (!y || y.hash < 6) continue;
+          const stFloor = starFloorTbl[y.hash] || 0;
+          const baseMv = y.marketValue > 0 ? y.marketValue : U.computeMarketValue({ ...y, isYouth: true }, sellerClubCtx);
+          const rivalPrice = Math.round(Math.max(divFloor, stFloor, baseMv * (3 + y.hash / 2)) / 10000) * 10000;
+          rivalYouthTargets.push({
+            id: y.id,
+            name: y.name,
+            pos: y.pos,
+            age: y.age,
+            foot: y.foot,
+            nationality: y.nationality,
+            force: y.force,
+            potCap: y.estPotCap || y.potCap || y.force,
+            potRange: y.estPotRange || null,
+            development: y.development || 50,
+            hash: y.hash,
+            s1: y.s1,
+            s2: y.s2,
+            stackPct: y.stackPct,
+            marketValue: baseMv,
+            price: rivalPrice,
+            dp25: Math.round(rivalPrice * 0.25),
+            teamId: cid,
+            teamName: cname,
+            teamCountry: ccountry,
+            isLocal: Boolean(userCountry && y.nationality === userCountry),
+          });
+        }
       }
     }
 
@@ -710,9 +797,14 @@
     const ysLocal = youthScoutCandidates.filter(x => x.isLocal).slice(0, 30);
     const ysForeign = youthScoutCandidates.filter(x => !x.isLocal).slice(0, 30);
 
+    rivalYouthTargets.sort((a, b) => (b.hash - a.hash) || (b.potCap - a.potCap) || (a.price - b.price));
+    const ryLocal = rivalYouthTargets.filter(x => x.isLocal).slice(0, 30);
+    const ryForeign = rivalYouthTargets.filter(x => !x.isLocal).slice(0, 30);
+
     return {
       scoutPool: selected,
       youthScoutTargets: ysLocal.concat(ysForeign),
+      rivalYouthTargets: ryLocal.concat(ryForeign),
       aiUnhappyTotal,
       aiBosmanTotal,
     };

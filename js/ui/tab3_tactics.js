@@ -205,7 +205,7 @@ function renderMoodTable() {
           <div class="kpi-sub">0% risiko unhappy</div>
         </div>
       </div>
-      <div class="c-muted" style="font-size:11px">Kuota bytecode #21465 (aktif setelah ≥6 laga): <b>40%</b> Top-11 (1 GK + 10 Outfield) / <code>role=starter</code> · <b>25%</b> <code>role=rotation</code> · <b>8%</b> Cadangan #12–#18 (&gt;19th) / <code>role=youth</code>. Usia ≤19th (auto) &amp; <code>reserve</code> kebal 0%!</div>`;
+      <div class="c-muted" style="font-size:11px">Kuota bytecode #22134 (aktif setelah ≥6 laga): <b>25%</b> Natural Top-11 <code>auto</code> (1 GK + 10 Outfield, &gt;19th) · <b>40%</b> hanya bila <code>role=starter</code> / <code>roleSore</code> · <b>8%</b> <code>rotation</code> / Cadangan #12–#18 (&gt;19th). Status <b class="c-green">HAPPY</b> bila ≥60% (Top-11) / ≥35% (Sub) / ≥15% (Res). Usia ≤19th (auto) &amp; <code>reserve</code> kebal 0%!</div>`;
   }
 
   const sumHdr = document.getElementById('t3-mood-sum-hdr');
@@ -230,7 +230,7 @@ function renderMoodTable() {
   if (tbl) {
     tbl.innerHTML = `<thead><tr><th>Pemain &amp; Mood</th><th>Saran Aksi v9</th><th>Kuota Menit</th><th class="col-hide-mob">Target &amp; Defisit</th><th class="col-hide-mob">Role v9</th><th class="col-hide-mob">Pos</th></tr></thead><tbody>` +
       mRows.map(p => {
-        const mCls = p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'warn' ? 'b-warn' : 'b-info');
+        const mCls = p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'happy' ? 'b-good' : ((p.nearQuota || p.mood === 'warn') ? 'b-warn' : 'b-info'));
         const adv = getMoodActionAdvice(p);
         const defTxt = (!p.moodImmune && p.minsDeficit > 0)
           ? `<div class="c-amber" style="font-size:10px">-${p.minsDeficit}m (~${p.gamesDeficit} lg)</div>`

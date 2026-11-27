@@ -266,6 +266,10 @@
       const minRatio = effGames > 0 ? (minsNow / (effGames * 90.0)) : 1.0;
 
       const roleSore = Boolean(p.roleSore);
+      const mc = C.MOOD_CFG || {};
+      const natStarterQuota = mc.starterQuota !== undefined ? mc.starterQuota : 0.25;
+      const expStarterQuota = mc.explicitStarterQuota !== undefined ? mc.explicitStarterQuota : 0.40;
+      const youngQuota = mc.youngQuota !== undefined ? mc.youngQuota : 0.08;
       let reqRatio = 0.0;
       let immune = false;
       let reason = 'Aman';
@@ -274,10 +278,10 @@
         immune = true;
         reason = p.injured ? 'Cedera (kebal sementara)' : 'Skorsing';
       } else if (roleSore) {
-        reqRatio = 0.40;
+        reqRatio = expStarterQuota;
         reason = 'Menolak turun role (roleSore, wajib 40% menit)';
       } else if (role === 'starter') {
-        reqRatio = 0.40;
+        reqRatio = expStarterQuota;
       } else if (role === 'reserve') {
         immune = true;
         reqRatio = 0.0;
@@ -285,18 +289,18 @@
       } else if (role === 'rotation') {
         const rotTier = Math.min(tier, 1);
         if (rotTier >= 1) {
-          reqRatio = 0.08;
+          reqRatio = youngQuota;
         } else {
           immune = true;
           reqRatio = 0.0;
           reason = 'Role Rotation (Kebal Unhappy)';
         }
       } else if (role === 'youth') {
-        reqRatio = (p.age || 20) <= 19 ? 0.0 : (Math.min(tier, 1) >= 1 ? 0.08 : 0.0);
+        reqRatio = (p.age || 20) <= 19 ? 0.0 : (Math.min(tier, 1) >= 1 ? youngQuota : 0.0);
         if (reqRatio === 0.0) immune = true;
       } else {
-        if (tier === 2) reqRatio = 0.40;
-        else if (tier === 1) reqRatio = 0.08;
+        if (tier === 2) reqRatio = natStarterQuota;
+        else if (tier === 1) reqRatio = youngQuota;
         else {
           reqRatio = 0.0;
           immune = true;
@@ -308,17 +312,26 @@
       const gamesDeficit = Math.ceil(minsDeficit / 90.0);
 
       let mood = 'ok';
+      let nearQuota = false;
       if (!immune && teamGames >= 6 && effGames >= 6 && reqRatio > 0 && minRatio < reqRatio) {
         mood = 'unhappy';
         unhappyCount++;
         reason = `Menit kurang (${Math.round(minRatio * 100)}% < ${Math.round(reqRatio * 100)}%, kurang ${minsDeficit} mnt / ~${gamesDeficit} laga)`;
+      } else if (!immune && teamGames >= 6 && effGames >= 6 && (
+        (tier === 2 && minRatio >= (mc.happyTop || 0.60))
+        || (tier === 1 && minRatio >= (mc.happySub || 0.35))
+        || (tier === 0 && minRatio >= (mc.happyRes || 0.15))
+      )) {
+        mood = 'happy';
+        reason = `Bahagia (${Math.round(minRatio * 100)}% menit main)`;
       } else if (!immune && teamGames >= 6 && effGames >= 6 && reqRatio > 0 && minRatio < reqRatio + 0.05) {
-        mood = 'warn';
+        nearQuota = true;
         reason = `Ambang batas menit (${Math.round(minRatio * 100)}% / target ${Math.round(reqRatio * 100)}%)`;
       }
 
       moods[pid] = {
         mood,
+        nearQuota,
         tier,
         minPct: U.roundTo(minRatio * 100.0, 1),
         reqPct: U.roundTo(reqRatio * 100.0, 1),
@@ -752,7 +765,7 @@
           sc += (U.safeNum(p.energy, 100) - 80) * 0.35;
           if (p.moodTier === 1 && U.safeNum(p.minPct, 100) < 12.0) {
             sc += 4.5;
-          } else if (p.mood === 'unhappy' || p.mood === 'warn') {
+          } else if (p.mood === 'unhappy' || p.nearQuota || p.mood === 'warn') {
             sc += 3.0;
           }
           if ((p.potCap - p.force) >= 6 && p.age <= 22) {
@@ -2433,83 +2446,245 @@
     return Math.max(repCap, divCap, squadCap) + ctBonus;
   }
 
-  // Bytecode #24061 transferPolicy (#3695 SELLER_STANCE: listed 0.90x, topStar <=27 1.35x, top3 1.25x, starter 1.10x, scarce 1.15x)
-  function transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers = null, posCount = null, playerRankInClub = 99) {
-    if (!p || !sellerCountry) return { status: 'OK', mult: 1.0, reason: null };
+  // Bytecode #24950 lastInPosition: berlaku untuk SEMUA posisi (!forSale & hanya 1 pemain di sektor/posisi)
+  function lastInPosition(p, sellerPlayers = [], bPlayers = []) {
+    if (!p || p.forSale) return false;
+    const all = [...(Array.isArray(sellerPlayers) ? sellerPlayers : []), ...(Array.isArray(bPlayers) ? bPlayers : [])];
+    if (!all.length) return false;
+    const pSec = (C.EXACT_CAT && (p.pos in C.EXACT_CAT)) ? C.EXACT_CAT[p.pos] : p.pos;
+    const same = all.filter(x => {
+      if (!x) return false;
+      const xPos = x.pos || x.position;
+      const xSec = (C.EXACT_CAT && (xPos in C.EXACT_CAT)) ? C.EXACT_CAT[xPos] : xPos;
+      return xSec === pSec;
+    });
+    return same.length === 1 && same[0].id === p.id;
+  }
+
+  // Bytecode #24951 sellerStance (OTA 2.1.0): bobot posisi/peran/keuangan/kontrak/veteran/scarce + keyPlayer buyout
+  function sellerStance(p, sellerCtx = {}, buyerCtx = {}, todayDays = null) {
+    const sc = (sellerCtx && typeof sellerCtx === 'object') ? sellerCtx : {};
+    const bc = (buyerCtx && typeof buyerCtx === 'object') ? buyerCtx : {};
+    const cfg = C.SELLER_STANCE || {};
+    const sPlayers = Array.isArray(sc.players) ? sc.players : [];
+    const bPlayers = Array.isArray(sc.bPlayers) ? sc.bPlayers : [];
+    if (!p || !sPlayers.length || !bc) return { mult: 1.0, reasons: [] };
+
+    const sorted = [...sPlayers].sort((a, b) => (U.safeNum(b.force, 0) - U.safeNum(a.force, 0)) || String(a.id).localeCompare(String(b.id)));
+    const rankIdx = sorted.findIndex(x => x.id === p.id);
+    if (rankIdx < 0) return { mult: 1.0, reasons: [] };
+    const rank = rankIdx + 1;
+
+    const topScorer = [...sPlayers].sort((a, b) => (U.safeNum(b.goals, 0) - U.safeNum(a.goals, 0)) || String(a.id).localeCompare(String(b.id)))[0];
+    const isTopScorer = Boolean(topScorer && topScorer.id === p.id && U.safeInt(p.goals, 0) >= (cfg.scorerMinGoals || 4));
+    const isCap = Boolean(sc.captain && sPlayers.some(x => x.id === p.id && sc.captain === p.id))
+      || Boolean(!sc.captain && rank === 1 && sPlayers.length > 0 && p.id === sorted[0].id);
+    const isStarter = rank <= (cfg.starters || 11);
+    const notForSale = !p.forSale;
+
+    const pSec = (C.EXACT_CAT && (p.pos in C.EXACT_CAT)) ? C.EXACT_CAT[p.pos] : p.pos;
+    const sameSector = sPlayers.filter(x => {
+      const xp = x.pos || x.position;
+      const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
+      return xs === pSec;
+    });
+    const isWorldTop = Boolean(p.top);
+    const isCraque = Boolean(p.star || p.starAwarded);
+    const reasons = [];
+
+    if (notForSale) {
+      const w = cfg.weight || {};
+      if (isWorldTop) reasons.push({ key: 'worldTop', delta: w.worldTop || 0.20 });
+      else if (isCraque) reasons.push({ key: 'craque', delta: w.craque || 0.14 });
+      else if (rank <= (cfg.keyTop || 3)) reasons.push({ key: 'keyStarter', delta: w.keyTop || 0.12 });
+      else if (isStarter) reasons.push({ key: 'starter', delta: w.starter || 0.08 });
+    }
+    if (isTopScorer && notForSale) reasons.push({ key: 'topScorer', delta: cfg.topScorer || 0.08 });
+    if (notForSale && isCap) reasons.push({ key: 'captain', delta: cfg.captain || 0.03 });
+    if (notForSale) {
+      const hasCover = sameSector.some(x => x.id !== p.id && (U.safeNum(x.force, 0) + (cfg.scarceGap || 10)) >= U.safeNum(p.force, 0));
+      if (!hasCover) reasons.push({ key: 'onlyOne', delta: cfg.onlyOne || 0.06 });
+    }
+    const teamGames = sPlayers.reduce((m, x) => Math.max(m, U.safeInt(x.gamesPlayed, 0)), 0);
+    if (notForSale && teamGames >= (cfg.midGames || 10) && teamGames <= (cfg.endGames || 30)) {
+      reasons.push({ key: 'midSeason', delta: cfg.midSeason || 0.04 });
+    }
+
+    const sLv = U.safeInt(sc.level, 7);
+    const bLv = U.safeInt(bc.level, 7);
+    const lvlScales = cfg.levelScale || [1, 0.5, 0.2, 0.1];
+    let scale = lvlScales[Math.min(lvlScales.length - 1, Math.max(0, sLv - bLv))];
+    const sDiv = U.safeInt(sc.division, 0);
+    const bDiv = U.safeInt(bc.division, 0);
+    const betterDiv = Boolean(sDiv > 0 && bDiv > 0 && sDiv < bDiv);
+    if (betterDiv) scale = Math.min(scale, cfg.betterDivisionScale || 0.2);
+
+    const rawPosDelta = reasons.reduce((s, r) => s + r.delta, 0);
+    if (rawPosDelta > 0 && scale < 1) {
+      reasons.push({ key: 'bigBuyer', delta: -rawPosDelta * (1 - scale) });
+    }
+    if (p.forSale) reasons.push({ key: 'forSale', delta: 0 });
+
+    let cashCrisis = false;
+    const budget = U.safeNum(sc.budget, NaN);
+    const payroll = sPlayers.reduce((s, x) => s + U.safeNum(x.salary, 0), 0);
+    if (Number.isFinite(budget)) {
+      if (budget < 0) {
+        reasons.push({ key: 'redCash', delta: -(cfg.redCash || 0.20) });
+        cashCrisis = true;
+      } else if (payroll > 0 && budget < (cfg.poorMonths || 3) * payroll) {
+        reasons.push({ key: 'poorCash', delta: -(cfg.poorCash || 0.10) });
+        cashCrisis = true;
+      }
+    }
+
+    const cDays = U.safeInt(p.contractDays, 999);
+    if (cDays > 0 && cDays <= 365) {
+      reasons.push({ key: 'contractEnds', delta: -(cfg.contractEnds || 0.08) });
+    }
+    const age = U.safeInt(p.age, 25);
+    if (age >= (cfg.veteranFrom || 32)) {
+      const vetDisc = Math.min(cfg.veteranMax || 0.20, (age - (cfg.veteranFrom || 32) + 1) * (cfg.veteranPerYear || 0.05));
+      reasons.push({ key: 'veteran', delta: -vetDisc });
+    }
+
+    let scarceDelta = 0;
+    if (notForSale) {
+      const allSec = [...sPlayers, ...bPlayers].filter(x => {
+        const xp = x.pos || x.position;
+        const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
+        return xs === pSec;
+      });
+      if (allSec.length === 2) {
+        const other = allSec.find(x => x.id !== p.id);
+        const scCfg = cfg.scarce || { starter: 0.50, backup: 0.30 };
+        scarceDelta = (other && U.safeNum(other.force, 0) > U.safeNum(p.force, 0)) ? (scCfg.backup || 0.30) : (scCfg.starter || 0.50);
+        if (scarceDelta > 0) reasons.push({ key: 'scarce', delta: scarceDelta });
+      }
+    }
+
+    const baseSum = reasons.filter(r => r.key !== 'scarce').reduce((s, r) => s + r.delta, 0);
+    const clampedBase = U.clamp(1 + baseSum, 1 - (cfg.maxDiscount || 0.30), 1 + (cfg.maxPremium || 0.50));
+    let mult = clampedBase + scarceDelta;
+
+    const paidIn = p.paidIn;
+    if (paidIn && sc.id && paidIn.teamId === sc.id && todayDays !== null && todayDays <= paidIn.until && (paidIn.price || 0) > Math.round((p.marketValue || 0) * mult)) {
+      reasons.unshift({ key: 'paidRecently', delta: 0 });
+    }
+
+    const out = { mult: U.roundTo(mult, 2), reasons };
+    if (notForSale && !cashCrisis && rank <= (cfg.refuseTop || 3) && (isWorldTop || isTopScorer) && bLv >= sLv && !betterDiv) {
+      const rc = U.releaseClauseOf(p.marketValue, sc.country || p.nationality, (paidIn && paidIn.price) || 0);
+      out.refuse = 'keyPlayer';
+      out.buyout = rc.amount;
+      out.reasons.unshift({ key: 'keyPlayer', delta: 0 });
+    }
+    return out;
+  }
+
+  // Bytecode #24934 transferPolicy: matriks reputasi Eropa (cg=0) & non-Eropa
+  // Mengembalikan string status ('ok'|'doubleSalary'|'refuse') atau objek compat jika dipanggil dengan signature lama
+  function transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers = null, posCount = null, playerRankInClub = 99, sellerRep = 50, buyerRep = 50, sellerDiv = 1) {
+    if (!p && !sellerCountry) return { status: 'OK', mult: 1.0, reason: null, clubPolicy: 'ok' };
 
     const sPlayers = Array.isArray(sellerPlayers) ? sellerPlayers : [];
-    const samePosCount = posCount !== null && posCount !== undefined
-      ? posCount
-      : sPlayers.filter(x => x.pos === p.pos && !x.injured).length;
-
-    if (p.pos === 'G' && samePosCount <= 1) {
-      return { status: 'REFUSE', mult: 2.0, reason: 'onlyGoalkeeper' };
+    if (p && sPlayers.length > 0 && lastInPosition(p, sPlayers)) {
+      return { status: 'REFUSE', mult: 2.0, reason: 'lastInPosition', clubPolicy: 'refuse' };
+    }
+    if (p && posCount !== null && posCount !== undefined && posCount <= 1 && !p.forSale) {
+      return { status: 'REFUSE', mult: 2.0, reason: 'lastInPosition', clubPolicy: 'refuse' };
     }
 
-    const age = U.safeInt(p.age, 24);
-    const isTopOrStar = Boolean(p.top || p.star || p.starAwarded);
-    const isTop3 = U.safeInt(playerRankInClub, 99) <= 3;
-    const isStarter = U.safeInt(playerRankInClub, 99) <= 11;
-    const isYoungStar = Boolean(age <= 22 && ((p.potential || 0) >= (p.force || 0) + 10 || (p.hash || 0) >= 8 || isTopOrStar));
-    const isKeyTop = Boolean(isTopOrStar || isTop3);
-
-    if (p.forSale) {
-      return {
-        status: 'OK',
-        mult: 0.90,
-        reason: null,
-        isKeyTop,
-        isYoungStar,
-      };
+    const gBuyer = buyerCountry ? Math.max(0, U.countryGroup(buyerCountry)) : 0;
+    const gSeller = sellerCountry ? Math.max(0, U.countryGroup(sellerCountry)) : 1;
+    const bRep = U.reputationLevel(buyerRep);
+    const sRep = U.reputationLevel(sellerRep);
+    let clubPolicy = 'ok';
+    if (gBuyer !== 0) {
+      if (sellerCountry && gSeller === 0 && bRep >= 4) {
+        if (sRep >= 4) clubPolicy = 'ok';
+        else if (U.safeInt(sellerDiv, 1) === 1) clubPolicy = 'ok';
+        else if (sRep >= 3) clubPolicy = 'doubleSalary';
+        else clubPolicy = 'refuse';
+      } else if (bRep >= 3 && sRep >= 3) {
+        clubPolicy = 'ok';
+      } else if (bRep === 3 && (sRep === 2 || sRep === 1)) {
+        clubPolicy = 'ok';
+      } else if (bRep <= 2) {
+        clubPolicy = 'ok';
+      } else {
+        clubPolicy = 'refuse';
+      }
     }
 
-    let mult = 1.0;
-    if (isTopOrStar && age <= 27) mult = 1.35;
-    else if (isTop3) mult = 1.25;
-    else if (isStarter) mult = 1.10;
+    if (clubPolicy === 'refuse') {
+      return { status: 'REFUSE', mult: 2.0, reason: 'transferPolicy', clubPolicy: 'refuse' };
+    }
 
-    if (samePosCount <= 2) mult *= 1.15;
+    const stance = sPlayers.length
+      ? sellerStance(p, { level: sellerLevel, division: sellerDiv, country: sellerCountry, players: sPlayers }, { level: buyerLevel })
+      : null;
+
+    let mult = stance ? stance.mult : (p && p.forSale ? 1.0 : 1.0);
+    if (!stance && p && !p.forSale) {
+      const isTopOrStar = Boolean(p.top || p.star || p.starAwarded);
+      const isTop3 = U.safeInt(playerRankInClub, 99) <= 3;
+      const isStarter = U.safeInt(playerRankInClub, 99) <= 11;
+      if (isTopOrStar) mult += 0.14;
+      else if (isTop3) mult += 0.12;
+      else if (isStarter) mult += 0.08;
+      if ((posCount || 3) === 2) mult += 0.30;
+    }
+
+    const age = U.safeInt(p && p.age, 24);
+    const isTopOrStar = Boolean(p && (p.top || p.star || p.starAwarded));
+    const isKeyTop = Boolean(isTopOrStar || U.safeInt(playerRankInClub, 99) <= 3);
+    const isYoungStar = Boolean(age <= 22 && (((p && p.potential) || 0) >= ((p && p.force) || 0) + 10 || ((p && p.hash) || 0) >= 8 || isTopOrStar));
 
     return {
       status: 'OK',
       mult: U.roundTo(Math.min(2.5, mult), 2),
-      reason: null,
+      reason: stance && stance.refuse ? stance.refuse : null,
+      buyout: stance && stance.buyout ? stance.buyout : 0,
+      reasons: stance ? stance.reasons : [],
+      clubPolicy,
       isKeyTop,
       isYoungStar,
     };
   }
 
-  // Bytecode #24060 refusesDistance
-  // gS===0 && gB>0 -> sL>=7 && bL+1<sL && !aff && !homeReturn && age<32
-  // gS!==gB && !aff && !homeReturn -> sL>=7 && (sL - bL) >= 2 && age<30
-  function refusesDistance(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel) {
-    if (!buyerCountry || !sellerCountry) return false;
-    if (U.sameCountry(sellerCountry, buyerCountry)) return false;
-
-    const bLv = U.safeInt(buyerLevel, 7);
-    const sLv = U.safeInt(sellerLevel, 7);
-    const age = U.safeInt(p && p.age, 25);
+  // Bytecode #24936 refusesDistance (TANPA cutoff usia; slack = clamp(contSlack, 0, 5) + bonus)
+  function refusesDistance(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, slackBonus = 0, buyerDiv = 1, contSlack = 0) {
+    if (!sellerCountry || !buyerCountry) return false;
+    const sC = String(sellerCountry).toUpperCase();
+    const bC = String(buyerCountry).toUpperCase();
     const pNat = String((p && p.nationality) || '').toUpperCase();
 
-    const homeReturn = Boolean(pNat && U.sameCountry(pNat, buyerCountry));
-    const aff = U.hasAffinity(sellerCountry, buyerCountry) || Boolean(pNat && U.hasAffinity(pNat, buyerCountry));
-    const gSeller = U.countryGroup(sellerCountry);
-    const gBuyer = U.countryGroup(buyerCountry);
+    if (U.sameCountry(sC, bC)) return false;
+    if (pNat && U.sameCountry(pNat, bC)) return false;
 
-    if (gSeller === 0 && gBuyer > 0) {
-      if (sLv >= 7 && (bLv + 1) < sLv && !aff && !homeReturn && age < 32) {
-        return true;
-      }
+    const slack = U.clamp(U.safeInt(slackBonus, 0), 0, 10) + U.clamp(U.safeInt(contSlack, 0), 0, 5);
+    const sLv = U.safeInt(sellerLevel, 7);
+    const bLv = U.safeInt(buyerLevel, 7);
+    const bDiv = U.safeInt(buyerDiv, 1);
+    const aff = U.hasAffinity(sC, bC) || Boolean(pNat && U.hasAffinity(pNat, bC));
+    if (aff) {
+      return bLv < sLv - 3 - slack;
     }
-    if (gSeller !== gBuyer && !aff && !homeReturn) {
-      if (sLv >= 7 && (sLv - bLv) >= 2 && age < 30) {
-        return true;
-      }
-    }
-    return false;
+    if (bDiv < 1 || bDiv > 2) return true;
+    return bLv < sLv - slack;
   }
 
-  // Bytecode #24062 userBuyPolicy
+  // Bytecode #24939 refusesStatus (STAR_PULL: gap >= 5 + top-5/star/top -> menolak pindah)
+  function refusesStatus(p, sellerLevel, buyerLevel, playerRankInClub = 99, slack = 0) {
+    const sp = C.STAR_PULL || { minGap: 5, top: 5 };
+    const sLv = U.safeInt(sellerLevel, 7);
+    const bLv = U.safeInt(buyerLevel, 7);
+    if ((sLv - bLv - slack) < (sp.minGap || 5)) return false;
+    return Boolean(isPlayerStar(p) || (p && p.top) || U.safeInt(playerRankInClub, 99) <= (sp.top || 5));
+  }
+
+  // Bytecode #24938 userBuyPolicy (#24934 + #24939 refusesStatus + #24936 refusesDistance + ceil -> doubleSalary)
   function userBuyPolicy(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, buyerRep, buyerDiv, sellerPlayers = null, posCount = null, isUnattached = false, extra = null) {
     const ex = (extra && typeof extra === 'object') ? extra : {};
     const rankInClub = U.safeInt(ex.rankInClub, 99);
@@ -2517,72 +2692,82 @@
     const ctLevel = U.safeInt(ex.ctLevel, 1);
 
     const pol = isUnattached
-      ? { status: 'OK', mult: 1.0, reason: null, isKeyTop: Boolean(p.top || p.star), isYoungStar: false }
-      : transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers, posCount, rankInClub);
-    if (pol.status === 'REFUSE') return pol;
+      ? { status: 'OK', mult: 1.0, reason: null, clubPolicy: 'ok', isKeyTop: Boolean(p.top || p.star), isYoungStar: false }
+      : transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers, posCount, rankInClub, ex.sellerRep, buyerRep, ex.sellerDiv);
+    if (pol.status === 'REFUSE') {
+      return { ...pol, code: pol.reason === 'lastInPosition' ? 'LAST_POS' : 'REFUSE_POLICY' };
+    }
 
     const sLv = isUnattached ? U.clamp(Math.round(((p.force || 50) - 18) / 7), 1, 10) : U.safeInt(sellerLevel, 7);
     const bLv = U.safeInt(buyerLevel, 7);
     const sCountry = isUnattached ? (p.nationality || '') : sellerCountry;
+    const bDiv = U.safeInt(buyerDiv, 1);
 
-    if (!isUnattached && refusesDistance(p, sCountry, buyerCountry, sLv, bLv)) {
-      return { status: 'REFUSE', mult: 2.0, reason: 'distanceOrLeague', code: 'REFUSE_DIST', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
+    if (refusesStatus(p, sLv, bLv, rankInClub, 0)) {
+      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseLevel', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
     }
-
-    const gap = sLv - bLv;
-    const age = U.safeInt(p && p.age, 25);
-    const isTopOrStar = Boolean(p && (p.top || p.star || p.starAwarded));
-    const isUnhappy = Boolean(ex.isUnhappy || (p && p.mood === 'unhappy'));
-
-    if (!p.forSale && !isUnhappy) {
-      if (gap >= 3 && age < 29) {
-        return { status: 'REFUSE', mult: 2.0, reason: 'clubLevelLow', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
-      }
-      if (gap >= 2 && isTopOrStar && age < 28) {
-        return { status: 'REFUSE', mult: 2.0, reason: 'ambition', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
-      }
+    if (!isUnattached && refusesDistance(p, sCountry, buyerCountry, sLv, bLv, 0, bDiv, ex.contSlack || 0)) {
+      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseDistance', code: 'REFUSE_DIST', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
     }
 
     const ceil = buyerForceCeiling(buyerRep, buyerDiv, avgTop11, ctLevel);
-    let ceilMult = 1.0;
+    let doubleSalary = pol.clubPolicy === 'doubleSalary';
+    if ((p.force || 0) > ceil + 5) {
+      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseLevel', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
+    }
     if ((p.force || 0) > ceil) {
-      if (!p.forSale && !isUnhappy && (p.force || 0) > ceil + 5) {
-        return { status: 'REFUSE', mult: 2.0, reason: 'clubStatusLow', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
-      }
-      ceilMult = 2.0;
+      doubleSalary = true;
     }
 
     return {
       status: 'OK',
-      mult: U.roundTo(Math.min(3.5, Math.max(pol.mult, ceilMult)), 2),
-      reason: null,
-      code: ceilMult > 1.0 ? 'CEIL_2X' : 'OK',
-      ceilMult,
+      mult: pol.mult,
+      reason: pol.reason || null,
+      buyout: pol.buyout || 0,
+      reasons: pol.reasons || [],
+      code: doubleSalary ? 'CEIL_2X' : 'OK',
+      doubleSalary,
+      salaryMul: doubleSalary ? 2.0 : 1.0,
+      ceilMult: 1.0,
       isKeyTop: pol.isKeyTop,
       isYoungStar: pol.isYoungStar,
     };
   }
 
-  // Bytecode #24064 buyPersuadable: tawaran >= 1.5x MV memberi slack +2 pada buyerLevel & +4 pada ceiling!
+  // Bytecode #24940 buyPersuadable: BUY_PERSUADE { levelGap: 2, forceOver: 5, wageFloor: 2.5 }
   function buyPersuadable(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, pol, extra = null) {
     if (!pol || pol.status !== 'REFUSE') return false;
-    if (pol.reason === 'onlyGoalkeeper' || pol.reason === 'domesticRival') return false;
+    if (pol.reason === 'lastInPosition' || pol.reason === 'onlyGoalkeeper' || pol.reason === 'domesticRival' || pol.reason === 'transferPolicy') return false;
+    if (pol.reason !== 'refuseLevel' && pol.reason !== 'refuseDistance') return false;
     const ex = (extra && typeof extra === 'object') ? extra : {};
-    const bLv = U.safeInt(buyerLevel, 7) + 2;
+    const bp = C.BUY_PERSUADE || { levelGap: 2, forceOver: 5 };
+    const bLv = U.safeInt(buyerLevel, 7);
     const sLv = U.safeInt(sellerLevel, 7);
-    const age = U.safeInt(p && p.age, 25);
-    const isTopOrStar = Boolean(p && (p.top || p.star || p.starAwarded));
+    const bDiv = U.safeInt(ex.buyerDiv, 1);
+    const rankInClub = U.safeInt(ex.rankInClub, 99);
 
-    if (refusesDistance(p, sellerCountry, buyerCountry, sLv, bLv)) return false;
-    const gap = sLv - bLv;
-    if (gap >= 3 && age < 29) return false;
-    if (gap >= 2 && isTopOrStar && age < 28) return false;
+    if (refusesDistance(p, sellerCountry, buyerCountry, sLv, bLv, bp.levelGap || 2, bDiv, ex.contSlack || 0)) return false;
+    if (refusesStatus(p, sLv, bLv, rankInClub, bp.levelGap || 2)) return false;
 
     if (ex.buyerRep !== undefined) {
-      const ceil = buyerForceCeiling(ex.buyerRep, ex.buyerDiv || 1, ex.avgTop11 || 0, ex.ctLevel || 1) + 4;
-      if ((p.force || 0) > ceil + 5) return false;
+      const ceil = buyerForceCeiling(ex.buyerRep, bDiv, ex.avgTop11 || 0, ex.ctLevel || 1);
+      if ((p.force || 0) > ceil + 5 + (bp.forceOver || 5)) return false;
     }
     return true;
+  }
+
+  // Bytecode #24941 persuadeChance: base 0.25 + starterBonus + perWage + perPrice (maks 0.85)
+  function persuadeChance(p, sellerLevel, buyerLevel, buyerRep, buyerDiv, wageMul = 2.5, priceMul = 1.5, role = 'starter', ex = null) {
+    const bp = C.BUY_PERSUADE || {};
+    const cfgEx = (ex && typeof ex === 'object') ? ex : {};
+    const ceil = buyerForceCeiling(buyerRep, buyerDiv, cfgEx.avgTop11 || 0, cfgEx.ctLevel || 1);
+    const forceGap = Math.max(0, U.safeNum(p && p.force, 0) - ceil);
+    const priceGap = priceMul > 0 ? Math.max(0, (priceMul / (wageMul > 0 ? 1 : 1)) - 1) : 0;
+    const bonus = (role === 'starter' ? (bp.starterBonus || 0.15) : 0);
+    const prob = (bp.base || 0.25) + bonus + (forceGap / 0.1) * (bp.perWage || 0.05) * 0.01 + (priceGap / 0.1) * (bp.perPrice || 0.06);
+    const gapLv = Math.max(0, U.safeInt(sellerLevel, 7) - U.safeInt(buyerLevel, 7));
+    const adjusted = prob - Math.max(0, gapLv - 2) * 0.04;
+    return U.roundTo(U.clamp(adjusted, bp.base || 0.25, bp.max || 0.85), 2);
   }
 
   /**
@@ -2787,9 +2972,13 @@
     evaluateSquadImpact,
     detectSquadHoles,
     buyerForceCeiling,
+    lastInPosition,
+    sellerStance,
     transferPolicy,
     refusesDistance,
+    refusesStatus,
     userBuyPolicy,
     buyPersuadable,
+    persuadeChance,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

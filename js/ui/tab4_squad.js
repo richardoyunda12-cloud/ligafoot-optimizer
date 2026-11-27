@@ -290,7 +290,7 @@ function renderRosterActionRadar() {
           return `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
             <div style="min-width:0">
               <a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>
-              <span class="c-muted mono">(${p.contractDays}d · ${p.squadRank > 11 ? 'Cadangan' : 'Inti'})</span>
+              <span class="c-muted mono">(${p.contractDays}d · ${p.isRawReserve ? 'Cadangan #12+ Daftar' : 'Inti #1-#11 Daftar'})</span>
               <div class="mono c-muted">Gaji ${fmtM(p.salary)} → Lantai ${x.floorPct}%</div>
             </div>
             <span class="badge b-good mono">Hemat -${fmtM(x.saveMo)}/b</span>
@@ -426,7 +426,7 @@ function renderTrainingAudit() {
   }).join('');
 
   const autoWarn = tr.mode === 'auto'
-    ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">AUTO AKTIF</span><div><b>Mode AUTO Special Training aktif!</b> Di bytecode #34840, mode auto 100% buta potCap (cuma pilih usia termuda). Wajib ubah ke <b>MANUAL</b>!</div></div>`
+    ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">AUTO AKTIF</span><div><b>Mode AUTO Special Training aktif!</b> Di bytecode #22099, <code>trainAutoPicks</code> hanya memilih gap potCap tertinggi lalu sisa slot over-cap usia ≤30 (bukan prioritas Wonderkid &amp; Skill Stack terbaikmu). Sebaiknya ubah ke <b>MANUAL</b>!</div></div>`
     : '';
   el.innerHTML = `
     <div class="mb-8">Mode: <b class="${tr.mode === 'auto' ? 'c-red' : 'c-green'}">${tr.mode.toUpperCase()}</b> | Kapasitas CT Lv ${D.meta.ctLevel}: <b class="c-sky">${totalSlots} slot</b></div>
@@ -724,7 +724,7 @@ function renderBTeamPanel() {
     kpiEl.innerHTML = `<div class="alert-item INFO mb-8">
       <span class="badge b-info">BELUM PUNYA TIM B</span>
       <div>
-        Klub belum memiliki Tim B aktif. Biaya pembuatan Tim B (#24615): <b class="mono">${fmtM((bt && bt.creationCost) || 600000)}</b>.
+        Klub belum memiliki Tim B aktif. Biaya pembuatan Tim B (#22346): <b class="mono">${fmtM((bt && bt.creationCost) || 2600000)}</b>.
         Kuota pemain asing Tim Utama saat ini: <b class="mono">${(bt && bt.curForeign) || 0}/${(bt && bt.foreignCap) || 7}</b>.
       </div>
     </div>`;

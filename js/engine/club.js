@@ -1159,15 +1159,26 @@
     sortedByForce.forEach((p, idx) => { rankOf[p.id] = idx; });
     const top5Ids = new Set(sortedByForce.slice(0, 5).map(p => p.id));
 
+    const rawOrderMap = new Map();
+    if (Array.isArray(uTeam.playerIds)) {
+      uTeam.playerIds.forEach((rawPid, idx) => {
+        const pid = String(rawPid || '').trim();
+        if (pid && !rawOrderMap.has(pid)) rawOrderMap.set(pid, idx);
+      });
+    }
+
     for (const p of userRoster) {
       const rIdx = rankOf[p.id];
+      const rawIdx = rawOrderMap.has(p.id) ? rawOrderMap.get(p.id) : rIdx;
       p.squadRank = rIdx + 1;
+      p.rawIdx = rawIdx;
+      p.isRawReserve = rawIdx >= 11;
       p.isForeign = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
       p.isTop5Arab = top5Ids.has(p.id) && p.age >= 26;
       const starterFloor = U.salaryCutFloorMul(false, p.age, p.salaryCuts, p.renewRefusals);
       const reserveFloor = U.salaryCutFloorMul(true, p.age, p.salaryCuts, p.renewRefusals);
-      p.salaryFloorFactor = rIdx < 11 ? starterFloor : reserveFloor;
-      p.benchCutSave = (!p.salaryCutLocked && rIdx < 11) ? Math.round(p.salary * (starterFloor - reserveFloor)) : 0;
+      p.salaryFloorFactor = rawIdx < 11 ? starterFloor : reserveFloor;
+      p.benchCutSave = (!p.salaryCutLocked && rawIdx < 11) ? Math.round(p.salary * (starterFloor - reserveFloor)) : 0;
       p.autoRenewLoophole = Boolean(
         p.contractDays <= 10 && !p.noAutoRenew && (p.force >= 40 || p.isGem || rIdx < 14) && !p.loanedFrom
       );
@@ -1212,7 +1223,7 @@
     const { holes, holePositions } = T.detectSquadHoles(userRoster, rawActiveFormation);
     const holePosSet = new Set(holePositions);
 
-    // Special Training Audit (#21430 trainSlots = 3 + floor((ctLevel - 1) / 2))
+    // Special Training Audit (#21430 trainSlots = 3 + floor((ctLevel - 1) / 2), #22099 Pass 1 + Pass 2 over-cap)
     const rawTrainIds = Array.isArray(uTeam.trainIds) ? uTeam.trainIds : [];
     const trainSlots = 3 + Math.floor((Math.max(1, Math.min(10, ctLevel)) - 1) / 2);
     const trainMode = String(uTeam.trainMode || 'auto');
@@ -1220,15 +1231,20 @@
     for (const p of userRoster) pById[p.id] = p;
 
     const idealCount = Math.max(6, trainSlots + 2);
-    const idealTrain = userRoster
+    const pass1Train = userRoster
       .filter(p => !p.injured && p.age < p.declineAge && (p.potCap - p.force) > 0)
-      .sort((a, b) => ((b.potCap - b.force) - (a.potCap - a.force)) || (a.age - b.age) || (b.growthFrac - a.growthFrac))
-      .slice(0, idealCount);
+      .sort((a, b) => ((b.potCap - b.force) - (a.potCap - a.force)) || (a.age - b.age) || (b.growthFrac - a.growthFrac));
+    const pass1Ids = new Set(pass1Train.map(p => p.id));
+    // #22099 Pass 2: jika slot masih kosong, izinkan pemain usia <= 30 dengan ruang over-cap (+2)
+    const pass2Train = userRoster
+      .filter(p => !pass1Ids.has(p.id) && !p.injured && p.age <= 30 && p.potCap > 0 && p.force < (p.potCap + 2))
+      .sort((a, b) => (a.age - b.age) || ((b.potCap + 2 - b.force) - (a.potCap + 2 - a.force)) || (b.growthFrac - a.growthFrac));
+    const idealTrain = [...pass1Train, ...pass2Train].slice(0, idealCount);
 
     const wastedTrain = [];
     for (const tid of rawTrainIds.slice(0, trainSlots)) {
       const tp = pById[tid];
-      if (tp && (tp.force >= tp.potCap || tp.age >= tp.declineAge)) {
+      if (tp && (tp.force >= tp.potCap + 2 || (tp.force >= tp.potCap && tp.age > 30) || tp.age >= tp.declineAge)) {
         wastedTrain.push(tp.name);
       }
     }
@@ -1245,6 +1261,7 @@
         force: p.force,
         potCap: p.potCap,
         gap: p.potCap - p.force,
+        overCap: p.force >= p.potCap,
         growthFrac: p.growthFrac,
         stackGrade: p.stackGrade,
         nonStack: p.nonStack,
@@ -1254,8 +1271,7 @@
 
     const autoGuard = auditAutoSettings(save, uTeam, userRoster, trainAudit);
 
-    // Akademi Ranking + European Mega-Offer estimator (#23886 / #23903)
-    const ceilMap = { 7: 5, 8: 15, 9: 25, 10: 30 };
+    // Akademi Ranking (#22569 youthPeakEstimate — tanpa bonus plafon / mega offer fiktif)
     const youthRanked = userYouth.map(y => {
       const fillsHole = holePosSet.has(y.pos);
       const yScore = U.roundTo(
@@ -1267,19 +1283,11 @@
       let yAct = 'LEPAS / CADANGAN';
       if ((y.age > 20 || y.development >= 90 || (y.age === 20 && y.development >= 75)) && y.hash >= 5) yAct = 'PROMOSIKAN SEKARANG';
       else if (y.hash >= 6 || (fillsHole && y.hash >= 5)) yAct = 'TAHAN & LATIH';
-      const ceilBonus = y.development >= 60 ? (ceilMap[y.hash] || 0) : 0;
-      const isMegaProspect = Boolean(y.hash >= 9 || y.potCap >= 75);
-      const estMegaOffer = isMegaProspect
-        ? Math.round(Math.max(y.marketValue * 2.2, payrollRef * (y.hash >= 10 ? 0.35 : 0.22)))
-        : Math.round(Math.max(150000, y.marketValue * 1.4));
       return {
         ...y,
         fillsHole,
         pipeScore: yScore,
         action: yAct,
-        ceilBonus,
-        isMegaProspect,
-        estMegaOffer,
       };
     }).sort((a, b) => b.pipeScore - a.pipeScore);
 
@@ -1530,7 +1538,7 @@
     );
 
     prog(75, 'Memindai Global Auto-Scout Moneyball (1.185+ klub AI)...');
-    const { scoutPool, youthScoutTargets, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
+    const { scoutPool, youthScoutTargets, rivalYouthTargets, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
       save, staticPlayers, clubsMeta, userId, userCountry, holePositions, bestXi.avgScore
     );
 
@@ -2011,7 +2019,8 @@
         ? bTeamObj.playerIds.length
         : (Array.isArray(bTeamObj.extraRows) ? bTeamObj.extraRows.length : 0))
       : 0;
-    const bTeamCost = Math.min(2000000, Math.max(100000, Math.round(U.safeNum(userTeamLevel, 3) * 600000)));
+    // Bytecode #22346 bCreationCost: round((2_000_000 + 600_000 * max(1, teamLevel)) / 100_000) * 100_000
+    const bTeamCost = Math.round((2000000 + 600000 * Math.max(1, U.safeNum(userTeamLevel, 3))) / 100000) * 100000;
     const excessForeign = Math.max(0, foreignCountSquad - foreignCap);
     const bTeamCandidates = userRoster
       .filter(p => !p.loanedFrom && !p.injured && p.age <= 22 && (p.potCap - p.force) >= 10 && (!bestXiIds.has(p.id) || p.force <= (bestXi.avgScore - 8)))
@@ -2533,7 +2542,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.6 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.7 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
@@ -2598,6 +2607,7 @@
       roster: rosterExport,
       youth: youthRanked,
       youthScoutTargets,
+      rivalYouthTargets,
       loanBuyWatch,
       idols: idolsList,
       trainAudit,

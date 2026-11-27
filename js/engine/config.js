@@ -499,13 +499,14 @@
     MX: 7, US: 8, JP: 5, SA: 8, TR: 11, NL: 8, ID: 7,
   };
 
-  // Bytecode #3454, #21513, #21517, #23839, #23840: Geografi, Afiliasi, & Batas Transfer
+  // Bytecode #3659, #21513, #21517, #24934-#24941: Geografi (6 grup resmi), Afiliasi & Batas Transfer
   const COUNTRY_GROUPS = {
-    0: ['ES', 'EN', 'GB', 'EN-EL', 'EN-SL', 'EN-WL', 'EN-NL', 'IT', 'DE', 'FR', 'PT', 'NL', 'BE', 'TR', 'RU', 'UA', 'PL', 'AT', 'CH', 'SC', 'GR', 'HR', 'RS', 'CZ', 'DK', 'SE', 'NO', 'RO'],
-    1: ['BR', 'AR', 'CO', 'UY', 'CL', 'PY', 'PE', 'EC', 'BO', 'VE'],
-    2: ['MX', 'US', 'CA', 'CR', 'HN', 'PA', 'JM'],
-    3: ['JP', 'KR', 'SA', 'QA', 'AE', 'CN', 'AU', 'IR', 'UZ', 'TH', 'VN', 'ID', 'MY'],
-    4: ['EG', 'MA', 'TN', 'NG', 'GH', 'SN', 'CI', 'CM', 'DZ', 'ZA', 'ML'],
+    0: ['AL', 'DE', 'AD', 'AM', 'AT', 'AZ', 'BE', 'BY', 'BA', 'BG', 'KZ', 'CY', 'HR', 'DK', 'SC', 'SK', 'SI', 'ES', 'EE', 'FI', 'FR', 'GE', 'GR', 'NL', 'HU', 'FO', 'EN', 'GB', 'IE', 'NIR', 'IS', 'IL', 'IT', 'ME', 'XK', 'LV', 'LI', 'LT', 'LU', 'MK', 'MT', 'MD', 'MC', 'NO', 'WL', 'PL', 'PT', 'CZ', 'RO', 'RU', 'SM', 'RS', 'SE', 'CH', 'TR', 'UA', 'GI'],
+    1: ['AR', 'BO', 'BR', 'CL', 'CO', 'EC', 'PY', 'PE', 'UY', 'VE'],
+    2: ['ZA', 'AO', 'DZ', 'BJ', 'BW', 'BF', 'BI', 'CV', 'CM', 'TD', 'CG', 'CI', 'DJ', 'EG', 'ER', 'ET', 'GA', 'GM', 'GH', 'GN', 'GW', 'GQ', 'KE', 'LS', 'LY', 'LR', 'MG', 'MW', 'ML', 'MA', 'MR', 'MZ', 'NA', 'NE', 'NG', 'CF', 'CD', 'RW', 'ST', 'SN', 'SL', 'SYC', 'SO', 'SZ', 'SD', 'TZ', 'TG', 'TN', 'UG', 'ZM', 'ZW', 'KM', 'MU', 'SS'],
+    3: ['AF', 'SA', 'AU', 'BH', 'BD', 'BN', 'BT', 'KH', 'QA', 'CN', 'TL', 'KP', 'KR', 'AE', 'PH', 'HK', 'YE', 'IN', 'ID', 'IR', 'IQ', 'JP', 'JO', 'KW', 'LA', 'LB', 'MO', 'MY', 'MV', 'MM', 'MN', 'NP', 'OM', 'PS', 'PK', 'KG', 'SG', 'SY', 'LK', 'TJ', 'TH', 'TW', 'TM', 'UZ', 'VN'],
+    4: ['AI', 'AG', 'CW', 'AW', 'BS', 'BB', 'BZ', 'BM', 'CA', 'CR', 'CU', 'DM', 'SV', 'US', 'GD', 'GT', 'GY', 'HT', 'HN', 'KY', 'VG', 'JM', 'MX', 'NI', 'PA', 'PR', 'DO', 'LC', 'KN', 'VC', 'SR', 'TT', 'VI', 'MS', 'TC', 'GP', 'MQ', 'GF'],
+    5: ['FJ', 'CK', 'SB', 'NZ', 'PG', 'WS', 'PF', 'TO', 'VU', 'FM', 'MH', 'NR', 'PW', 'KI', 'TV', 'AS', 'NC', 'GU'],
   };
 
   const UK_CODES = ['EN', 'GB', 'WL', 'SC', 'NIR', 'EN-EL', 'EN-SL', 'EN-WL', 'EN-NL'];
@@ -641,22 +642,19 @@
     { maxDays: 99999, rate: 0.30 },
   ];
 
-  // Bytecode #3724 & #20972: Injured Sale Discount (L806140)
-  // <=10d: 0.70, <=30d: 0.55, <=60d: 0.40, >60d: 0.25 (severeDays=30, severeBlockChance=0.55)
+  // Bytecode #3611 & #23498/#20972: Injured Sale Discount (OTA 2.1.0)
+  // <=10d: 0.70, <=28d: 0.55, <=70d: 0.40, >70d: 0.25
   const INJURED_SALE = {
     minorMaxDays: 10,
-    moderateMaxDays: 30,
-    majorMaxDays: 60,
+    moderateMaxDays: 28,
+    majorMaxDays: 70,
     minorFactor: 0.70,
     moderateFactor: 0.55,
     majorFactor: 0.40,
     severeFactor: 0.25,
-    severeDays: 30,
-    severeBlockChance: 0.55,
   };
 
-  // Bytecode #3725 & #24197: Youth Scout (Olheiro da Base — L806154)
-  // maxAge=21, minGrowthMargin=10 (raw potential - force >= 10), minFairMul=2.0x MV, maxPerSeason=2
+  // Bytecode #3611 & #25091: Youth Scout U-21 incoming AI scout valuation & Rival Junior floors
   const YOUTH_SCOUT = {
     maxAge: 21,
     minGrowthMargin: 10,
@@ -664,17 +662,89 @@
     maxPerSeason: 2,
   };
 
-  // Bytecode #3726 & #21465: Squad Moods
+  const RIVAL_JUNIOR_DIV_FLOOR = [50000, 300000, 200000, 120000, 80000, 50000];
+  const RIVAL_JUNIOR_STAR_FLOOR = { 8: 600000, 9: 1500000, 10: 3000000 };
+
+  // Bytecode #3611 & #22134: Squad Moods
+  // Tier 2 (natural starter auto): 0.25; explicit role='starter' atau roleSore: 0.40; Happy: 0.60/0.35/0.15
   const MOOD_CFG = {
     minGames: 6,
-    starterQuota: 0.40,
+    starterQuota: 0.25,
+    explicitStarterQuota: 0.40,
     midQuota: 0.25,
     youngQuota: 0.08,
+    happyTop: 0.60,
+    happySub: 0.35,
+    happyRes: 0.15,
     injuryDaysPerGame: 4,
     unhappyPenaltyMin: 4,
     unhappyPenaltyStep: 0.01,
     unhappyPenaltyMax: 0.04,
   };
+
+  const UNHAPPY_GROWTH = 0.5;
+
+  // Bytecode #3611 slot 227-229, 273 & #24934-#24951: Seller Stance, Persuade & Star Pull
+  const SELLER_STANCE = {
+    maxPremium: 0.50,
+    maxDiscount: 0.30,
+    weight: { worldTop: 0.20, craque: 0.14, keyTop: 0.12, starter: 0.08 },
+    keyTop: 3,
+    starters: 11,
+    topScorer: 0.08,
+    scorerMinGoals: 4,
+    captain: 0.03,
+    onlyOne: 0.06,
+    scarceGap: 10,
+    midSeason: 0.04,
+    midGames: 10,
+    endGames: 30,
+    levelScale: [1, 0.5, 0.2, 0.1],
+    betterDivisionScale: 0.2,
+    poorCash: 0.10,
+    redCash: 0.20,
+    poorMonths: 3,
+    contractEnds: 0.08,
+    veteranFrom: 32,
+    veteranPerYear: 0.05,
+    veteranMax: 0.20,
+    refuseTop: 3,
+    scarce: { starter: 0.50, backup: 0.30 },
+  };
+
+  const BUY_PERSUADE = {
+    levelGap: 2,
+    forceOver: 5,
+    wageFloor: 2.5,
+    base: 0.25,
+    perWage: 0.05,
+    perPrice: 0.06,
+    max: 0.85,
+    starterBonus: 0.15,
+  };
+
+  const STAR_PULL = {
+    minGap: 5,
+    top: 5,
+    loanOver: 3,
+  };
+
+  // Bytecode #3611 & #21911: Quadratic Market Value Constants (OTA 2.1.0)
+  const VALUE_K_BY_LEVEL = [[21, 750], [20, 600], [18, 500], [12, 400], [0, 366]];
+  const VALUE_CRAQUE_MUL = { europeElite: 3, europeBig: 2, default: 1.7 };
+  const VALUE_WORLDTOP_MUL = 1.6;
+  const VALUE_ATTACKER_MUL = 1.3;
+  const VALUE_HIGHLIGHT_MUL = 1.2;
+  const VALUE_AGE_TERMS = [[19, 32, 27], [25, 32, 22], [31, 32, 15], [33, 34, 10]];
+  const VALUE_AGE_OLD_CUT = 50;
+  const VALUE_LOW_LEVEL_MUL = [[0, 0.08], [2, 0.12], [4, 0.18], [6, 0.28], [8, 0.42], [10, 0.65], [12, 1]];
+  const VALUE_OLD_MUL = [[40, 0.1], [39, 0.14], [38, 0.19], [37, 0.26], [36, 0.35], [35, 0.47], [34, 0.62], [33, 0.78], [32, 0.9]];
+  const VALUE_YOUNG_BONUS = { perPoint: 0.018, max: 0.4, weights: [[19, 1], [21, 0.8], [23, 0.55], [25, 0.3]] };
+  const VALUE_K_MIN = 60;
+  const VALUE_YOUTH_FRACTION = 0.03;
+  const VALUE_YOUTH_RAMP = { ageFrom: 19, ageTo: 22, forceFrom: 40, forceTo: 60 };
+  const EURO_TOP_BONUS = 1.4;
+  const EURO_TOP_MIN_LEVEL = 21;
 
   // Bytecode #3545: Red Card Fine
   const FINE_CFG = {
@@ -967,7 +1037,28 @@
       TERMINATION_FEE_TIERS,
       INJURED_SALE,
       YOUTH_SCOUT,
+      RIVAL_JUNIOR_DIV_FLOOR,
+      RIVAL_JUNIOR_STAR_FLOOR,
       MOOD_CFG,
+      UNHAPPY_GROWTH,
+      SELLER_STANCE,
+      BUY_PERSUADE,
+      STAR_PULL,
+      VALUE_K_BY_LEVEL,
+      VALUE_CRAQUE_MUL,
+      VALUE_WORLDTOP_MUL,
+      VALUE_ATTACKER_MUL,
+      VALUE_HIGHLIGHT_MUL,
+      VALUE_AGE_TERMS,
+      VALUE_AGE_OLD_CUT,
+      VALUE_LOW_LEVEL_MUL,
+      VALUE_OLD_MUL,
+      VALUE_YOUNG_BONUS,
+      VALUE_K_MIN,
+      VALUE_YOUTH_FRACTION,
+      VALUE_YOUTH_RAMP,
+      EURO_TOP_BONUS,
+      EURO_TOP_MIN_LEVEL,
       FINE_CFG,
       LOAN_OPTION,
       SHOUT_DECAY,

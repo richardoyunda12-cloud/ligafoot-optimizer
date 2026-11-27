@@ -140,7 +140,7 @@
     const renew3yrSaveMonth = Math.round(salary * -renew3yrDelta); // negatif = tambahan biaya
     const doubleDipSaveYear = Math.round(salary * (1.0 - 0.88 * 0.88) * 12);
 
-    // Youth Scout (Olheiro da Base #24197): age <= 21, raw (potential - force) >= 10, harga 2.0x MV
+    // Valuasi Olheiro da Base U-21 (#25091: incoming AI scout offer max(potentialMV * 0.6, MV * 2))
     const youthScoutGap = potential - force;
     const youthScoutEligible = Boolean(!isUserTeam && age <= C.YOUTH_SCOUT.maxAge && youthScoutGap >= C.YOUTH_SCOUT.minGrowthMargin && !forSale);
     const youthScoutPrice = Math.round(Math.max(10000, marketValue) * C.YOUTH_SCOUT.priceFactor);
@@ -416,7 +416,7 @@
       const yRec = buildPlayerRecord({ ...yRow, isYouth: true }, staticPlayers, isUserTeam, teamId, teamName, teamCountry, userDiv);
       yRec.development = U.safeInt(yRow.development, 50);
       yRec.isYouth = true;
-      // Bytecode #22231 youthPeakEstimate & #21532 youthPeakFromPotential
+      // Bytecode #22569 youthPeakEstimate (range 1..100 skala v9, sudah dinormalisasi)
       const rawStar = U.safeInt(yRow.shownPotential !== undefined && yRow.shownPotential !== null ? yRow.shownPotential : yRec.hash, 1);
       const potStar = U.clamp(yRec.star ? Math.max(8, rawStar) : rawStar, 1, 10);
       const rng = YOUTH_PEAK_RANGES[potStar - 1] || [25, 30];
@@ -439,14 +439,15 @@
   }
 
   /**
-   * Simulasi ETA mencapai PotCap berdasarkan #21499 weeklyGrowthRate & #21562 trainGrowthBonus.
+   * Simulasi ETA mencapai PotCap berdasarkan #22061 weeklyGrowthRate & trainGrowthBonus.
    */
-  function estimatePeakEta(age, force, potCap, growthFrac = 0, clubLevel = 12, ctLevel = 1, declineAge = 32) {
+  function estimatePeakEta(age, force, potCap, growthFrac = 0, clubLevel = 12, ctLevel = 1, declineAge = 32, opts = {}) {
     const a0 = U.safeInt(age, 20);
     const f0 = U.safeInt(force, 20);
     const cap = U.safeInt(potCap, f0);
     if (f0 >= cap || a0 >= declineAge) return null;
 
+    const o = (opts && typeof opts === 'object') ? opts : {};
     const lv = U.clamp(U.safeInt(clubLevel, 12), 1, 25);
     const ct = U.clamp(U.safeInt(ctLevel, 1), 1, 10);
 
@@ -457,16 +458,17 @@
       let weeks = 0;
       const maxWeeks = Math.max(1, (declineAge - curAge) * 52);
       while (curF < cap && weeks < maxWeeks) {
-        let base = 0.02;
-        if (lv >= 19) base = curAge < 20 ? 0.14 : (curAge <= 28 ? 0.08 : 0.05);
-        else if (lv >= 15) base = curAge < 18 ? 0.12 : (curAge <= 20 ? 0.10 : (curAge <= 28 ? 0.08 : 0.06));
-        else if (lv >= 11) base = curAge < 18 ? 0.10 : (curAge <= 20 ? 0.08 : (curAge <= 28 ? 0.06 : 0.04));
-        else base = curAge < 18 ? 0.08 : (curAge <= 20 ? 0.06 : (curAge <= 28 ? 0.04 : 0.02));
-
-        let rate = base + (played ? 0.01 : 0.0);
-        if (ct >= 4) rate += 0.010;
-        if (ct >= 2 && curAge <= 23) rate += 0.015;
-        if (trained) rate += 0.015 + 0.0015 * (ct - 1);
+        const rate = U.estimateWeeklyGrowthRate(
+          {
+            age: curAge,
+            force: curF,
+            top: Boolean(o.top),
+            star: Boolean(o.star),
+            development: o.development || 0,
+            hash: o.hash || 0,
+          },
+          { clubLevel: lv, ctLevel: ct, played, inTrain: trained, unhappy: Boolean(o.unhappy), country: o.country || '' }
+        );
         gf += rate;
         while (gf >= 1.0 && curF < cap) {
           gf -= 1.0;

@@ -165,12 +165,13 @@ function calcAll() {
     const safePctLim = (CFG.FINE_SAFE_PCT || 20);
     const cashGain = fSal * (fPct / 100);
     const slumpProb = fPct <= safePctLim ? 0 : +(0.50 * fPct).toFixed(1);
+    const fineSlumpPct = fPct <= safePctLim ? 0 : +(3 + 0.05 * fPct).toFixed(1);
     const verdict = fPct <= safePctLim
       ? `<span class="badge b-good">✅ 0% RISIKO SLUMP — UANG GRATIS!</span>`
-      : `<span class="badge ${slumpProb >= 40 ? 'b-crit' : 'b-warn'}">⚠ PELUANG SLUMP ${slumpProb}% (-3% performa × 30d)</span>`;
+      : `<span class="badge ${slumpProb >= 40 ? 'b-crit' : 'b-warn'}">⚠ PELUANG SLUMP ${slumpProb}% (-${fineSlumpPct}% performa × 30d)</span>`;
     fineOut.innerHTML = `
       <div>Uang Masuk ke Kas: <b class="mono c-green" style="font-size:16px">+${cashGain.toFixed(1)}K</b> ${verdict}</div>
-      <div class="c-muted" style="margin-top:4px">Batas aman = <b>${safePctLim}%</b> (0% risiko). Di atas ${safePctLim}%, peluang slump = <code>0.50 × pct%</code>.</div>`;
+      <div class="c-muted" style="margin-top:4px">Batas aman = <b>${safePctLim}%</b> (0% risiko). Di atas ${safePctLim}%, peluang slump = <code>0.50 × pct%</code> dengan penalti <code>-(3 + 0.05 × pct)%</code> (cap -20%).</div>`;
   }
 }
 
@@ -249,7 +250,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.10.6 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.10.7 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -943,13 +944,13 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.6`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.6</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.7`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.7</span>`;
   const rsTag = D.meta.realScale ? ' • 📏 Real 0–100' : '';
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}${rsTag}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)})${rsTag} • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.10.6 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.10.7 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],

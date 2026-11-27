@@ -505,12 +505,12 @@ function renderActionPlaybook() {
   const roster = D.roster || [];
   const pLink = p => `<a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a>`;
 
-  // 1. Ruang Ganti (#21465 / #21831): pemain #12+ yang unhappy/warn & belum reserve
+  // 1. Ruang Ganti (#22134 / #21831): pemain #12+ yang unhappy/rawan & belum reserve
   const needReserve = roster.filter(p =>
-    (p.squadRank || 99) > 11 && !p.injured && String(p.squadRole || 'auto').toLowerCase() !== 'reserve' && (p.mood === 'unhappy' || p.mood === 'warn')
+    (p.squadRank || 99) > 11 && !p.injured && String(p.squadRole || 'auto').toLowerCase() !== 'reserve' && (p.mood === 'unhappy' || p.nearQuota || p.mood === 'warn')
   );
   const starterUnhappy = roster.filter(p =>
-    (p.squadRank || 99) <= 11 && !p.injured && (p.mood === 'unhappy' || p.mood === 'warn')
+    (p.squadRank || 99) <= 11 && !p.injured && (p.mood === 'unhappy' || p.nearQuota || p.mood === 'warn')
   );
   const lockerHit = Number((D.meta && D.meta.lockerHitPct) || 0);
 

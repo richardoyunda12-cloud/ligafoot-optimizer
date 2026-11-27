@@ -215,7 +215,7 @@ function slotScoreJS(p, sl, rotMode, ruleId = null) {
     if (rotMode && sl !== 'G') {
       pickScore += ((p.energy ?? 100) - 80) * 0.35;
       if (p.moodTier === 1 && (p.minPct ?? 100) < 12.0) pickScore += 4.5;
-      else if (p.mood === 'unhappy' || p.mood === 'warn') pickScore += 3.0;
+      else if (p.mood === 'unhappy' || p.nearQuota || p.mood === 'warn') pickScore += 3.0;
       if ((p.potCap - p.force) >= 6 && p.age <= 22) pickScore += 2.0;
     }
     return { score: ev.score, pickScore, wf: ev.wrongFoot };
@@ -277,29 +277,29 @@ const BADGE_TIPS = {
   BOSMAN: 'Kontrak tersisa ≤180 hari (≤6 bulan) — bisa direkrut GRATIS (biaya transfer 0) via Pra-Kontrak saat kontraknya habis!',
   UNH: 'Pemain tidak bahagia (Unhappy) di klub AI — diskon harga beli -15% dan tuntutan gaji dipotong -50%!',
   FREE: 'Free Agent (tanpa klub) — gratis biaya transfer. Catatan: terkunci tidak bisa Sell Now selama 1 tahun.',
-  SALE: 'Pemain masuk daftar jual (For Sale) oleh klub AI — harga lebih murah sekitar -10%.',
+  SALE: 'Pemain masuk daftar jual (For Sale) oleh klub AI — harga normal 1.0x MV tanpa markup klub penjual.',
   LOAN: 'Tersedia untuk dipinjam (Loanable) oleh klub AI.',
-  SCARCE: 'Klub AI kekurangan stok di posisi ini (≤2 pemain) — harga jual dinaikkan +15%, sebaiknya hindari!',
+  SCARCE: 'Klub AI hanya punya 2 stok di sektor ini — harga naik +50% (pemain terbaik) atau +30% (pelapis). Jika cuma 1 stok, klub menolak jual (LAST_POS).',
   TRAP: 'Jebakan Potensi: Potential tampilan jauh lebih tinggi daripada PotCap asli (≥4 poin) — pertumbuhannya bakal mentok lebih cepat!',
   GEM: 'Hidden Gem / Permata Tersembunyi: PotCap asli lebih tinggi dari tampilan atau punya ruang tumbuh sangat besar.',
   GOD: 'Kombinasi Skill Stack kelas atas (efek kedua skill menumpuk penuh di Match Engine).',
   LOCAL: 'Pemain domestik (satu negara dengan klubmu) — tidak memakan kuota pemain asing & adaptasi 2x lebih cepat!',
   INJ: 'Pemain sedang cedera.',
   F9: 'False Nine: pasang pada 1 pemain ST/SS/CAM di lini depan untuk turun membantu lini tengah (-40% bobot ATK-nya → +50% ke MID jika punya PAS/PLY, atau +35% tanpa PAS/PLY). Tidak tersedia untuk winger (LW/RW); ideal saat lini depan ≥2 penyerang.',
-  SLUMP: 'Fine Slump: penurunan performa (-3% per denda, maks -20%) selama 30 hari karena denda kartu merah >20%.',
+  SLUMP: 'Fine Slump: penurunan performa dinamis -(3 + 0.05×pct)% (mis. -4.1% @21%, -5.5% @50%, -8.0% @100%; total cap -20%) selama 30 hari karena denda kartu merah >20%.',
   NONSTACK: 'Skill tidak menumpuk (TCK+MRK di bek cuma +5% sekali; PAS+PLY di gelandang cuma +3% sekali).',
-  ARAB: 'Arab Watch: pemain Top-5 skuad usia ≥26 thn punya peluang 10% ditawar klub Arab 2.5x–3.0x Market Value!',
+  ARAB: 'Arab Watch: pemain Top-5 skuad usia ≥26 thn punya peluang harian 0.33%/hari (sekitar 10% per bulan) ditawar klub Arab 2.5x–3.0x Market Value!',
   GOLDEN: 'Golden Window (60–120 hari, syarat >=60 hari di #24161): perpanjang kontrak 3 tahun di jendela ini untuk potong gaji -12% GRATIS! Di 11–59 hari mereka justru minta naik +5–15%.',
   LOOPHOLE: 'Loophole Auto-Renew 0%: nyalakan Auto-Renew sementara untuk pemain inti ≤10 hari agar diperpanjang +180 hari dengan gaji lama (0% naik).',
   SWAP: 'Rekomendasi tukar beli target + jual pemain skuad lama (hitung net kas, selisih gaji & upgrade performa Eff).',
   FLIP: 'Strategi beli pemain muda (17–21 thn) murah, latih 1–2 musim, lalu jual mahal (+40% counter) untuk cetak kas!',
-  REFUSEDIST: 'Menolak Pindah (#24060 refusesDistance): pemain dari liga Eropa / benua lain tanpa afiliasi menolak pindah ke level liga klubmu.',
-  REFUSELVL: 'Menolak Turun Kasta (#24062 clubLevelLow): selisih level klub terlalu jauh (≥3 level untuk usia <29 thn, atau ≥2 level untuk bintang <28 thn).',
-  PERSUADE: 'Bisa Dibujuk (#24064 buyPersuadable): awalnya menolak, tapi mau pindah jika ditawar >=1.5x Market Value (+2 slack level & +4 plafon Force).',
-  CEIL2X: 'Di Atas Plafon Force (#24059 buyerForceCeiling): membutuhkan tawaran 2.0x Market Value (maks +5 di atas plafon).',
-  KEYLOCK: 'Dikunci Klub AI (#24136/#24715): pemain Top/Star atau Top-3 Force klub AI yang tidak unhappy — otomatis diperpanjang sebelum Bosman.',
-  YSCOUT: 'Olheiro da Base (#24197): U-21 berpotensi besar (potential - force >=10) yang bisa dibajak instan seharga 2.0x MV (kuota 2/musim; diskon 0.75x di CT Lv 3+).',
-  INJDISC: 'Diskon Cedera (#3724 INJURED_SALE): harga pasar sedang terpotong -30% (≤10d), -45% (≤30d), -60% (≤60d), atau -75% (>60d) karena cedera.',
+  REFUSEDIST: 'Menolak Pindah (#24936 refusesDistance): pemain lintas benua tanpa afiliasi/satu grup negara menolak pindah (Div 3-4 ditolak total jika tanpa afiliasi).',
+  REFUSELVL: 'Menolak Turun Kasta (#24939/#24938): selisih level ≥5 untuk pemain top/star atau Force melewati batas plafon +5.',
+  PERSUADE: 'Bisa Dibujuk (#24940/#24941 buyPersuadable): mau dibujuk (+2 levelGap & +5 forceOver di atas plafon) bila gaji >=2.5x & harga cocok (peluang 25%–85%).',
+  CEIL2X: 'Di Atas Plafon Force (#24938): biaya transfer tetap normal 1.0x, tetapi pemain menuntut Gaji 2.0x (Double Salary)!',
+  KEYLOCK: 'Dikunci Klub AI (#25603/#24951): pemain Top/Star/Top-3 yang tidak unhappy otomatis diperpanjang sebelum Bosman, atau minta tebus Release Clause.',
+  YSCOUT: 'Prospek U-21 (#25091): pemain senior U-21 dengan margin potensi tinggi (rawan ditawar AI ~2.0x MV). Untuk bajak akademi junior rival, cek panel Olheiro da Base di Tab Akademi.',
+  INJDISC: 'Diskon Cedera (#23498 INJURED_SALE): harga pasar sedang terpotong -30% (≤10d), -45% (≤28d), -60% (≤70d), atau -75% (>70d) karena cedera.',
   BUG343: 'Bug Engine v1.2.0 (#34992): slot ke-11 pada formasi 3-4-3 memakai rule 18 yang jatuh ke sektor X (ATK hilang -33%)!'
 };
 function tipFor(code) {
@@ -634,7 +634,7 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Energi / Stamina</span>${energyPillHtml(p.energy)}</div>
         <div class="drawer-kv"><span>Chemistry Integrasi &amp; Ritme</span><span class="mono">Integrasi <b class="c-green">${p.integration ?? 100}%</b> • Ritme 3 Laga <b>${Math.round((p.rhythm ?? 1) * 100)}%</b> <span class="c-muted">(rx=${p.rx ?? 7})</span></span></div>
         <div class="drawer-kv"><span>Statistik Musim Ini</span><span class="mono"><b>${p.gamesPlayed}</b> laga (${p.seasonMinutes || 0} mnt) • <b>${p.goals}</b> gol • <b>${p.assists}</b> asis • Avg <b>${p.avgRating}</b></span></div>
-        <div class="drawer-kv"><span>Mood &amp; Role v9</span><span class="badge ${p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'warn' ? 'b-warn' : 'b-info')}">${p.mood.toUpperCase()} · ${esc(p.moodReason)}</span></div>
+        <div class="drawer-kv"><span>Mood &amp; Role v9</span><span class="badge ${p.mood === 'unhappy' ? 'b-crit' : (p.mood === 'happy' ? 'b-good' : ((p.nearQuota || p.mood === 'warn') ? 'b-warn' : 'b-info'))}">${p.mood.toUpperCase()} · ${esc(p.moodReason)}</span></div>
         <div class="drawer-kv"><span>Menit Main (Target ${p.reqPct}%)</span>${minutesQuotaBarHtml(p.minPct, p.reqPct, p.mood)}</div>
         ${(p.minsDeficit > 0 && !p.moodImmune) ? `<div class="drawer-kv"><span>Defisit Menit Main</span><b class="mono c-amber">Kurang ${p.minsDeficit} mnt (~${p.gamesDeficit} laga penuh)</b></div>` : ''}
         ${cardsList.length ? `<div class="drawer-kv"><span>Kartu Aktif</span><span class="mono c-amber">${esc(cardsList.join(' · '))}</span></div>` : ''}
@@ -709,12 +709,10 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Est. Pot / PotCap</span><b class="mono c-green">${y.estPotCap || y.potCap || y.force}${Array.isArray(y.estPotRange) ? ` (rentang ${y.estPotRange[0]}–${y.estPotRange[1]})` : ''}</b></div>
         <div class="drawer-kv"><span>Development</span><b class="mono c-green">${y.development}%</b></div>
         <div class="mini-bar-bg" style="height:9px;margin:4px 0 8px"><div class="mini-bar-fill" style="width:${Math.min(100, y.development)}%;background:var(--green)"></div></div>
-        <div class="drawer-kv"><span>Bonus Tembus Plafon Klub</span><b class="mono c-sky">${y.ceilBonus ? '+' + y.ceilBonus + ' PotCap' : 'Belum (butuh ★7+ & Dev ≥60)'}</b></div>
-        <div class="drawer-kv"><span>Est. Tawaran Mega Eropa</span><b class="mono ${y.isMegaProspect ? 'c-green' : 'c-muted'}">${fmtM(y.estMegaOffer || 0)} ${y.isMegaProspect ? '🔥 (Prospek ★9+)' : ''}</b></div>
         <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></div>
         <div class="drawer-kv"><span>Skor Pipeline Akademi</span><b class="mono">${y.pipeScore}</b></div>
       </div>
-      <div class="c-muted mt-12" style="font-size:11px">Catatan engine: Pemain akademi berhenti berkembang pada usia 20 tahun. Jika ★≥5 dan Dev ≥90 atau usia 20, promosikan untuk menambal skuad atau dijadikan aset flip.</div>`;
+      <div class="c-muted mt-12" style="font-size:11px">Catatan engine (#22569): Laju development melambat di usia 20 (rate 0.35) dan berhenti bertambah pada usia 21+. Jika ★≥5 dan Dev ≥90 atau usia 20, promosikan untuk menambal skuad atau dijadikan aset flip.</div>`;
   } else if (kind === 'scout') {
     const r = (D.scoutPool || []).find(x => x[19] === id);
     if (!r) return;

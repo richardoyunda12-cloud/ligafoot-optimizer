@@ -377,6 +377,55 @@ function runStage2Engine(savePath) {
   assert(Number.isFinite(tracked3.obsWeeklyRate) && tracked3.obsWeeklyRate > 0, 'obsWeeklyRate harus positif');
   assert.notStrictEqual(tracked3.paceStatus, 'BASELINE', '3-save paceStatus tidak boleh BASELINE');
 
+  // 10. Batch 3 OTA 2.1.0 Parity Unit Checks
+  const U = global.LFEngine.utils;
+  const T = global.LFEngine.tactics;
+  const C = global.LFEngine.config;
+  assert.strictEqual(Object.keys(C.COUNTRY_GROUPS).length, 6, 'COUNTRY_GROUPS harus 6 grup');
+  assert.strictEqual(U.countryGroup('EN'), 0);
+  assert.strictEqual(U.countryGroup('BR'), 1);
+  assert.strictEqual(U.countryGroup('NZ'), 5);
+  assert.strictEqual(U.countryGroup('XX_UNKNOWN'), -1);
+  assert.strictEqual(U.injuryTier(28), 'moderate');
+  assert.strictEqual(U.injuryTier(70), 'major');
+  assert.strictEqual(U.injuryTier(71), 'severe');
+  assert.strictEqual(C.MOOD_CFG.starterQuota, 0.25);
+  assert.strictEqual(C.MOOD_CFG.explicitStarterQuota, 0.40);
+
+  const synthRoster = [];
+  for (let i = 0; i < 12; i++) {
+    synthRoster.push({
+      id: `p${i}`,
+      pos: i === 0 ? 'G' : 'MC',
+      age: 24,
+      force: 80 - i,
+      squadRole: i === 2 ? 'starter' : 'auto',
+      seasonMinutes: i === 1 ? 630 : 270, // 70% vs 30% of 900m (10 games)
+      gamesPlayed: 10,
+      seasonInjuryDays: 0,
+    });
+  }
+  const { moods: mTest } = T.computeSquadMoodsV9(synthRoster, false);
+  assert.strictEqual(mTest.p0.reqPct, 25, 'Natural starter auto harus reqPct 25%');
+  assert.strictEqual(mTest.p1.mood, 'happy', 'Natural starter 70% (>=60%) harus happy');
+  assert.strictEqual(mTest.p2.reqPct, 40, 'Explicit role=starter harus reqPct 40%');
+  assert.strictEqual(mTest.p2.mood, 'unhappy', 'Explicit starter 30% (<40%) harus unhappy');
+
+  const brRate = U.estimateWeeklyGrowthRate({ age: 20, force: 25, top: true }, { clubLevel: 20, country: 'BR', played: true });
+  const mxRate = U.estimateWeeklyGrowthRate({ age: 20, force: 25, top: true }, { clubLevel: 20, country: 'MX', played: true });
+  assert(mxRate > brRate, 'BR harus kena penalti -0.02 sementara MX tidak');
+
+  const polCeil = T.userBuyPolicy({ id: 'x1', pos: 'MC', force: 79, age: 25, marketValue: 1000000 }, 'ES', 'ES', 10, 10, 40, 2, null, 3, false, { avgTop11: 68 });
+  assert.strictEqual(polCeil.status, 'OK');
+  assert.strictEqual(polCeil.code, 'CEIL_2X');
+  assert.strictEqual(polCeil.salaryMul, 2.0);
+  assert.strictEqual(polCeil.ceilMult, 1.0);
+  assert.strictEqual(T.refusesStatus({ force: 70, top: true }, 18, 13, 1, 0), true);
+  assert.strictEqual(T.refusesDistance({ age: 35, nationality: 'IT' }, 'IT', 'JP', 15, 13, 0, 1), true);
+  assert(U.computeMarketValue({ force: 60, age: 20, potCap: 75, pos: 'ATA', star: true }, { level: 21, country: 'ES' }) > 10000000);
+  assert(D.bTeamInfo.creationCost >= 2600000, 'bTeamCost minimum 2.6M tanpa cap 2M');
+  assert(Array.isArray(D.rivalYouthTargets), 'D.rivalYouthTargets harus ada');
+
   console.log(
     `  PASS: Parse ${D.meta.parseSec}s | Skuad ${D.roster.length} | BestXI ${D.bestXi.avgScore} | ` +
     `MatchLog ${D.matchTelemetry.all.games} | Wonderkids ${D.progression.wonderkids.length} | 3-Save Rate +${tracked3.obsWeeklyRate}/pkn (${tracked3.paceStatus}).`
