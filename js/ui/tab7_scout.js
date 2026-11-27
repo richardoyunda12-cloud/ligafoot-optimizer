@@ -409,7 +409,7 @@ function enrichScoutRow(r, cm) {
 
 function renderCompactScoutBadges(flagsStr, fillsHole) {
   const all = flagsStr ? flagsStr.split(',').filter(Boolean) : [];
-  const primaryOrder = ['FREE', 'BOSMAN', 'UNH', 'PERSUADE', 'YSCOUT', 'REFUSE_DIST', 'REFUSE_LVL', 'KEY_LOCK', 'CEIL_2X', 'SCARCE', 'TRAP', 'GEM', 'INJ', 'INJ_DISC'];
+  const primaryOrder = ['FREE', 'BOSMAN', 'UNH', 'PERSUADE', 'YSCOUT', 'REFUSE_DIST', 'REFUSE_LVL', 'KEY_LOCK', 'CEIL_2X', 'SCARCE', 'TRAP', 'SGEM', 'GEM', 'GOD', 'INJ', 'INJ_DISC'];
   const primary = [];
   if (fillsHole) primary.push({ k: 'LUBANG', cls: 'b-warn', tip: 'Mengisi lubang posisi di skuad senior' });
   primaryOrder.forEach(k => {
@@ -417,16 +417,18 @@ function renderCompactScoutBadges(flagsStr, fillsHole) {
       let cls = 'b-good';
       if (['SCARCE', 'TRAP', 'INJ', 'REFUSE_DIST', 'REFUSE_LVL', 'KEY_LOCK', 'REFUSE'].includes(k)) cls = 'b-crit';
       else if (['PERSUADE', 'CEIL_2X'].includes(k)) cls = 'b-warn';
+      else if (k === 'SGEM') cls = 'b-accent';
       else if (['YSCOUT', 'INJ_DISC'].includes(k)) cls = 'b-info';
-      primary.push({ k, cls, tip: tipFor(k) });
+      const lbl = k === 'SGEM' ? '⭐ SUPER GEM' : k;
+      primary.push({ k, lbl, cls, tip: tipFor(k) });
     }
   });
   const used = new Set(primary.map(x => x.k));
   const secondary = all.filter(k => !used.has(k));
 
-  const primHtml = primary.map(x => `<span class="badge ${x.cls}" title="${esc(x.tip)}">${x.k}</span>`).join(' ');
+  const primHtml = primary.map(x => `<span class="badge ${x.cls}" title="${esc(x.tip)}">${x.lbl || x.k}</span>`).join(' ');
   const secHtml = secondary.length
-    ? `<span class="micro-tags">${secondary.map(k => `<span class="micro-tag" title="${esc(tipFor(k))}">${k}</span>`).join('')}</span>`
+    ? `<span class="micro-tags">${secondary.map(k => `<span class="micro-tag" title="${esc(tipFor(k))}">${k === 'SGEM' ? '⭐SGEM' : k}</span>`).join('')}</span>`
     : '';
   return primHtml + secHtml;
 }
@@ -1070,6 +1072,7 @@ function renderScoutPresetChips() {
     ['BOSMAN', '🆓 Bosman ≤180d'],
     ['UNH', '🔥 Unhappy -15%'],
     ['FLIP', '💸 Flip ≤21th'],
+    ['SGEM', '⭐ Super Gem'],
     ['GEM', '💎 Gems'],
     ['FREE', 'Free Agent'],
     ['LOCAL', '🇮🇩 Lokal'],
@@ -1117,7 +1120,7 @@ function applyScoutPreset(preset) {
   setVal('s-pos', '');
   scoutPosSet.clear();
   setVal('s-foot', '');
-  setVal('s-max-age', preset === 'FLIP' ? '21' : (preset === 'POT60' ? '23' : ''));
+  setVal('s-max-age', preset === 'FLIP' ? '21' : (preset === 'POT60' ? '23' : (preset === 'SGEM' ? '22' : '')));
   setVal('s-min-f', '');
   setVal('s-max-price', '');
   setChk('s-only-stack', preset === 'FLIP');
@@ -1170,6 +1173,7 @@ function getFilteredScout() {
     if (scoutPreset === 'FLIP' && (r[2] > 21 || r[17] < 30)) continue;
     if (scoutPreset === 'BOSMAN' && !isBosmanTarget(r)) continue;
     if (scoutPreset === 'UNH' && !flags.includes('UNH')) continue;
+    if (scoutPreset === 'SGEM' && !flags.includes('SGEM')) continue;
     if (scoutPreset === 'GEM' && !flags.includes('GEM')) continue;
     if (scoutPreset === 'FREE' && !flags.includes('FREE')) continue;
     if (scoutPreset === 'LOCAL' && !flags.includes('LOCAL')) continue;

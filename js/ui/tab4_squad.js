@@ -722,6 +722,7 @@ function getFilteredBTeamRoster() {
   const list = Array.isArray(bt.roster) ? bt.roster : [];
   let res = list;
   if (bTeamFilter === 'PROMOTE') res = list.filter(p => p.bAction === 'SIAP PROMOSI');
+  else if (bTeamFilter === 'SGEM') res = list.filter(p => p.isSuperGem);
   else if (bTeamFilter === 'LEAK') res = list.filter(p => p.zeroMin);
   else if (bTeamFilter === 'CONTRACT') res = list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom);
   else if (bTeamFilter === 'FOREIGN') res = list.filter(p => isRosterForeign(p));
@@ -799,7 +800,7 @@ function renderBTeamPanel() {
       <div style="background:var(--bg2);border:1px solid rgba(16,185,129,.35);border-radius:8px;padding:8px 10px;font-size:11px">
         <div style="font-weight:800;margin-bottom:4px" class="c-green">📥 Pipeline Tim B → Tim Utama (Gratis)</div>
         ${topPromoteCands.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px">${topPromoteCands.map(p =>
-          `<span class="tl-pill" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b> <span class="mono">${fmtPos(p.pos)} ${p.age}th · F${p.force}→${p.potCap}</span>${p.fillsHole ? ' <b class="c-green">LUBANG</b>' : ''}</span>`
+          `<span class="tl-pill" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b> <span class="mono">${fmtPos(p.pos)} ${p.age}th · F${p.force}→${p.potCap}</span>${p.isSuperGem ? ' <b class="c-purple">⭐SGEM</b>' : ''}${p.stackGrade === 'GOD' ? ' <b class="c-green">GOD</b>' : ''}${p.fillsHole ? ' <b class="c-green">LUBANG</b>' : ''}</span>`
         ).join('')}</div>` : '<div class="c-muted">Belum ada pemain Tim B mencapai ambang starter Tim Utama.</div>'}
       </div>
       <div style="background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;padding:8px 10px;font-size:11px">
@@ -813,6 +814,7 @@ function renderBTeamPanel() {
   const counts = {
     ALL: list.length,
     PROMOTE: list.filter(p => p.bAction === 'SIAP PROMOSI').length,
+    SGEM: list.filter(p => p.isSuperGem).length,
     LEAK: list.filter(p => p.zeroMin).length,
     CONTRACT: list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom).length,
     FOREIGN: list.filter(p => isRosterForeign(p)).length,
@@ -822,6 +824,7 @@ function renderBTeamPanel() {
   const chipDefs = [
     ['ALL', `Semua (${counts.ALL})`],
     ['PROMOTE', `⬆ Siap Promosi (${counts.PROMOTE})`],
+    ...(counts.SGEM > 0 ? [['SGEM', `⭐ Super Gem (${counts.SGEM})`]] : []),
     ['LEAK', `💸 0 Menit (${counts.LEAK})`],
     ['CONTRACT', `⏳ Kontrak (${counts.CONTRACT})`],
     ['HIGHPOT', `🚀 Gap ≥12 (${counts.HIGHPOT})`],
@@ -850,7 +853,7 @@ function renderBTeamPanel() {
     return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.injured ? `<span class="badge b-crit" style="font-size:9px">🏥${p.injuryDays}d</span>` : ''}</div>
-        <div class="origin-meta">${originNoteHtml(p)}${p.bLineupRole === 'XI' ? '<span class="badge b-good origin-note" title="Starter XI di formasi Tim B saat ini">⚡ XI B</span>' : (p.bLineupRole === 'BENCH' ? '<span class="badge b-muted origin-note" title="Cadangan di bangku Tim B">🪑 Bench B</span>' : '')}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}</div>
+        <div class="origin-meta">${originNoteHtml(p)}${p.bLineupRole === 'XI' ? '<span class="badge b-good origin-note" title="Starter XI di formasi Tim B saat ini">⚡ XI B</span>' : (p.bLineupRole === 'BENCH' ? '<span class="badge b-muted origin-note" title="Cadangan di bangku Tim B">🪑 Bench B</span>' : '')}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}${p.isTrap ? `<span class="badge b-crit" style="font-size:9px" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isSuperGem ? `<span class="badge b-accent" style="font-size:9px" title="${esc(tipFor('SGEM'))}">⭐ SUPER GEM</span>` : (p.isGem ? `<span class="badge b-good" style="font-size:9px" title="${esc(tipFor('GEM'))}">GEM</span>` : ''))}${p.stackGrade === 'GOD' ? `<span class="badge b-good" style="font-size:9px" title="${esc(tipFor('GOD'))}">GOD</span>` : ''}</div>
       </td>
       <td><b>${fmtPos(p.pos)}</b></td>
       <td class="mono"><b>${p.force}</b></td>

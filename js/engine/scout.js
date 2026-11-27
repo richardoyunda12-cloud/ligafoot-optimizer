@@ -567,7 +567,8 @@
 
       const sc = scoreTarget(p, true, false, false, false, pol, persuadable, false);
       const flags = ['FREE'];
-      if (p.isGem) flags.push('GEM');
+      if (p.isSuperGem) flags.push('SGEM');
+      else if (p.isGem) flags.push('GEM');
       if (p.isTrap) flags.push('TRAP');
       if (p.stackGrade === 'GOD') flags.push('GOD');
       if (userCountry && p.nationality === userCountry) flags.push('LOCAL');
@@ -700,7 +701,8 @@
         if (p.forSale) flags.push('SALE');
         if (p.loanable) flags.push('LOAN');
         if (isScarce) flags.push('SCARCE');
-        if (p.isGem) flags.push('GEM');
+        if (p.isSuperGem) flags.push('SGEM');
+        else if (p.isGem) flags.push('GEM');
         if (p.isTrap) flags.push('TRAP');
         if (p.stackGrade === 'GOD') flags.push('GOD');
         if (p.injured) {

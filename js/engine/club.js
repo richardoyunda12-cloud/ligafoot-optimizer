@@ -1090,6 +1090,13 @@
     }
 
     if (bTeamInfo && bTeamInfo.hasBTeam) {
+      if ((bTeamInfo.superGemCount || 0) > 0 && Array.isArray(bTeamInfo.superGems)) {
+        const sgNames = bTeamInfo.superGems.slice(0, 3)
+          .map(x => `${x.name} (${U.posEn(x.pos)} ${x.age}th, F${x.force}→${x.potCap}${x.stackGrade === 'GOD' ? ' GOD' : ''})`)
+          .join(', ');
+        add('MEDIUM', 'Tim B Super Gem', `${bTeamInfo.superGemCount} Super Gem berkembang di ${bTeamInfo.bTeamName || 'Tim B'}!`,
+          `${sgNames}. Pastikan main rutin di Tim B atau tarik promosi gratis (0€) bila dibutuhkan Tim Utama.`);
+      }
       if ((bTeamInfo.contractAlertCount || 0) > 0) {
         add('MEDIUM', 'Tim B', `${bTeamInfo.contractAlertCount} pemain ${bTeamInfo.bTeamName || 'Tim B'} masuk Kontrak Kritis / Golden Window!`,
           'Buka Tab 3E (Tim B) untuk cek sisa kontrak & ekspor pemain Tim B agar tidak terlewat.');
@@ -2140,6 +2147,7 @@
     let bTeamZeroMinPayrollLeak = 0;
     let bTeamContractAlerts = 0;
     let bTeamSeasonStarted = false;
+    const bTeamSuperGems = [];
     const rawBSetup = (save.bSetup && typeof save.bSetup === 'object') ? save.bSetup : null;
     const bSetupXiSet = new Set(rawBSetup && Array.isArray(rawBSetup.xi) ? rawBSetup.xi.map(String) : []);
     const bSetupBenchSet = new Set(rawBSetup && Array.isArray(rawBSetup.bench) ? rawBSetup.bench.map(String) : []);
@@ -2169,6 +2177,9 @@
         const inGolden = p.contractDays >= C.RENEW_GOLDEN_MIN && p.contractDays <= C.RENEW_GOLDEN_MAX && !p.loanedFrom;
         const critContract = p.contractDays <= 30 && !p.loanedFrom;
         if (critContract || inGolden) bTeamContractAlerts++;
+        if (p.isSuperGem && !p.isTrap) {
+          bTeamSuperGems.push({ id: p.id, name: p.name, pos: p.pos, age: p.age, force: p.force, potCap: p.potCap, stackGrade: p.stackGrade });
+        }
         if (zeroMin) {
           bTeamZeroMinLeak++;
           bTeamZeroMinPayrollLeak += (p.salary || 0);
@@ -2236,6 +2247,8 @@
       zeroMinLeakCount: bTeamZeroMinLeak,
       zeroMinPayrollLeak: bTeamZeroMinPayrollLeak,
       contractAlertCount: bTeamContractAlerts,
+      superGemCount: bTeamSuperGems.length,
+      superGems: bTeamSuperGems.sort((a, b) => (b.potCap - a.potCap) || (b.force - a.force)).slice(0, 6),
       roster: bRosterExport,
     };
 
@@ -2486,11 +2499,16 @@
     const canDeferredOutsideWindow = !isWindowOpenNow && useRealWindows && !save.onlineHumans && !save.choosingTeam;
     const filterBuyersByWindow = useRealWindows && !canDeferredOutsideWindow;
     const aiBuyersPool = [];
+    let maxAiBudgetOpen = 0;
+    let windowSkippedClubs = 0;
     for (const [tid, tObj] of Object.entries(compactTeams)) {
       if (!tObj || typeof tObj !== 'object' || tid === userId || (ownBId && tid === ownBId) || String(tid).endsWith('_B')) continue;
       const stC = U.getStaticClub(clubsMeta, tid);
       const cCountry = String(tObj.country || stC.country || 'BR').toUpperCase();
-      if (filterBuyersByWindow && typeof U.isWindowOpenOn === 'function' && !U.isWindowOpenOn(cCountry, currentDate)) continue;
+      if (filterBuyersByWindow && typeof U.isWindowOpenOn === 'function' && !U.isWindowOpenOn(cCountry, currentDate)) {
+        windowSkippedClubs++;
+        continue;
+      }
       const dynMap = new Map();
       const rawDyn = tObj.playerDynamic;
       if (Array.isArray(rawDyn)) {
@@ -2549,7 +2567,9 @@
       let topSum = 0;
       for (let ti = 0; ti < topN; ti++) topSum += forces[ti];
       const top11Avg = topN > 0 ? (topSum / topN) : 0;
-      aiBuyersPool.push({ repCeil, minF, minSeniorForce, top11Avg });
+      const cBudget = Math.max(0, U.safeNum(tObj.budget, 0));
+      if (cBudget > maxAiBudgetOpen) maxAiBudgetOpen = cBudget;
+      aiBuyersPool.push({ repCeil, minF, minSeniorForce, top11Avg, budget: cBudget });
     }
     const userGkCount = userRoster.filter(x => x.pos === 'G').length;
     const maxAskMul = C.PURCHASE_OFFER_MAX_ASK_MUL || 1.10;
@@ -2564,9 +2584,13 @@
       const effMV = p.injured ? Math.round(mv * U.safeNum(p.injurySaleMul, 1)) : Math.round(mv);
       const maxAskPrice = Math.round(effMV * maxAskMul);
       const maxAuctionPrice = Math.round(effMV * maxAucMul);
+      const effAsk = (p.forSale && p.forSalePrice > 0) ? Math.round(p.forSalePrice) : effMV;
+      const forSaleOverCap = Boolean(p.forSale && p.forSalePrice > maxAskPrice);
+      const lastInPositionLock = Boolean(p.pos !== 'G' && typeof T.lastInPosition === 'function' && T.lastInPosition(p, userRoster, bRosterExport));
       const offerSlotsRange = p.force >= 50 ? '1–2' : (p.force >= 40 ? '1–3' : (p.force >= 30 ? '2–4' : '2–5'));
 
       let estBuyersCount = 0;
+      let estAffordBuyersCount = 0;
       let buyerDemandTier = 'COLD';
       let buyerDemandNote = 'Belum ada klub AI yang memenuhi syarat level/usia di bursa — coba Pinjamkan (Loan) atau tunggu perkembangan skuad';
       if (p.loanedFrom) {
@@ -2578,6 +2602,10 @@
       } else if (p.pos === 'G' && userGkCount <= 1) {
         buyerDemandTier = 'LOCKED';
         buyerDemandNote = 'Terkunci aturan minimal 1 kiper di skuad';
+      } else if (lastInPositionLock) {
+        const secLbl = (C.EXACT_CAT && (p.pos in C.EXACT_CAT)) ? C.EXACT_CAT[p.pos] : p.pos;
+        buyerDemandTier = 'LOCKED';
+        buyerDemandNote = `Terkunci aturan lastInPosition (#25401): stok sektor ${secLbl} (Senior + Tim B) tersisa 1/1. Promosikan/beli 1 pemain ${secLbl} dulu agar bisa dijual.`;
       } else {
         const pf = U.safeNum(p.force, 20);
         const pAge = U.safeInt(p.age, 24);
@@ -2588,23 +2616,37 @@
           if (!(pf >= b.minF || pf >= b.minSeniorForce)) continue;
           if (pAge >= 30 && pf < (b.top11Avg - vetTol)) continue;
           estBuyersCount++;
+          if (b.budget >= effAsk) estAffordBuyersCount++;
         }
         const injSuffix = p.injured
           ? ` ⚠ Sedang cedera: harga terpotong jadi ${Math.round((p.injurySaleMul || 1) * 100)}% MV — sebaiknya tunggu sembuh.`
           : '';
-        const defSuffix = canDeferredOutsideWindow ? ' [Bursa tutup → Deal Tertunda: pindah saat bursa buka]' : '';
+        const winSuffix = filterBuyersByWindow && windowSkippedClubs > 0
+          ? ` (${windowSkippedClubs} klub di luar negeri tutup bursa pada ${currentDate})`
+          : (canDeferredOutsideWindow ? ' [Bursa tutup → Deal Tertunda: pindah saat bursa buka]' : '');
+        const askWarn = forSaleOverCap
+          ? ` ⚠ Harga For Sale (${U.fmtMoney(p.forSalePrice)}) melebihi batas 1.10x MV (${U.fmtMoney(maxAskPrice)}) — game otomatis skip roll tawaran!`
+          : '';
+        const budgetWarn = (estBuyersCount > 0 && estAffordBuyersCount === 0 && maxAiBudgetOpen > 0)
+          ? ` ⚠ Kas AI tertinggi di bursa terbuka saat ini ${U.fmtMoney(maxAiBudgetOpen)} — 0 klub berkas ≥ ${U.fmtMoney(effAsk)} (pertimbangkan harga ≤ kas AI atau tunggu bursa Eropa/Arab buka).`
+          : (estAffordBuyersCount < estBuyersCount && estAffordBuyersCount > 0
+            ? ` (${estAffordBuyersCount} di antaranya berkas ≥ ${U.fmtMoney(effAsk)}).`
+            : '');
         if (estBuyersCount >= 50) {
           buyerDemandTier = 'HOT';
-          buyerDemandNote = `Ramai peminat (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV) atau Lelang maks ~${U.fmtMoney(maxAuctionPrice)}.${injSuffix}${defSuffix}`;
+          buyerDemandNote = `Ramai peminat (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV) atau Lelang maks ~${U.fmtMoney(maxAuctionPrice)}.${winSuffix}${askWarn}${budgetWarn}${injSuffix}`;
         } else if (estBuyersCount >= 10) {
           buyerDemandTier = 'WARM';
-          buyerDemandNote = `Peminat cukup (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV).${injSuffix}${defSuffix}`;
+          buyerDemandNote = `Peminat cukup (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV).${winSuffix}${askWarn}${budgetWarn}${injSuffix}`;
         } else if (estBuyersCount >= 1) {
           buyerDemandTier = 'LOW';
-          buyerDemandNote = `Peminat terbatas (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Jangan pasang harga > ${U.fmtMoney(maxAskPrice)} (1.10x MV) agar tawaran tetap muncul.${injSuffix}${defSuffix}`;
+          buyerDemandNote = `Peminat terbatas (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Jangan pasang harga > ${U.fmtMoney(maxAskPrice)} (1.10x MV) agar tawaran tetap muncul.${winSuffix}${askWarn}${budgetWarn}${injSuffix}`;
         }
       }
       cp.estBuyersCount = estBuyersCount;
+      cp.estAffordBuyersCount = estAffordBuyersCount;
+      cp.forSaleOverCap = forSaleOverCap;
+      cp.lastInPositionLock = lastInPositionLock;
       cp.offerSlotsRange = offerSlotsRange;
       cp.maxAskPrice = maxAskPrice;
       cp.maxAuctionPrice = maxAuctionPrice;
@@ -2631,7 +2673,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.10 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.11 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
@@ -2679,6 +2721,8 @@
         xiHold: Boolean(uTeam.xiHold),
         aiUnhappyTotal,
         aiBosmanTotal,
+        maxAiBudgetOpen,
+        windowSkippedClubs,
         scoutPoolCount: scoutPool.length,
         hasStaticDb: Object.keys(staticPlayers).length > 0,
       },

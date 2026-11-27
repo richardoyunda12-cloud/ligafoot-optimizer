@@ -166,14 +166,19 @@ function runStage2Engine(savePath) {
   assert.strictEqual(f9Xi.falseNine, true, 'solveBestXi harus menandai falseNine=true dengan >=2 penyerang & 1 ST PAS/ARM');
   assert.deepStrictEqual(f9Xi.falseNinePlayers, ['StrikerPM'], 'falseNinePlayers hanya boleh memuat ST/SS/CAM, bukan winger PE');
 
-  // Regresi v8.10.3: buyerAcceptsPlayer (#24933) + findInterestedTeams (#25045) tanpa filter budget palsu
-  const topUnlocked = D.roster.find(p => !p.freeSigned && !p.loanedFrom && !(p.pos === 'G' && D.roster.filter(x => x.pos === 'G').length <= 1));
+  // Regresi v8.10.3 + v8.10.11: buyerAcceptsPlayer (#24933) + findInterestedTeams (#25496) + lastInPosition (#25401)
+  const topUnlocked = D.roster.find(p => !p.freeSigned && !p.loanedFrom && !p.lastInPositionLock && !(p.pos === 'G' && D.roster.filter(x => x.pos === 'G').length <= 1));
   if (topUnlocked) {
     assert(topUnlocked.estBuyersCount > 0, `Pemain utama ${topUnlocked.name} seharusnya memiliki peminat AI (estBuyersCount=${topUnlocked.estBuyersCount})`);
+    assert.strictEqual(typeof topUnlocked.estAffordBuyersCount, 'number', 'estAffordBuyersCount harus ada pada roster');
     const expEffMv = topUnlocked.injured ? Math.round((topUnlocked.marketValue || 0) * (topUnlocked.injurySaleMul || 1)) : Math.round(topUnlocked.marketValue || 0);
     assert.strictEqual(topUnlocked.maxAskPrice, Math.round(expEffMv * 1.10), `maxAskPrice ${topUnlocked.name} harus 1.10x MV efektif`);
     assert(typeof topUnlocked.offerSlotsRange === 'string' && topUnlocked.offerSlotsRange.includes('–'), 'offerSlotsRange hilang');
   }
+  // Regresi v8.10.11: SGEM flag di Pasar Global & superGemCount di Tim B
+  assert(D.scoutPool.some(r => String(r[18] || '').split(',').includes('SGEM')), 'Pasar Global (scoutPool) harus menandai flag SGEM pada Super Gem U-22');
+  assert.strictEqual(typeof D.bTeamInfo.superGemCount, 'number', 'D.bTeamInfo.superGemCount harus bertipe number');
+  assert.strictEqual(typeof D.meta.maxAiBudgetOpen, 'number', 'D.meta.maxAiBudgetOpen harus bertipe number');
 
   // Regresi v8.10.6 (Batch 2 Match Engine, Tactics & Formations Parity - OTA 2.1.0)
 {

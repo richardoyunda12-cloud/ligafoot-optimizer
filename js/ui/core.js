@@ -511,11 +511,13 @@ function buyerDemandBadgeHtml(p, compact = false) {
   }
   const tier = p.buyerDemandTier;
   const cnt = Number(p.estBuyersCount || 0);
+  const aff = (p.estAffordBuyersCount !== undefined && p.estAffordBuyersCount !== null) ? Number(p.estAffordBuyersCount) : cnt;
   const tip = esc(p.buyerDemandNote || 'Estimasi klub AI yang mampu membeli');
+  const affTag = (!compact && aff < cnt && aff === 0) ? ' · 💸Kas AI 0' : ((!compact && aff < cnt) ? ` · ${aff} kas cukup` : '');
   if (tier === 'LOCKED') return `<span class="badge b-muted" title="${tip}">🔒 ${compact ? 'Kunci' : 'Terkunci'}</span>`;
-  if (tier === 'HOT') return `<span class="badge b-good mono" title="${tip}">🔥 ${compact ? cnt + ' klb' : `Ramai (${cnt} klub)`}</span>`;
-  if (tier === 'WARM') return `<span class="badge b-info mono" title="${tip}">⚖️ ${compact ? cnt + ' klb' : `Sedang (${cnt} klub)`}</span>`;
-  if (tier === 'LOW') return `<span class="badge b-warn mono" title="${tip}">🧊 ${compact ? cnt + ' klb' : `Tipis (${cnt} klub)`}</span>`;
+  if (tier === 'HOT') return `<span class="badge ${aff === 0 ? 'b-warn' : 'b-good'} mono" title="${tip}">🔥 ${compact ? cnt + ' klb' : `Ramai (${cnt} klub${affTag})`}</span>`;
+  if (tier === 'WARM') return `<span class="badge ${aff === 0 ? 'b-warn' : 'b-info'} mono" title="${tip}">⚖️ ${compact ? cnt + ' klb' : `Sedang (${cnt} klub${affTag})`}</span>`;
+  if (tier === 'LOW') return `<span class="badge b-warn mono" title="${tip}">🧊 ${compact ? cnt + ' klb' : `Tipis (${cnt} klub${affTag})`}</span>`;
   return `<span class="badge b-crit mono" title="${tip}">❄️ ${compact ? '0 klb' : 'Sepi (0 klub)'}</span>`;
 }
 
@@ -682,7 +684,11 @@ function openPlayerDrawer(kind, id) {
           if (p.loanedFrom) stTxt = '<b class="c-amber">⚠ Pemain pinjaman — tidak bisa dijual</b>';
           else if (p.freeSigned) stTxt = '<b class="c-amber">⚠ Terkunci freeNoSale (rekrut gratis)</b>';
           else if (p.pos === 'G' && gkCnt <= 1) stTxt = '<b class="c-amber">⚠ Terkunci minimal 1 kiper</b>';
-          else if (p.injured) stTxt += ' <span class="c-red">(terpotong cedera!)</span>';
+          else if (p.lastInPositionLock) stTxt = '<b class="c-amber">⚠ Terkunci lastInPosition (stok lini 1/1 — promosikan pelapis dulu)</b>';
+          else {
+            if (p.forSaleOverCap) stTxt += ` · <b class="c-red">⚠ Harga pasangmu >1.10x MV!</b>`;
+            if (p.injured) stTxt += ' <span class="c-red">(terpotong cedera!)</span>';
+          }
           return `<div class="drawer-kv" id="drw-sell-ceiling" title="Jika memasang harga di atas 1.10x MV pada Purchase Offers, game tidak memunculkan klub peminat (0 tawaran)."><span>🏷️ Batas Harga Jual</span><span class="mono">${stTxt}</span></div>`;
         })()}
         <div class="drawer-kv"><span>Biaya Putus / Fee Jual (${Math.round((p.termFeeRate ?? 0) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
@@ -755,7 +761,11 @@ function openPlayerDrawer(kind, id) {
         <b>${fmtPos(r[1])}</b> • ${r[2]} thn • Kaki <b>${fmtFoot(r[3])}</b> • ${esc(r[4])} • <b>${esc(r[16])}</b>
       </div>
       <div class="pill-row">
-        ${flags.map(f => `<span class="badge ${f === 'SCARCE' || f === 'TRAP' || f === 'INJ' ? 'b-crit' : (f === 'FREE' || f === 'BOSMAN' || f === 'UNH' || f === 'GEM' ? 'b-good' : 'b-info')}" title="${esc(tipFor(f))}">${f}</span>`).join('')}
+        ${flags.map(f => {
+          const cls = (f === 'SCARCE' || f === 'TRAP' || f === 'INJ') ? 'b-crit' : (f === 'SGEM' ? 'b-accent' : ((f === 'FREE' || f === 'BOSMAN' || f === 'UNH' || f === 'GEM' || f === 'GOD') ? 'b-good' : 'b-info'));
+          const lbl = f === 'SGEM' ? '⭐ SUPER GEM' : f;
+          return `<span class="badge ${cls}" title="${esc(tipFor(f))}">${lbl}</span>`;
+        }).join('')}
       </div>
       <div class="drawer-sec">
         <h3>🔎 Profil &amp; Potensi</h3>
@@ -840,6 +850,8 @@ function openPlayerDrawer(kind, id) {
       </div>
       <div class="pill-row">
         <span class="badge ${esc(p.bCls || 'b-info')}">${esc(p.bAction || 'TAHAN & LATIH')}</span>
+        ${p.isTrap ? `<span class="badge b-crit" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isSuperGem ? `<span class="badge b-accent" title="${esc(tipFor('SGEM'))}">⭐ SUPER GEM</span>` : (p.isGem ? `<span class="badge b-good" title="${esc(tipFor('GEM'))}">GEM</span>` : ''))}
+        ${p.stackGrade === 'GOD' ? `<span class="badge b-good" title="${esc(tipFor('GOD'))}">GOD +${p.stackPct}%</span>` : ''}
         ${p.injured ? `<span class="badge b-crit">🏥 Cedera ${p.injuryDays}d</span>` : ''}
         ${p.zeroMin ? '<span class="badge b-crit">0 Menit Main</span>' : ''}
       </div>

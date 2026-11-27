@@ -159,6 +159,9 @@ function getAlertActionSpec(a) {
   if (c.includes('slump')) {
     return { lbl: 'Filter Slump →', act: "openSquadWithFilter('SLUMP')" };
   }
+  if (c.includes('tim b')) {
+    return { lbl: 'Buka Tim B →', act: "goToView('t3','t3-bteam')" };
+  }
   if (c.includes('naik gaji') || c.includes('potong gaji')) {
     return { lbl: 'Cek Radar Gaji →', act: "goToView('t3','t3-squad')" };
   }
@@ -336,6 +339,54 @@ function renderTab1() {
         </div>
         ${twBadge}
       </div>`;
+  }
+
+  // 2B2. RINGKASAN POTENSI CUAN / HEMAT BULANAN (Tiket Preset + Potong Gaji + Golden -12% + Tim B)
+  let profitEl = document.getElementById('t1-profit-strip');
+  if (!profitEl && stripEl && stripEl.parentNode) {
+    profitEl = document.createElement('div');
+    profitEl.id = 't1-profit-strip';
+    stripEl.parentNode.insertBefore(profitEl, stripEl.nextSibling);
+  }
+  if (profitEl) {
+    const roster = D.roster || [];
+    const pa = D.stadium && D.stadium.presetAudit;
+    const activePreset = (pa && Array.isArray(pa.presets)) ? pa.presets.find(x => x.isActive) : null;
+    const tktGainPerMatch = (activePreset && activePreset.ligaLoss >= 100000) ? activePreset.ligaLoss : 0;
+    const cutSaveMo = roster
+      .filter(p => !p.salaryCutLocked && p.contractDays >= 60 && p.salary > 0)
+      .reduce((s, p) => s + Math.round(p.salary * Math.max(0, 1 - (p.salaryFloorFactor || 0.90))), 0);
+    const goldSaveMo = roster
+      .filter(p => p.contractDays >= 60 && p.contractDays <= 120 && !p.loanedFrom && p.salary > 0)
+      .reduce((s, p) => s + Math.round(p.salary * 0.12), 0);
+    const btLeakMo = (D.bTeamInfo && D.bTeamInfo.hasBTeam && D.bTeamInfo.seasonStarted && D.bTeamInfo.zeroMinPayrollLeak > 0)
+      ? D.bTeamInfo.zeroMinPayrollLeak
+      : 0;
+    const estMonthlyOpp = (tktGainPerMatch * 2) + cutSaveMo + goldSaveMo + btLeakMo;
+    if (estMonthlyOpp > 0) {
+      const chips = [];
+      if (tktGainPerMatch > 0) {
+        chips.push(`<button type="button" class="badge b-warn mono" style="cursor:pointer" onclick="goToView('t5','t5-tkt')" title="Ganti preset tiket ke optimal Liga (${esc((pa && pa.bestLigaPresetName) || 'Liga')})">🎫 Tiket +${fmtM(tktGainPerMatch)}/laga</button>`);
+      }
+      if (cutSaveMo > 0) {
+        chips.push(`<button type="button" class="badge b-good mono" style="cursor:pointer" onclick="goToView('t3','t3-squad')" title="Pemain kuota 0/1 siap Potong Gaji (termasuk yg reset pasca naik gaji)">✂️ Potong Gaji +${fmtM(cutSaveMo)}/bln</button>`);
+      }
+      if (goldSaveMo > 0) {
+        chips.push(`<button type="button" class="badge b-good mono" style="cursor:pointer" onclick="openSquadWithFilter('GOLDEN')" title="Perpanjang 3 tahun di Golden Window (60-120h) hemat -12%">💎 Golden -12% +${fmtM(goldSaveMo)}/bln</button>`);
+      }
+      if (btLeakMo > 0) {
+        chips.push(`<button type="button" class="badge b-crit mono" style="cursor:pointer" onclick="goToView('t3','t3-bteam')" title="Gaji pemain Tim B dengan 0 menit bermain">🅱️ Tim B 0-mnt +${fmtM(btLeakMo)}/bln</button>`);
+      }
+      profitEl.innerHTML = `
+        <div class="club-status-strip" style="margin-top:6px;gap:6px;flex-wrap:wrap;border-color:rgba(16,185,129,.35)">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span class="badge b-good mono">💰 Potensi Cuan ~+${fmtM(estMonthlyOpp)}/bln</span>
+            ${chips.join('')}
+          </div>
+        </div>`;
+    } else {
+      profitEl.innerHTML = '';
+    }
   }
 
   // 2C. APA YANG BERUBAH SEJAK SAVE TERAKHIR? (Multi-Save Diff)
