@@ -617,6 +617,8 @@ function closePlayerDrawer() {
   activeDrawer = null;
   compareSlots = [];
   if (typeof closeCompareModal === 'function') closeCompareModal();
+  if (typeof resetQuantUiState === 'function') resetQuantUiState();
+  if (typeof resetBundleUiState === 'function') resetBundleUiState();
   const bg = document.getElementById('player-drawer-bg');
   if (bg) bg.classList.remove('open');
 }
@@ -1132,6 +1134,8 @@ window.LFResetUIState = function () {
   activeDrawer = null;
   compareSlots = [];
   if (typeof closeCompareModal === 'function') closeCompareModal();
+  if (typeof resetQuantUiState === 'function') resetQuantUiState();
+  if (typeof resetBundleUiState === 'function') resetBundleUiState();
   if (D && D.stadium && D.stadium.optLigaPrices) {
     simPrices = { ...D.stadium.optLigaPrices };
   }

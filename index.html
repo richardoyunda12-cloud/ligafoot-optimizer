@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
-<title>LigaFoot Optimizer v8.11.0 — Web App &amp; PWA</title>
+<title>LigaFoot Optimizer v8.12.0 — Web App &amp; PWA</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="brand-ico">⚽</div>
         <div>
-          <h1>LigaFoot Optimizer <span class="c-green">v8.11.0 PWA</span></h1>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.12.0 PWA</span></h1>
           <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 (Bytecode v9) • Tanpa Upload</div>
         </div>
       </div>
@@ -165,7 +165,7 @@
         <div class="brand">
           <div class="brand-ico">⚽</div>
           <div>
-            <h1 id="hdr-title">LigaFoot Optimizer v8.11.0</h1>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.12.0</h1>
             <div class="sub" id="hdr-sub">Memuat data...</div>
           </div>
         </div>
@@ -178,7 +178,7 @@
             <div class="top-more-pop">
               <button type="button" class="btn btn-sm" style="width:100%;text-align:left" onclick="openGlossary();document.getElementById('top-more-menu').removeAttribute('open')">📖 Kamus Istilah</button>
               <button type="button" class="btn btn-sm" id="btn-density" style="width:100%;text-align:left" onclick="toggleDensity()">↕️ Mode: Lega</button>
-              <div class="top-more-ver"><span class="badge b-good" id="hdr-badge">v8.11.0 PWA</span></div>
+              <div class="top-more-ver"><span class="badge b-good" id="hdr-badge">v8.12.0 PWA</span></div>
             </div>
           </details>
         </div>
@@ -454,6 +454,8 @@
             <button type="button" id="bp-tab-ROI" class="btn btn-sm" onclick="setBlueprintTab('ROI')">💸 Flip ROI</button>
             <button type="button" id="bp-tab-BARGAIN" class="btn btn-sm" onclick="setBlueprintTab('BARGAIN')">🆓 Gratis/Diskon</button>
             <button type="button" id="bp-tab-SELL" class="btn btn-sm" onclick="setBlueprintTab('SELL')">📤 Jual Skuad</button>
+            <button type="button" id="bp-tab-BUNDLE" class="btn btn-sm" onclick="setBlueprintTab('BUNDLE')">📦 Paket Solver</button>
+            <button type="button" id="bp-tab-LOAN" class="btn btn-sm" onclick="setBlueprintTab('LOAN')">🤝 Pinjaman</button>
           </div>
         </div>
         <div id="t7-blueprint"></div>
@@ -728,6 +730,21 @@
           <div class="tbl-wrap"><table id="t3-recent-tbl"></table></div>
         </div>
       </div>
+
+      <div class="card mt-12" id="t6-quant-card">
+        <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+          <div>
+            <h2 style="margin:0">🎲 Monte Carlo &amp; Smart Wonderkid Farming <span class="badge b-accent">Web Worker Offline</span></h2>
+            <div class="kpi-sub">Simulasi ribuan sisa musim &amp; turnamen CWC/AFC secara paralel tanpa membekukan UI.</div>
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <button type="button" id="q-tab-LEAGUE" class="btn btn-sm btn-green" onclick="setQuantTab('LEAGUE')">🏆 Monte Carlo Liga</button>
+            <button type="button" id="q-tab-FARM" class="btn btn-sm" onclick="setQuantTab('FARM')">🌱 Farming ROI</button>
+            <button type="button" id="q-tab-TOURNEY" class="btn btn-sm" onclick="setQuantTab('TOURNEY')">🌍 Grup CWC/AFC</button>
+          </div>
+        </div>
+        <div id="t6-quant-body" style="font-size:12px"></div>
+      </div>
     </div>
 
     <!-- Sub-tab 6T: Forensik MatchLog & Efektivitas Taktik -->
@@ -987,6 +1004,7 @@
 <script src="js/engine/roster.js"></script>
 <script src="js/engine/scout.js"></script>
 <script src="js/engine/club.js"></script>
+<script src="js/engine/quant.js"></script>
 <script src="js/storage.js"></script>
 
 <!-- 2. Bootstrap Awal Global `D` Sebelum Modul UI Dimuat -->

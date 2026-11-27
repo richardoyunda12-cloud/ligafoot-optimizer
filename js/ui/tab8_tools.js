@@ -263,7 +263,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.11.0 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.12.0 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -431,6 +431,208 @@ function renderTab8Extras() {
 
   // 6. Sub-Tab 6C: PWA Storage & Backup Manager
   renderPwaManager();
+
+  // 7. Sub-Tab 6A: Quantitative Monte Carlo Lab (Web Worker Offline)
+  renderQuantLab();
+}
+
+// ==================== QUANT LAB: MONTE CARLO LIGA, FARMING ROI & TURNAMEN (v8.12.0) ====================
+let quantActiveTab = 'LEAGUE'; // LEAGUE | FARM | TOURNEY
+let quantCache = {};
+let quantWhatIfShift = 0; // 0 | -0.04 | 0.05 | -0.15
+let quantFarmGems = 4;
+let quantTourneyIdx = 0;
+
+function resetQuantUiState() {
+  quantActiveTab = 'LEAGUE';
+  quantCache = {};
+  quantWhatIfShift = 0;
+  quantFarmGems = 4;
+  quantTourneyIdx = 0;
+}
+
+function setQuantTab(tab) {
+  quantActiveTab = ['LEAGUE', 'FARM', 'TOURNEY'].includes(tab) ? tab : 'LEAGUE';
+  ['LEAGUE', 'FARM', 'TOURNEY'].forEach(t => {
+    const b = document.getElementById('q-tab-' + t);
+    if (b) b.className = (quantActiveTab === t) ? 'btn btn-sm btn-green' : 'btn btn-sm';
+  });
+  renderQuantLab();
+}
+
+function setQuantWhatIf(shift) {
+  quantWhatIfShift = Number(shift) || 0;
+  renderQuantLab();
+}
+
+function setQuantFarmGems(n) {
+  quantFarmGems = Math.max(1, Math.min(5, Number(n) || 4));
+  renderQuantLab();
+}
+
+function setQuantTourney(idx) {
+  quantTourneyIdx = Math.max(0, Number(idx) || 0);
+  renderQuantLab();
+}
+
+function renderQuantLab() {
+  const box = document.getElementById('t6-quant-body');
+  if (!box) return;
+  const qi = D.quantInputs || {};
+  const runner = window.LFQuantRunner;
+  if (!runner) {
+    box.innerHTML = '<div class="c-muted">Modul Quant Engine belum dimuat.</div>';
+    return;
+  }
+
+  if (quantActiveTab === 'LEAGUE') {
+    if (!qi.league || !qi.league.teams || qi.league.teams.length < 2) {
+      box.innerHTML = '<div class="c-muted">Jadwal liga belum tersedia di save ini.</div>';
+      return;
+    }
+    const cKey = `LEAGUE_${quantWhatIfShift}`;
+    const drawLeague = (res) => {
+      if (!res || !res.userSummary) return;
+      const u = res.userSummary;
+      const shBtns = [
+        [0, 'Normal (0%)'],
+        [-0.04, 'Locker -4%'],
+        [-0.15, 'Rotasi -15%'],
+        [0.05, 'Upgrade +5%'],
+      ].map(([v, lbl]) => `<button type="button" class="qchip ${quantWhatIfShift === v ? 'active' : ''}" onclick="setQuantWhatIf(${v})">${lbl}</button>`).join('');
+      const tblRows = (res.table || []).map((r, idx) => `
+        <tr class="${r.isUser ? 'hl-user' : ''}">
+          <td class="mono">${idx + 1}</td>
+          <td><b>${esc(r.name)}</b>${r.isUser ? ' ★' : ''}</td>
+          <td class="mono">${r.xi}</td>
+          <td class="mono"><b>${r.expPts}</b></td>
+          <td class="mono ${r.expGD >= 0 ? 'c-green' : 'c-red'}">${r.expGD >= 0 ? '+' : ''}${r.expGD}</td>
+          <td class="mono c-green"><b>${r.titlePct}%</b></td>
+          <td class="mono c-sky">${r.top4Pct}%</td>
+          <td class="mono ${r.relegPct >= 20 ? 'c-red' : 'c-muted'}">${r.relegPct}%</td>
+        </tr>`).join('');
+      box.innerHTML = `
+        <div class="quick-chips-bar" style="margin-bottom:8px">${shBtns}</div>
+        <div class="grid g4 mb-8">
+          <div class="kpi"><span class="kpi-lbl">Est. Poin Akhir</span><span class="kpi-val mono c-green">${u.expPts} pts</span><span class="kpi-sub mono">P10 ${u.p10} · Med ${u.p50} · P90 ${u.p90}</span></div>
+          <div class="kpi"><span class="kpi-lbl">Peluang Juara (#1)</span><span class="kpi-val mono c-green">${u.titlePct}%</span><span class="kpi-sub mono">${res.iterations.toLocaleString('id-ID')} musim (${res.elapsedMs}ms)</span></div>
+          <div class="kpi"><span class="kpi-lbl">Peluang Top 4</span><span class="kpi-val mono c-sky">${u.top4Pct}%</span><span class="kpi-sub mono">Top 2: ${u.top2Pct}%</span></div>
+          <div class="kpi"><span class="kpi-lbl">Risiko Degradasi</span><span class="kpi-val mono ${u.relegPct > 5 ? 'c-red' : 'c-green'}">${u.relegPct}%</span><span class="kpi-sub mono">${res.unplayedCount} sisa laga</span></div>
+        </div>
+        <div class="tbl-wrap tbl-sticky" style="max-height:320px;overflow-y:auto">
+          <table><thead><tr><th>#</th><th>Klub</th><th>Best XI</th><th>xPts</th><th>xSG</th><th>Juara%</th><th>Top4%</th><th>Degr%</th></tr></thead><tbody>${tblRows}</tbody></table>
+        </div>`;
+    };
+    if (quantCache[cKey]) {
+      drawLeague(quantCache[cKey]);
+      return;
+    }
+    box.innerHTML = '<div class="c-muted">⏳ Menjalankan 5.000 simulasi musim di background Web Worker...</div>';
+    runner.run('runLeagueMonteCarlo', qi.league, { iterations: 5000, userPowerShift: quantWhatIfShift })
+      .then(res => {
+        quantCache[cKey] = res;
+        if (quantActiveTab === 'LEAGUE') drawLeague(res);
+      })
+      .catch(err => { box.innerHTML = `<div class="c-red">Gagal menjalankan simulasi: ${esc(err && err.message ? err.message : String(err))}</div>`; });
+    return;
+  }
+
+  if (quantActiveTab === 'FARM') {
+    if (!qi.league || !qi.league.teams || qi.league.teams.length < 2) {
+      box.innerHTML = '<div class="c-muted">Jadwal liga belum tersedia untuk simulasi Farming.</div>';
+      return;
+    }
+    const cKey = `FARM_${quantFarmGems}`;
+    const drawFarm = (res) => {
+      if (!res) return;
+      const gBtns = [1, 2, 3, 4, 5].map(n =>
+        `<button type="button" class="qchip ${quantFarmGems === n ? 'active' : ''}" onclick="setQuantFarmGems(${n})">${n} Super Gem</button>`
+      ).join('');
+      const gPills = (res.gems || []).map(g =>
+        `<span class="tl-pill" onclick="openPlayerDrawer('${escJs(g.source)}','${escJs(g.id)}')"><b>${esc(g.name)}</b> <span class="mono">${fmtPos(g.pos)} ${g.age}th · F${g.force}→+${g.gainF}</span> <b class="c-green mono">+${fmtM(g.mvGain)} MV</b></span>`
+      ).join('');
+      const pRows = (res.policies || []).map(p => `
+        <tr>
+          <td><b>${esc(p.label)}</b></td>
+          <td class="mono">${p.farmMatches}/${p.unplayed}</td>
+          <td class="mono"><b>${p.expPts}</b></td>
+          <td class="mono c-green"><b>${p.titlePct}%</b></td>
+          <td class="mono c-sky">${p.top4Pct}%</td>
+        </tr>`).join('');
+      box.innerHTML = `
+        <div class="flex-between mb-8" style="gap:6px;flex-wrap:wrap">
+          <div class="quick-chips-bar" style="margin:0">${gBtns}</div>
+          <span class="badge b-good mono">Total +1 Musim MV: +${fmtM(res.totalMvGain)} (${fmtM(res.totalMvNow)} → ${fmtM(res.totalMvNext)}) · Farm XI ${res.farmXiAvg} (dr ${res.fullXiAvg})</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">${gPills || '<span class="c-muted">Tidak ada kandidat U-22 dengan gap ≥10.</span>'}</div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Strategi Rotasi Liga</th><th>Laga Farm</th><th>xPts</th><th>Juara%</th><th>Top4%</th></tr></thead><tbody>${pRows}</tbody></table>
+        </div>`;
+    };
+    if (quantCache[cKey]) {
+      drawFarm(quantCache[cKey]);
+      return;
+    }
+    box.innerHTML = '<div class="c-muted">⏳ Menghitung trade-off % Trofi vs Nilai Pasar Wonderkid (3.000 musim)...</div>';
+    const bRoster = (D.bTeamInfo && Array.isArray(D.bTeamInfo.roster)) ? D.bTeamInfo.roster : [];
+    runner.run('runWonderkidFarmSim', qi.league, D.roster || [], bRoster, D.meta || {}, { numGems: quantFarmGems, iterations: 3000 })
+      .then(res => {
+        quantCache[cKey] = res;
+        if (quantActiveTab === 'FARM') drawFarm(res);
+      })
+      .catch(err => { box.innerHTML = `<div class="c-red">Gagal simulasi farming: ${esc(err && err.message ? err.message : String(err))}</div>`; });
+    return;
+  }
+
+  // TOURNEY (FIFA CWC / AFC Elite / Piala Presiden)
+  const tourneys = Array.isArray(qi.tournaments) ? qi.tournaments : [];
+  if (!tourneys.length) {
+    box.innerHTML = '<div class="c-muted">Tidak ada turnamen fase grup aktif untuk klub Anda saat ini.</div>';
+    return;
+  }
+  const idx = Math.min(quantTourneyIdx, tourneys.length - 1);
+  const tData = tourneys[idx];
+  const cKey = `TOURNEY_${tData.compId}_${idx}`;
+  const drawTourney = (res) => {
+    if (!res || !res.baseline) return;
+    const tBtns = tourneys.map((t, ti) =>
+      `<button type="button" class="qchip ${ti === idx ? 'active' : ''}" onclick="setQuantTourney(${ti})">${esc(t.name)} (${esc(t.groupLabel)})</button>`
+    ).join('');
+    const bu = res.baseline.userSummary || {};
+    const b5 = (res.boost5 && res.boost5.userSummary) || {};
+    const dAdv = +((b5.advancePct || 0) - (bu.advancePct || 0)).toFixed(1);
+    const tRows = (res.baseline.table || []).map((r, ri) => `
+      <tr class="${r.isUser ? 'hl-user' : ''}">
+        <td class="mono">${ri + 1}</td>
+        <td><b>${esc(r.name)}</b>${r.isUser ? ' ★' : ''}</td>
+        <td class="mono">${r.xi}</td>
+        <td class="mono"><b>${r.expPts}</b></td>
+        <td class="mono ${r.expGD >= 0 ? 'c-green' : 'c-red'}">${r.expGD >= 0 ? '+' : ''}${r.expGD}</td>
+        <td class="mono c-green"><b>${r.advancePct}%</b></td>
+        <td class="mono c-sky">${r.titlePct}%</td>
+      </tr>`).join('');
+    box.innerHTML = `
+      <div class="quick-chips-bar" style="margin-bottom:8px">${tBtns}</div>
+      <div class="pill-row mb-8">
+        <span class="badge b-good mono">Peluang Lolos Top ${res.advance}: <b>${bu.advancePct ?? 0}%</b></span>
+        <span class="badge b-info mono">Juara Grup (#1): <b>${bu.titlePct ?? 0}%</b></span>
+        <span class="badge b-accent mono">What-If Skuad +5% Power → Lolos <b>${b5.advancePct ?? 0}%</b> (${dAdv >= 0 ? '+' : ''}${dAdv}%)</span>
+      </div>
+      <div class="tbl-wrap">
+        <table><thead><tr><th>#</th><th>Klub</th><th>Best XI</th><th>xPts</th><th>xSG</th><th>Lolos Top ${res.advance}</th><th>#1 Grup</th></tr></thead><tbody>${tRows}</tbody></table>
+      </div>`;
+  };
+  if (quantCache[cKey]) {
+    drawTourney(quantCache[cKey]);
+    return;
+  }
+  box.innerHTML = `<div class="c-muted">⏳ Mensimulasikan fase grup ${esc(tData.name)} (5.000 turnamen)...</div>`;
+  runner.run('runGroupTournamentMonteCarlo', tData, { iterations: 5000 })
+    .then(res => {
+      quantCache[cKey] = res;
+      if (quantActiveTab === 'TOURNEY') drawTourney(res);
+    })
+    .catch(err => { box.innerHTML = `<div class="c-red">Gagal simulasi turnamen: ${esc(err && err.message ? err.message : String(err))}</div>`; });
 }
 
 // ==================== SUB-TAB 6T: FORENSIK MATCHLOG (TIER 2 #5) ====================
@@ -962,13 +1164,13 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.11.0`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.11.0</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.12.0`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.12.0</span>`;
   const rsTag = D.meta.realScale ? ' • 📏 Real 0–100' : '';
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}${rsTag}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)})${rsTag} • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.11.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.12.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],

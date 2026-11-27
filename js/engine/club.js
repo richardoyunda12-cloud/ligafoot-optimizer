@@ -1141,6 +1141,124 @@
     return alerts;
   }
 
+  function buildQuantInputs(save, userId, leagueId, compactTeams, staticPlayers, clubsMeta, userCountry, foreignCap) {
+    const world = (save && save.world && typeof save.world === 'object') ? save.world : {};
+    const worldComps = (world.comps && typeof world.comps === 'object') ? world.comps : {};
+    const powCache = new Map();
+
+    function getTeamPower(tid) {
+      if (powCache.has(tid)) return powCache.get(tid);
+      const tObj = compactTeams[tid];
+      const cm = U.getStaticClub(clubsMeta, tid);
+      const name = (tObj && tObj.name) || cm.name || tid;
+      const isUser = tid === userId;
+      const ctry = String((tObj && tObj.country) || cm.country || (isUser ? userCountry : '') || '').toUpperCase();
+      const fkRaw = (tObj && tObj.formation) ? String(tObj.formation) : '4-3-3';
+      const fk = fkRaw.split('~')[0] || '4-3-3';
+      const roster = tObj ? (R.extractTeamRoster(tObj, staticPlayers, isUser, tid, name, ctry, 1).roster || []) : [];
+      const xi = T.solveBestXi(roster, fk, isUser ? foreignCap : 99, isUser ? userCountry : '');
+      const powH = T.computeEngineSectorPower(xi, xi.formation, { isHome: true, crowdOver70: true, style: 'Balanced', marking: 'Light' });
+      const powA = T.computeEngineSectorPower(xi, xi.formation, { isHome: false, crowdOver70: true, style: 'Balanced', marking: 'Light' });
+      const entry = { id: tid, name, isUser, xi: xi.avgScore, powH, powA };
+      powCache.set(tid, entry);
+      return entry;
+    }
+
+    function collectStageMatches(stage) {
+      const list = [];
+      if (!stage || typeof stage !== 'object') return list;
+      if (Array.isArray(stage.matches)) {
+        for (let i = 0; i < stage.matches.length; i++) list.push(stage.matches[i]);
+      }
+      if (Array.isArray(stage.rounds)) {
+        for (let ri = 0; ri < stage.rounds.length; ri++) {
+          const rd = stage.rounds[ri];
+          const arr = Array.isArray(rd && rd.matches) ? rd.matches : (Array.isArray(rd) ? rd : []);
+          for (let mi = 0; mi < arr.length; mi++) list.push(arr[mi]);
+        }
+      }
+      return list;
+    }
+
+    function buildCompInput(comp, teamIds, matches, advanceTop) {
+      const idxOf = new Map();
+      const teams = [];
+      for (let i = 0; i < teamIds.length; i++) {
+        const tid = String(teamIds[i] || '');
+        if (!tid || idxOf.has(tid)) continue;
+        idxOf.set(tid, teams.length);
+        const tp = getTeamPower(tid);
+        teams.push({ ...tp, pts: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, played: 0 });
+      }
+      const unplayed = [];
+      for (let i = 0; i < matches.length; i++) {
+        const m = matches[i];
+        if (!m) continue;
+        const h = String(m.home || m.homeId || m.h || '');
+        const a = String(m.away || m.awayId || m.a || '');
+        const hi = idxOf.get(h);
+        const ai = idxOf.get(a);
+        if (hi === undefined || ai === undefined) continue;
+        const hg = m.hg ?? m.homeGoals ?? m.scoreH;
+        const ag = m.ag ?? m.awayGoals ?? m.scoreA;
+        if (m.played || (typeof hg === 'number' && typeof ag === 'number')) {
+          const g1 = Number(hg) || 0;
+          const g2 = Number(ag) || 0;
+          teams[hi].played++; teams[ai].played++;
+          teams[hi].gf += g1; teams[hi].ga += g2;
+          teams[ai].gf += g2; teams[ai].ga += g1;
+          if (g1 > g2) { teams[hi].pts += 3; teams[hi].w++; teams[ai].l++; }
+          else if (g1 < g2) { teams[ai].pts += 3; teams[ai].w++; teams[hi].l++; }
+          else { teams[hi].pts++; teams[ai].pts++; teams[hi].d++; teams[ai].d++; }
+        } else {
+          unplayed.push({ h: hi, a: ai, neutral: Boolean(m.neutral) });
+        }
+      }
+      return {
+        compId: String(comp.id || ''),
+        compName: U.translateCompName(comp.id, comp.name || comp.id),
+        kind: String(comp.kind || ''),
+        advance: advanceTop,
+        teams,
+        unplayed,
+      };
+    }
+
+    let league = null;
+    const lgComp = leagueId ? worldComps[leagueId] : null;
+    if (lgComp && Array.isArray(lgComp.teams) && lgComp.teams.length >= 2) {
+      const st = Array.isArray(lgComp.stages) ? (lgComp.stages[U.safeInt(lgComp.stageIdx, 0)] || lgComp.stages[0]) : null;
+      const matches = collectStageMatches(st);
+      if (matches.length) {
+        league = buildCompInput(lgComp, lgComp.teams, matches, 4);
+      }
+    }
+
+    const tournaments = [];
+    for (const c of Object.values(worldComps)) {
+      if (!c || c.id === leagueId || !Array.isArray(c.teams) || !c.teams.includes(userId)) continue;
+      if (!Array.isArray(c.stages) || !c.stages.length) continue;
+      const st = c.stages[U.safeInt(c.stageIdx, 0)] || c.stages[0];
+      if (!st) continue;
+      const allMatches = collectStageMatches(st);
+      if (!allMatches.length) continue;
+      if (Array.isArray(st.groups) && st.groups.length) {
+        const ug = st.groups.find(g => g && Array.isArray(g.teams) && g.teams.includes(userId));
+        if (!ug) continue;
+        const gSet = new Set(ug.teams.map(String));
+        const grpMatches = allMatches.filter(m => m && (ug.label ? m.grp === ug.label : (gSet.has(String(m.home || '')) && gSet.has(String(m.away || '')))));
+        const built = buildCompInput(c, ug.teams, grpMatches, U.safeInt(st.advance, 2));
+        if (built.teams.length >= 2 && built.unplayed.length > 0) {
+          built.groupLabel = ug.label || st.name || 'Grup';
+          tournaments.push(built);
+        }
+      }
+      if (tournaments.length >= 4) break;
+    }
+
+    return { league, tournaments };
+  }
+
   /**
    * Orkestrator utama (Pure JS, jalan 100% di browser HP / Node.js).
    * Mengembalikan `{ data, updatedHistory }` dengan seluruh data v8.3 Bytecode v9 Verified.
@@ -1632,9 +1750,10 @@
     );
 
     prog(75, 'Memindai Global Auto-Scout Moneyball (1.185+ klub AI)...');
-    const { scoutPool, youthScoutTargets, rivalYouthTargets, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
+    const { scoutPool, youthScoutTargets, rivalYouthTargets, loanMarket, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
       save, staticPlayers, clubsMeta, userId, userCountry, holePositions, avgTop11Force
     );
+    const quantInputs = buildQuantInputs(save, userId, leagueId, compactTeams, staticPlayers, clubsMeta, userCountry, foreignCap);
 
     prog(88, 'Menyusun mutasi keuangan, kontrak pinjaman & status timnas...');
 
@@ -2673,7 +2792,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.11.0 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.12.0 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
@@ -2784,6 +2903,8 @@
       homeCrowdLog: homeCrowdLog.slice(-10).reverse(),
       standings: standingsRows,
       scoutPool,
+      loanMarket: loanMarket || { loanedOut: [], loanIn: [] },
+      quantInputs,
       nation: nationInfo,
       matchOrdersAudit,
       bTeamInfo,

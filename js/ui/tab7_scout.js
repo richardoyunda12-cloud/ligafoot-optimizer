@@ -433,9 +433,50 @@ function renderCompactScoutBadges(flagsStr, fillsHole) {
   return primHtml + secHtml;
 }
 
+let bundleMode = 'WIN';
+let bundleInst = false;
+let bundleCache = {};
+let lastBundleList = [];
+
+function resetBundleUiState() {
+  bundleMode = 'WIN';
+  bundleInst = false;
+  bundleCache = {};
+  lastBundleList = [];
+}
+
+function setBundleMode(m) {
+  bundleMode = m === 'FLIP' ? 'FLIP' : 'WIN';
+  renderScoutBlueprint();
+}
+
+function toggleBundleInst(v) {
+  bundleInst = Boolean(v);
+  renderScoutBlueprint();
+}
+
+function applyBundleToCart(idx) {
+  const b = lastBundleList[idx];
+  if (!b) return;
+  cartOut = {};
+  cartIn = {};
+  cartInBosman = {};
+  (b.sellPlayers || []).forEach(s => { cartOut[s.id] = { arab: false }; });
+  (b.buyPlayers || []).forEach(bp => {
+    const found = (D.scoutPool || []).find(r => r[19] === bp.id);
+    if (found) {
+      cartIn[bp.id] = found;
+      if (bp.isBosman || isBosmanTarget(found)) cartInBosman[bp.id] = true;
+    }
+  });
+  renderTab7All(true);
+  goToView('t4', 't4-cart');
+  showToast(`📦 Paket diterapkan ke Cart (${(b.sellPlayers || []).length} Jual · ${(b.buyPlayers || []).length} Beli)!`);
+}
+
 function setBlueprintTab(tab) {
   scoutBlueprintTab = tab;
-  ['UPGRADE', 'ROI', 'BARGAIN', 'SELL'].forEach(t => {
+  ['UPGRADE', 'ROI', 'BARGAIN', 'SELL', 'BUNDLE', 'LOAN'].forEach(t => {
     const btn = document.getElementById('bp-tab-' + t);
     if (btn) btn.className = (scoutBlueprintTab === t) ? 'btn btn-sm btn-green' : 'btn btn-sm';
   });
@@ -589,6 +630,102 @@ function renderScoutBlueprint() {
           <td class="mono">${fmtM(p.salary)}</td>
         </tr>`;
       }).join('') : '<tr><td colspan="8" class="c-green">Skuad sangat ramping — tidak ada deadwood mendesak untuk dijual!</td></tr>') + `</tbody></table></div>`;
+    return;
+  }
+
+  if (scoutBlueprintTab === 'BUNDLE') {
+    const runner = window.LFQuantRunner;
+    if (!runner) {
+      box.innerHTML = '<div class="c-muted">Quant Engine belum dimuat.</div>';
+      return;
+    }
+    const ctrlBar = `
+      <div class="flex-between mb-8" style="gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="btn btn-sm ${bundleMode === 'WIN' ? 'btn-green' : ''}" onclick="setBundleMode('WIN')">🏆 Max Upgrade Best XI</button>
+          <button type="button" class="btn btn-sm ${bundleMode === 'FLIP' ? 'btn-green' : ''}" onclick="setBundleMode('FLIP')">💸 Max Flip-ROI U-22</button>
+        </div>
+        <label style="font-size:11.5px;display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" ${bundleInst ? 'checked' : ''} onchange="toggleBundleInst(this.checked)" /> 💳 Gunakan Cicilan DP 25% (Plafon ${fmtM(D.meta.transferDebtRoom || 0)})
+        </label>
+      </div>`;
+    const cKey = `${bundleMode}_${bundleInst ? '1' : '0'}`;
+    const drawBundles = (list) => {
+      lastBundleList = Array.isArray(list) ? list : [];
+      if (!lastBundleList.length) {
+        box.innerHTML = ctrlBar + `<div class="alert-item"><span class="badge b-warn">SOLVER</span><div>Tidak ada paket kombinasi Jual+Beli yang memenuhi batas kas (${fmtM(D.meta.budget || 0)}) &amp; kuota asing (${D.meta.foreignCap || 7}). Coba aktifkan opsi Cicilan DP 25% atau mode <b>Flip-ROI</b>.</div></div>`;
+        return;
+      }
+      box.innerHTML = ctrlBar + `<div class="deal-grid">${lastBundleList.map((b, idx) => {
+        const sTxt = (b.sellPlayers || []).length
+          ? b.sellPlayers.map(s => `<a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(s.id)}')"><b>${esc(s.name)}</b></a> <span class="mono c-green">(+${fmtM(s.estRealSale)})</span>`).join(', ')
+          : '<span class="c-muted">Tanpa jual (pakai kas)</span>';
+        const bTxt = (b.buyPlayers || []).map(bp =>
+          `<div style="margin-top:3px"><a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(bp.id)}')"><b>${esc(bp.name)}</b></a> <span class="mono">(${fmtPos(bp.pos)} ${bp.age}th·F${bp.force}→${bp.potCap})</span> · <b class="c-amber">${bp.isBosman ? '0€ Bosman' : fmtM(bp.dpCost)}</b></div>`
+        ).join('');
+        return `<div class="deal-card">
+          <div class="flex-between mb-8">
+            <span class="badge ${b.deltaXi > 0 ? 'b-good' : 'b-accent'} mono">PAKET #${idx + 1} · ΔBest XI ${b.deltaXi >= 0 ? '+' : ''}${b.deltaXi}</span>
+            <span class="badge b-info mono">Asing ${b.projForeign}/${b.foreignCap}</span>
+          </div>
+          <div style="font-size:11.5px;margin-bottom:6px"><b>📤 Jual:</b> ${sTxt}</div>
+          <div style="font-size:11.5px;margin-bottom:8px"><b>📥 Beli:</b>${bTxt}</div>
+          <div class="mono c-muted" style="font-size:10.5px;margin-bottom:8px">
+            Sisa Kas: <b class="c-green">${fmtM(b.projBudget)}</b> · ΔGaji ${b.salDelta >= 0 ? '+' : ''}${fmtM(b.salDelta)} · Est. Flip <b class="c-green">+${fmtM(b.estFlipProfit)}</b>
+          </div>
+          <button type="button" class="btn btn-sm btn-green" style="width:100%" onclick="applyBundleToCart(${idx})">🛒 Terapkan Paket ke Cart</button>
+        </div>`;
+      }).join('')}</div>`;
+    };
+    if (bundleCache[cKey]) {
+      drawBundles(bundleCache[cKey]);
+      return;
+    }
+    box.innerHTML = ctrlBar + '<div class="c-muted">⏳ Mencari kombinasi paket Jual+Beli terbaik di Web Worker...</div>';
+    // Trim ke kandidat reachable non-trap teratas agar postMessage ke Worker instan
+    const trimmedScout = (D.scoutPool || []).filter(r => {
+      const fl = String(r[18] || '');
+      return !fl.includes('REFUSE') && !fl.includes('TRAP') && !fl.includes('INJ') && !fl.includes('KEY_LOCK');
+    }).slice(0, 600);
+    runner.run('runTransferPortfolioOpt', { roster: D.roster || [], scoutPool: trimmedScout, meta: D.meta || {}, holePositions: D.holePositions || [] }, { mode: bundleMode, maxBuys: 2, maxSells: 2, includeInstallments: bundleInst })
+      .then(res => {
+        bundleCache[cKey] = res || [];
+        if (scoutBlueprintTab === 'BUNDLE') drawBundles(bundleCache[cKey]);
+      })
+      .catch(err => { box.innerHTML = ctrlBar + `<div class="c-red">Gagal menjalankan solver: ${esc(err && err.message ? err.message : String(err))}</div>`; });
+    return;
+  }
+
+  if (scoutBlueprintTab === 'LOAN') {
+    const lm = D.loanMarket || { loanedOut: [], loanIn: [] };
+    const outList = Array.isArray(lm.loanedOut) ? lm.loanedOut : [];
+    const inList = Array.isArray(lm.loanIn) ? lm.loanIn : [];
+    const outHtml = outList.length
+      ? `<div class="tbl-wrap mb-12"><table><thead><tr><th>Pemain Dipinjamkan</th><th>Klub Tujuan</th><th>Main</th><th>Opsi Tebus</th><th>Peluang Ditebus</th></tr></thead><tbody>` +
+        outList.map(x => `<tr>
+          <td><b>${esc(x.name)}</b> <span class="c-muted mono">(${fmtPos(x.pos)} ${x.age}th · F${x.force}→${x.potCap})</span></td>
+          <td>${esc(x.toTeamName)} <span class="c-muted">(${esc(x.toTeamCountry)})</span></td>
+          <td class="mono">${x.gamesPlayed}g (${x.seasonMinutes}m · Avg ${x.avgRating || '-'})</td>
+          <td class="mono">${x.loanBuyFee > 0 ? fmtM(x.loanBuyFee) : '<span class="c-muted">Tanpa opsi</span>'}</td>
+          <td class="mono"><span class="badge ${x.loanBuyChance >= 0.5 ? 'b-good' : 'b-info'}">${Math.round((x.loanBuyChance || 0) * 100)}%</span> · sisa ${x.loanDays}d</td>
+        </tr>`).join('') + `</tbody></table></div>`
+      : '<div class="c-muted mb-12">Saat ini belum ada pemain Anda yang sedang dipinjamkan ke klub lain (`loanedFrom`).</div>';
+    const inHtml = inList.length
+      ? `<div class="tbl-wrap"><table><thead><tr><th>Target Loanable AI</th><th>Klub</th><th>F→Cap</th><th>Opsi Beli vs MV</th><th>Gaji</th></tr></thead><tbody>` +
+        inList.map(x => `<tr>
+          <td><a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(x.id)}')"><b>${esc(x.name)}</b></a> ${x.fillsHole ? '<span class="badge b-warn">LUBANG</span>' : ''} ${x.isLocal ? '<span class="badge b-good">LOKAL</span>' : ''}</td>
+          <td>${esc(x.clubName)} <span class="c-muted">(${esc(x.clubCountry)})</span></td>
+          <td class="mono"><b>${x.force}</b>→<b class="c-green">${x.potCap}</b> <span class="c-muted">(${x.age}th)</span></td>
+          <td class="mono">${x.loanBuyFee > 0 ? `${fmtM(x.loanBuyFee)} ${x.bargainPct > 0 ? `<span class="badge b-good">-${x.bargainPct}% MV</span>` : `<span class="c-muted">(MV ${fmtM(x.marketValue)})</span>`}` : `MV ${fmtM(x.marketValue)}`}</td>
+          <td class="mono">${fmtM(x.salary)}</td>
+        </tr>`).join('') + `</tbody></table></div>`
+      : '<div class="c-muted">Belum ada pemain berstatus <code>loanable</code> di klub AI pada tanggal save ini.</div>';
+    box.innerHTML = `
+      <h3 style="margin:0 0 6px">📤 Pemain Anda Dipinjamkan Keluar (${outList.length})</h3>
+      ${outHtml}
+      <h3 style="margin:8px 0 6px">🤝 Radar Pinjaman Masuk (Loanable AI Terpilih: ${inList.length})</h3>
+      <div class="kpi-sub mb-8">Memprioritaskan pemain beropsi beli di bawah Market Value &amp; penambal lubang posisi skuad.</div>
+      ${inHtml}`;
     return;
   }
 

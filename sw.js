@@ -3,7 +3,7 @@
  * Cache-First + Background Refresh untuk seluruh App Shell sehingga
  * aplikasi bisa dibuka 100% offline di HP (termasuk Mode Pesawat).
  */
-const CACHE_NAME = 'ligafoot-opt-pwa-v8-11-0';
+const CACHE_NAME = 'ligafoot-opt-pwa-v8-12-0';
 
 const APP_SHELL_FILES = [
   './',
@@ -20,6 +20,8 @@ const APP_SHELL_FILES = [
   './js/engine/roster.js',
   './js/engine/scout.js',
   './js/engine/club.js',
+  './js/engine/quant.js',
+  './js/worker/quant_worker.js',
   './js/storage.js',
   './js/gdrive.js',
   './js/ui/core.js',

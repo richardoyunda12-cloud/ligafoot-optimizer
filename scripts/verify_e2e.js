@@ -104,7 +104,7 @@ function runStage2Engine(savePath) {
   }
 
   global.window = global;
-  for (const f of ['config', 'utils', 'conditions', 'tactics', 'economy', 'roster', 'scout', 'club']) {
+  for (const f of ['config', 'utils', 'conditions', 'tactics', 'economy', 'roster', 'scout', 'club', 'quant']) {
     require(path.join(REPO_ROOT, 'js', 'engine', f + '.js'));
   }
 
@@ -506,6 +506,31 @@ function runStage2Engine(savePath) {
     const sMeta = T.precomputeSellerMeta(stPool, []);
     const stanceWithMeta = T.sellerStance(pTop1, { level: 8, division: 2, country: 'BR', players: stPool, _meta: sMeta }, { level: 14, division: 1 });
     assert.deepStrictEqual(stanceWithMeta, bigBuyFromSmall, 'precomputeSellerMeta harus menghasilkan output 100% identik');
+  }
+
+  // Regresi v8.12.0: Wave 2 Quant Engine (Monte Carlo Liga, Grup CWC/AFC, Farming ROI, Bundle Solver, Loan Market)
+  {
+    const Q = global.LFEngine.quant;
+    assert(Q && typeof Q.runLeagueMonteCarlo === 'function', 'LFEngine.quant harus termuat');
+    assert(D.quantInputs && D.quantInputs.league && D.quantInputs.league.teams.length >= 10, 'D.quantInputs.league harus tersedia');
+    assert(Array.isArray(D.quantInputs.tournaments) && D.quantInputs.tournaments.length >= 1, 'D.quantInputs.tournaments harus tersedia');
+    const mcLg = Q.runLeagueMonteCarlo(D.quantInputs.league, { iterations: 1000 });
+    const titleSum = mcLg.table.reduce((s, r) => s + r.titlePct, 0);
+    assert(titleSum >= 98 && titleSum <= 102, `Total peluang juara harus ~100%, dapat ${titleSum}`);
+    assert(mcLg.userSummary.p10 <= mcLg.userSummary.p50 && mcLg.userSummary.p50 <= mcLg.userSummary.p90, 'Persentil poin MC harus monoton P10<=P50<=P90');
+
+    const mcTr = Q.runGroupTournamentMonteCarlo(D.quantInputs.tournaments[0], { iterations: 800 });
+    assert(mcTr && mcTr.baseline && mcTr.baseline.userSummary && mcTr.boost5 && mcTr.boost5.userSummary, 'Monte Carlo turnamen grup harus mengembalikan baseline & boost5');
+
+    const farm = Q.runWonderkidFarmSim(D.quantInputs.league, D.roster, D.bTeamInfo.roster || [], D.meta, { numGems: 4, iterations: 500 });
+    assert(Array.isArray(farm.policies) && farm.policies.length === 4 && farm.totalMvGain > 0, 'Wonderkid Farming Sim harus mengembalikan 4 kebijakan & kenaikan MV positif');
+
+    const bundles = Q.runTransferPortfolioOpt({ roster: D.roster, scoutPool: D.scoutPool, meta: D.meta, holePositions: D.holePositions }, { mode: 'FLIP' });
+    assert(Array.isArray(bundles) && bundles.length >= 1, 'Portfolio Bundle Solver (FLIP) harus menghasilkan minimal 1 paket');
+    const foreignLim = D.meta.foreignCountSquad > D.meta.foreignCap ? Math.min(D.meta.foreignCountSquad, D.meta.foreignMax || 9) : D.meta.foreignCap;
+    assert(bundles[0].projBudget >= 0 && bundles[0].projForeign <= foreignLim, 'Paket Bundle Solver harus mematuhi batas kas & kuota asing');
+
+    assert(D.loanMarket && Array.isArray(D.loanMarket.loanedOut) && Array.isArray(D.loanMarket.loanIn), 'D.loanMarket harus memiliki array loanedOut & loanIn');
   }
 
   console.log(

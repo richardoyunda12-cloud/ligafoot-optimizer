@@ -465,6 +465,8 @@
     const candidates = [];
     const youthScoutCandidates = [];
     const rivalYouthTargets = [];
+    const loanedOutPlayers = [];
+    const loanInCandidates = [];
     let aiUnhappyTotal = 0;
     let aiBosmanTotal = 0;
 
@@ -716,6 +718,26 @@
         if (isKeyLocked) flags.push('KEY_LOCK');
         if (p.forSale) flags.push('SALE');
         if (p.loanable) flags.push('LOAN');
+        if (p.loanedFrom && String(p.loanedFrom) === String(userId)) {
+          loanedOutPlayers.push({
+            id: p.id, name: p.name, pos: p.pos, age: p.age, force: p.force, potCap: p.potCap,
+            toTeamId: cid, toTeamName: cname, toTeamCountry: ccountry,
+            loanDays: p.loanDays || 0, loanBuyFee: p.loanBuyFee || 0, loanBuyChance: p.loanBuyChance || 0,
+            gamesPlayed: p.gamesPlayed || 0, seasonMinutes: p.seasonMinutes || 0, avgRating: p.avgRating || 0,
+            marketValue: p.marketValue || 0,
+          });
+        } else if (p.loanable && isReachable && !p.isTrap && !p.injured) {
+          const bargainPct = (p.loanBuyFee > 0 && p.marketValue > 0)
+            ? Math.round((1 - (p.loanBuyFee / p.marketValue)) * 100)
+            : 0;
+          loanInCandidates.push({
+            id: p.id, name: p.name, pos: p.pos, age: p.age, foot: p.foot, nat: p.nationality,
+            force: p.force, potCap: p.potCap, s1: p.s1, s2: p.s2, stackPct: p.stackPct || 0,
+            salary: p.salary || 0, marketValue: p.marketValue || 0, loanBuyFee: p.loanBuyFee || 0,
+            bargainPct, clubId: cid, clubName: cname, clubCountry: ccountry,
+            fillsHole: holesSet.has(p.pos), isLocal: Boolean(userCountry && p.nationality === userCountry),
+          });
+        }
         if (isScarce) flags.push('SCARCE');
         if (p.isSuperGem) flags.push('SGEM');
         else if (p.isGem) flags.push('GEM');
@@ -819,10 +841,16 @@
     const ryLocal = rivalYouthTargets.filter(x => x.isLocal).slice(0, 30);
     const ryForeign = rivalYouthTargets.filter(x => !x.isLocal).slice(0, 30);
 
+    loanInCandidates.sort((a, b) => (b.bargainPct - a.bargainPct) || ((b.fillsHole ? 1 : 0) - (a.fillsHole ? 1 : 0)) || (b.force - a.force) || (b.potCap - a.potCap));
+
     return {
       scoutPool: selected,
       youthScoutTargets: ysLocal.concat(ysForeign),
       rivalYouthTargets: ryLocal.concat(ryForeign),
+      loanMarket: {
+        loanedOut: loanedOutPlayers.sort((a, b) => (b.force - a.force) || (a.loanDays - b.loanDays)),
+        loanIn: loanInCandidates.slice(0, 40),
+      },
       aiUnhappyTotal,
       aiBosmanTotal,
     };
