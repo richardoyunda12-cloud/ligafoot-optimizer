@@ -162,7 +162,68 @@ function runStage2Engine(savePath) {
     assert(typeof topUnlocked.offerSlotsRange === 'string' && topUnlocked.offerSlotsRange.includes('–'), 'offerSlotsRange hilang');
   }
 
-  // Regresi v8.10.5 (Batch 1 Bytecode Parity): saleFeeRate vs 0% incoming/Arab, 1.25x counter, loanBuyPrice, stadium tier single-rate, shop clubHistory[0], kindScale=1.0, loanLimit repLvl=0, installment ceil/floor
+  // Regresi v8.10.6 (Batch 2 Match Engine, Tactics & Formations Parity - OTA 2.1.0)
+{
+  const C = global.LFEngine.config;
+  const T = global.LFEngine.tactics;
+
+  assert.strictEqual(Object.keys(C.FORMATIONS).length, 16, 'Harus ada tepat 16 formasi resmi termasuk 3-4-1-2');
+  assert.ok(C.FORMATIONS['3-4-1-2'], 'Formasi 3-4-1-2 harus terdaftar');
+  assert.strictEqual(C.FORMATION_RULE_SLOTS['3-4-1-2'].length, 11, '3-4-1-2 ruleSlots harus 11');
+  assert.deepStrictEqual(C.FORMATION_MODS['3-4-1-2'], { atkMod: 2, defMod: -1 }, '3-4-1-2 mods harus +2/-1');
+  assert.strictEqual(T.slotCompatFactor('LD', 'ZD', 2), 0.70, 'FB di slot CB (rule 2) harus OOP 0.70');
+  assert.strictEqual(T.slotCompatFactor('ZD', 'ZD', 2), 1.00, 'CB di slot CB (rule 2) harus 1.00');
+  assert.strictEqual(T.slotCompatFactor('LD', 'LE', 5), 1.00, 'RB di slot LB (rule 5) tidak OOP (hanya wrongFoot)');
+  assert.strictEqual(T.evalSkillStackingForSector('G', 'REF', 'COL').stackPct, 0, 'GK REF/COL memberi 0% sector power');
+  assert.strictEqual(T.evalSkillStackingForSector('D', 'DES', '').stackPct, 5, 'DEF TCK memberi +5% sector');
+
+  const pTop = { id: 'pt', pos: 'MC', force: 20, s1: '', s2: '', top: true, star: true };
+  const pStar = { id: 'ps', pos: 'MC', force: 20, s1: '', s2: '', top: false, star: true };
+  const evTopH = T.evalPlayerForSlot(pTop, 'MC', false, 4, 7, true);
+  const evStarH = T.evalPlayerForSlot(pStar, 'MC', false, 4, 7, true);
+  const evStarAI = T.evalPlayerForSlot(pStar, 'MC', false, 4, 7, false);
+  assert.ok(Math.abs(evTopH.score - evStarH.score) < 1e-9, 'p.top harus capped 1.05 sama seperti isPlayerStar');
+  assert.ok(Math.abs((evStarH.score / evStarAI.score) - 1.05) < 1e-6, 'humanBoost 1.05 hanya untuk human, AI=1.00');
+
+  const bXi = ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'MC', 'MD', 'PD', 'ATA', 'PE'].map((pos, idx) => ({
+    slot: pos,
+    sectorCode: idx === 0 ? 'G' : (idx <= 4 ? 'D' : (idx <= 7 ? 'M' : 'A')),
+    score: 20,
+    player: {
+      id: 'p' + idx, name: 'P' + idx, pos, force: 20, age: 25,
+      s1: idx === 0 ? 'REF' : (pos === 'MD' ? 'CRU' : (pos === 'PD' ? 'CRU' : '')),
+      s2: idx === 0 ? 'SAI' : '',
+    },
+  }));
+  const powLight = T.computeEngineSectorPower({ xi: bXi, formation: '4-3-3', chemistry: 100 }, '4-3-3', { marking: 'Light', cardMul: 1.0 });
+  const powVh = T.computeEngineSectorPower({ xi: bXi, formation: '4-3-3', chemistry: 100 }, '4-3-3', { marking: 'Very Heavy', cardMul: 1.0 });
+  assert.strictEqual(powVh.staminaDrainLabel, 'Normal', 'Marking Very Heavy tetap stamina Normal');
+  assert.strictEqual(powVh.redMarkMul, 1.35, 'Very Heavy redMarkMul=1.35');
+  assert.ok(powVh.DEF <= powLight.DEF, 'Marking Very Heavy tidak memberi +8% DEF');
+  assert.strictEqual(powLight.gkSaveMul, 1.05, 'GK s1 REF(+4%)+s2 SAI(+1%) -> gkSaveMul 1.05');
+  assert.strictEqual(powLight.wingCrossers, 1, 'Wings hanya hitung LD/LE/PD/PE (MD CRU tidak dihitung)');
+
+  const bXiOldCap = bXi.map((it, idx) => idx === 2 ? { ...it, player: { ...it.player, age: 31 } } : it);
+  const powYoung = T.computeEngineSectorPower({ xi: bXi, formation: '4-3-3', chemistry: 100 }, '4-3-3', { marking: 'Light' });
+  const powOld = T.computeEngineSectorPower({ xi: bXiOldCap, formation: '4-3-3', chemistry: 100 }, '4-3-3', { marking: 'Light' });
+  assert.strictEqual(powYoung.MID, powOld.MID, 'Kapten tidak memberi +3% MID pasif sebelum Babak 2 Kalah');
+  const powOldCb = T.computeEngineSectorPower({ xi: bXiOldCap, formation: '4-3-3', chemistry: 100 }, '4-3-3', { marking: 'Light', secondHalf: true, losing: true });
+  assert.ok(powOldCb.MID > powOld.MID, 'Kapten >=28th aktif +6% MID di Babak 2 saat kalah');
+
+  const powAlt = T.computeEngineSectorPower({ xi: bXi, formation: '4-3-3', chemistry: 100 }, '4-3-3', { isHome: false, neutral: false, altHit: 1, style: 'Balanced' });
+  assert.ok(powAlt.DEF < 16 * 0.92, 'altMul diterapkan SETELAH clamp ±8% (tidak terpotong di 0.92)');
+
+  const sp = T.auditSetPieces([
+    { id: 'c1', name: 'Old', pos: 'MC', force: 16, age: 31, s1: '', s2: 'FIN' },
+    { id: 'c2', name: 'Fin1', pos: 'ATA', force: 18, age: 23, s1: 'FIN', s2: '' },
+    { id: 'c3', name: 'NoFin', pos: 'ZD', force: 25, age: 25, s1: '', s2: '' },
+  ]);
+  assert.strictEqual(sp.takers.captain[0].id, 'c1', 'Captain urut usia murni (#22450)');
+  assert.strictEqual(sp.autoPick.freeKick.id, sp.autoPick.penalty.id, 'Auto FK fallback sama dengan Auto PK');
+  assert.strictEqual(T.predictAiTacticsDetail(30, 20, false, []).aiStyle, 'Balanced', 'AI diff>=6 default Balanced (#24891)');
+}
+
+// Regresi v8.10.5 (Batch 1 Bytecode Parity): saleFeeRate vs 0% incoming/Arab, 1.25x counter, loanBuyPrice, stadium tier single-rate, shop clubHistory[0], kindScale=1.0, loanLimit repLvl=0, installment ceil/floor
   assert.strictEqual(global.LFEngine.roster.calcNetSaleProceeds(1000000, 365, false), 700000, 'Jual manual >180d harus kena 30% fee (#25088)');
   assert.strictEqual(global.LFEngine.roster.calcNetSaleProceeds(1000000, 365, true), 1000000, 'Incoming/Arab offer harus 0% fee (#25025)');
   assert.strictEqual(global.LFEngine.config.COUNTER_AVG_REALIZED, 1.25, 'COUNTER_AVG_REALIZED harus 1.25 (#25089)');

@@ -217,7 +217,7 @@
       const oppForm = (oppCm.formation in C.FORMATIONS) ? oppCm.formation : '4-4-2';
 
       const { roster: oppRoster } = R.extractTeamRoster(oppCm, staticPlayers, false, oppId, oppName, oppCountry);
-      const oppXi = T.solveBestXi(oppRoster, oppForm, 99, oppCountry, null, false, oppRepLv);
+      const oppXi = T.solveBestXi(oppRoster, oppForm, 99, oppCountry, null, false, oppRepLv, false);
       const oppXiPlayers = oppXi.xi.map(a => a.player);
       const oppInjured = oppRoster.filter(p => p.injured);
       const oppStars = oppRoster.filter(p => !p.injured).sort((a, b) => b.force - a.force).slice(0, 3);
@@ -754,7 +754,7 @@
       const form = (cm.formation in C.FORMATIONS) ? cm.formation : '4-4-2';
       const { roster } = R.extractTeamRoster(cm, staticPlayers, false, cid, name, country);
       if (!roster.length) continue;
-      const xi = T.solveBestXi(roster, form, 99, country, null, false, T.repToLevel(rep));
+      const xi = T.solveBestXi(roster, form, 99, country, null, false, T.repToLevel(rep), false);
       const xiLite = (xi.xi || []).map(a => [a.player.pos, a.player.s1, a.player.s2, a.player.force]);
       const stars = roster.filter(p => !p.injured).sort((a, b) => b.force - a.force).slice(0, 3)
         .map(p => ({ name: p.name, pos: p.pos, force: p.force, s1: p.s1, s2: p.s2, star: p.star }));

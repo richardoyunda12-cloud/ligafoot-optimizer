@@ -249,7 +249,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.10.5 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.10.6 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -665,7 +665,7 @@ function renderNationSection() {
     const validForms = ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2', '4-1-2-1-2', '3-4-2-1']
       .filter(f => D.formations && (f in D.formations));
     const oppPool = (Array.isArray(mp.oppPoolSlim) && mp.oppPoolSlim.length >= 11) ? mp.oppPoolSlim : [];
-    const oppXi = oppPool.length >= 11 ? Tac.solveBestXi(oppPool, mp.oForm || '4-3-3', 99, '') : null;
+    const oppXi = oppPool.length >= 11 ? Tac.solveBestXi(oppPool, mp.oForm || '4-3-3', 99, '', null, false, 3, false) : null;
     const oPowLive = oppXi
       ? Tac.computeEngineSectorPower(oppXi, mp.oForm || '4-3-3', {
           isHome: !mp.isHome, neutral: Boolean(mp.neutral), style: 'Balanced', marking: 'Heavy',
@@ -943,13 +943,13 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.5`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.5</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.6`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.6</span>`;
   const rsTag = D.meta.realScale ? ' • 📏 Real 0–100' : '';
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}${rsTag}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)})${rsTag} • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.10.5 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.10.6 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],

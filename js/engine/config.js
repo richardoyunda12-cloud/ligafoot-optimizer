@@ -77,28 +77,29 @@
     A:   { A: 1.00, ATA: 1.00, SA: 0.99, PD: 0.99, PE: 0.99 },
   };
 
-  // Bytecode #3575 & #3576: 18 Rule Slots & Pemetaan 15 Formasi Resmi (#3492)
-  // cat: 0=GK, 1=DEF, 2=MID, 3=ATK | sec: 'G'|'D'|'M'|'A'|'X' | side: null|'D'(kanan)|'E'(kiri)
+  // Bytecode #3575, #3576 & #22444/#3699: 18 Rule Slots & Pemetaan 16 Formasi Resmi (#614)
+  // cat 5-kelompok (#3700 env[29]): 0=G, 1=LAT(LD/LE), 2=ZAG(ZD/ZE), 3=MEI(MID), 4=ATA(ATK)
+  // sec: 'G'|'D'|'M'|'A'|'X' | side: null|'D'(kanan)|'E'(kiri) | wildcard: true hanya slot 10 & 17
   const RULE_SLOT_INFO = {
     0:  { label: 'G',   cat: 0, sec: 'G', side: null, exact: ['G'],                          wildcard: false },
     1:  { label: 'LD',  cat: 1, sec: 'D', side: 'D',  exact: ['LD', 'LAT'],                  wildcard: false },
-    2:  { label: 'ZD',  cat: 1, sec: 'D', side: null, exact: ['ZD', 'ZE', 'ZAG', 'Z'],       wildcard: false },
-    3:  { label: 'ZE',  cat: 1, sec: 'D', side: null, exact: ['ZE', 'ZD', 'ZAG', 'Z'],       wildcard: false },
-    4:  { label: 'ZD',  cat: 1, sec: 'D', side: null, exact: ['ZD', 'ZE', 'ZAG', 'Z'],       wildcard: false },
+    2:  { label: 'ZD',  cat: 2, sec: 'D', side: null, exact: ['ZD', 'ZE', 'ZAG', 'Z'],       wildcard: false },
+    3:  { label: 'ZE',  cat: 2, sec: 'D', side: null, exact: ['ZE', 'ZD', 'ZAG', 'Z'],       wildcard: false },
+    4:  { label: 'ZD',  cat: 2, sec: 'D', side: null, exact: ['ZD', 'ZE', 'ZAG', 'Z'],       wildcard: false },
     5:  { label: 'LE',  cat: 1, sec: 'D', side: 'E',  exact: ['LE', 'LAT'],                  wildcard: false },
-    6:  { label: 'VOL', cat: 2, sec: 'M', side: null, exact: ['VOL', 'V', 'MC'],             wildcard: false },
-    7:  { label: 'VOL', cat: 2, sec: 'M', side: null, exact: ['VOL', 'V', 'MC'],             wildcard: false },
-    8:  { label: 'MC',  cat: 2, sec: 'M', side: null, exact: ['MC', 'VOL', 'V', 'MA', 'MO'], wildcard: false },
-    9:  { label: 'MC',  cat: 2, sec: 'M', side: null, exact: ['MC', 'VOL', 'V', 'MA', 'MO'], wildcard: false },
+    6:  { label: 'VOL', cat: 3, sec: 'M', side: null, exact: ['VOL', 'V', 'MC'],             wildcard: false },
+    7:  { label: 'VOL', cat: 3, sec: 'M', side: null, exact: ['VOL', 'V', 'MC'],             wildcard: false },
+    8:  { label: 'MC',  cat: 3, sec: 'M', side: null, exact: ['MC', 'VOL', 'V', 'MA', 'MO'], wildcard: false },
+    9:  { label: 'MC',  cat: 3, sec: 'M', side: null, exact: ['MC', 'VOL', 'V', 'MA', 'MO'], wildcard: false },
     10: { label: 'PD',  cat: 1, sec: 'M', side: 'D',  exact: [],                             wildcard: true  }, // #3575 wildcard wingback kanan
-    11: { label: 'PD',  cat: 2, sec: 'M', side: 'D',  exact: ['PD', 'MD', 'MC', 'MA', 'MO'], wildcard: false },
-    12: { label: 'MA',  cat: 2, sec: 'M', side: null, exact: ['MA', 'MO', 'MC', 'MEI'],      wildcard: false },
-    13: { label: 'MA',  cat: 2, sec: 'M', side: null, exact: ['MA', 'MO', 'MC', 'MEI'],      wildcard: false },
-    14: { label: 'PE',  cat: 2, sec: 'M', side: 'E',  exact: ['PE', 'ME', 'MC', 'MA', 'MO'], wildcard: false },
-    15: { label: 'SA',  cat: 3, sec: 'A', side: null, exact: ['ATA', 'A', 'SA', 'PD', 'PE'], wildcard: false },
-    16: { label: 'ATA', cat: 3, sec: 'A', side: null, exact: ['ATA', 'A', 'SA'],             wildcard: false },
+    11: { label: 'PD',  cat: 3, sec: 'M', side: 'D',  exact: ['PD', 'MD', 'MC', 'MA', 'MO'], wildcard: false },
+    12: { label: 'MA',  cat: 3, sec: 'M', side: null, exact: ['MA', 'MO', 'MC', 'MEI'],      wildcard: false },
+    13: { label: 'MA',  cat: 3, sec: 'M', side: null, exact: ['MA', 'MO', 'MC', 'MEI'],      wildcard: false },
+    14: { label: 'PE',  cat: 3, sec: 'M', side: 'E',  exact: ['PE', 'ME', 'MC', 'MA', 'MO'], wildcard: false },
+    15: { label: 'SA',  cat: 4, sec: 'A', side: null, exact: ['ATA', 'A', 'SA', 'PD', 'PE'], wildcard: false },
+    16: { label: 'ATA', cat: 4, sec: 'A', side: null, exact: ['ATA', 'A', 'SA'],             wildcard: false },
     17: { label: 'PE',  cat: 1, sec: 'M', side: 'E',  exact: [],                             wildcard: true  }, // #3575 wildcard wingback kiri
-    18: { label: 'ATA', cat: 3, sec: 'X', side: null, exact: ['ATA', 'A', 'SA', 'PD', 'PE'], wildcard: false }, // #34992 bug: rule 18 di luar 15..16 -> sec 'X'
+    18: { label: 'ATA', cat: 4, sec: 'X', side: null, exact: ['ATA', 'A', 'SA', 'PD', 'PE'], wildcard: false }, // #34992 bug: rule 18 di luar 15..16 -> sec 'X'
   };
 
   const FORMATION_RULE_SLOTS = {
@@ -117,6 +118,7 @@
     '5-3-2':        [0, 1, 2, 4, 3, 5, 6, 12, 13, 15, 16],
     '3-5-2':        [0, 2, 4, 3, 10, 6, 7, 17, 12, 15, 16],
     '3-4-3':        [0, 2, 4, 3, 10, 6, 7, 17, 15, 16, 18],
+    '3-4-1-2':      [0, 2, 4, 3, 17, 6, 12, 10, 15, 16, 16],
   };
 
   // Bug engine asli di #34992 slotSector: slot ke-11 pada 3-4-3 memakai rule 18 -> sec 'X' (ATK -33%)
@@ -130,7 +132,7 @@
     },
   };
 
-  // 15 Formasi RESMI LigaFoot v1.2.0 (terverifikasi 100% dari bytecode #3556)
+  // 16 Formasi RESMI LigaFoot (#614 & #3699)
   const FORMATIONS = {
     '4-4-2':        ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'MA', 'MA', 'ATA', 'ATA'],
     '4-4-2 def.':   ['G', 'LD', 'ZD', 'ZE', 'LE', 'VOL', 'VOL', 'VOL', 'MA', 'ATA', 'ATA'],
@@ -147,9 +149,10 @@
     '5-3-2':        ['G', 'LD', 'ZD', 'ZD', 'ZE', 'LE', 'VOL', 'MA', 'MA', 'ATA', 'ATA'],
     '3-5-2':        ['G', 'ZD', 'ZD', 'ZE', 'PD', 'VOL', 'VOL', 'PE', 'MA', 'ATA', 'ATA'],
     '3-4-3':        ['G', 'ZD', 'ZD', 'ZE', 'PD', 'VOL', 'VOL', 'PE', 'ATA', 'ATA', 'ATA'],
+    '3-4-1-2':      ['G', 'ZD', 'ZD', 'ZE', 'PE', 'VOL', 'MA', 'PD', 'SA', 'ATA', 'ATA'],
   };
 
-  // Modifier resmi atkMod & defMod dari bytecode #3492
+  // Modifier resmi atkMod & defMod dari bytecode #614
   const FORMATION_MODS = {
     '4-4-2':        { atkMod:  0, defMod:  0 },
     '4-4-2 def.':   { atkMod: -3, defMod:  5 },
@@ -166,9 +169,10 @@
     '5-3-2':        { atkMod: -1, defMod:  3 },
     '3-5-2':        { atkMod:  1, defMod: -1 },
     '3-4-3':        { atkMod:  5, defMod: -4 },
+    '3-4-1-2':      { atkMod:  2, defMod: -1 },
   };
 
-  // Struktur jumlah pemain tiap sektor (G=1, D, M, A) sesuai #34992 slotSector
+  // Struktur jumlah pemain tiap sektor (G=1, D, M, A) sesuai #3699 & #614
   const FORMATION_SHAPE = {
     '4-4-2':        { D: 4, M: 4, A: 2, width: 'NARROW' },
     '4-4-2 def.':   { D: 4, M: 4, A: 2, width: 'NARROW' },
@@ -185,6 +189,7 @@
     '5-3-2':        { D: 5, M: 3, A: 2, width: 'NARROW' },
     '3-5-2':        { D: 3, M: 5, A: 2, width: 'WIDE'   },
     '3-4-3':        { D: 3, M: 4, A: 2, X: 1, width: 'WIDE' }, // slot 11 jatuh ke X (#34992)
+    '3-4-1-2':      { D: 3, M: 4, A: 3, width: 'WIDE'   },
   };
 
   // Custom Formation Role Overrides (Bytecode #2999 / #19552–#19560 / #22023)
@@ -695,78 +700,88 @@
   const LIVE_COACH_GUIDE = {
     shouts: [
       {
-        name: 'Encourage (Incentivar) — +1.2% MID',
-        when: 'Duel Lini Tengah Ketat (Menit 15–75)',
-        situation: 'Kalah / Imbang Penguasaan Bola di Tengah',
-        shout: 'Encourage (Incentivar)',
-        effect: '+1.2% MID selama 15 menit (tanpa penalti sektor lain; pengulangan shout sama dalam 25m: 1.0x → 0.5x → 0x)',
-        avoid: 'Jangan ulangi shout yang sama dalam 25 menit karena efek ke-3 menjadi 0%!',
+        name: 'Encourage — MID (+1.0% / +1.2%)',
+        when: 'Imbang atau Tertinggal di Babak 1/2',
+        situation: 'Memenangkan duel lini tengah & shot attempt',
+        shout: 'Encourage',
+        effect: 'Menang +1.0% MID · Imbang +1.2% MID · Kalah +1.2% MID (+sedikit lelah; pengulangan beruntun shout sama: 1.0x → 0.5x → 0x)',
+        avoid: 'Jangan ulang shout identik beruntun lebih dari 2x karena pemakaian ke-3 memberi efek 0%!',
       },
       {
-        name: 'Attack More (Atacar Mais) — +1.2% ATK',
-        when: 'Butuh Gol / Menekan Lawan',
-        situation: 'Butuh Gol Pembuka atau Mengejar Ketertinggalan',
-        shout: 'Attack More (Atacar Mais)',
-        effect: '+1.2% ATK selama 15 menit (bisa dikombinasikan dengan Order Attacking +4% ATK)',
-        avoid: 'Jika terlalu sering mengulang dalam <25 menit, ganti ke Demand More atau Encourage.',
+        name: 'Demand More — ATK (Kalah +1.2% / Menang -0.8%!)',
+        when: 'Hanya saat Imbang (+1.0% ATK) atau Tertinggal (+1.2% ATK)',
+        situation: 'Mengejar gol penyeimbang / comeback',
+        shout: 'Demand More',
+        effect: 'Menang -0.8% ATK (MERUGIKAN!) · Imbang +1.0% ATK · Kalah +1.2% ATK (+lebih lelah & +kartu)',
+        avoid: 'DILARANG dipakai saat sedang UNGGUL karena menurunkan ATK -0.8% + menambah kartu & kelelahan!',
       },
       {
-        name: 'Tighten Up (Fechar Atrás) — +1.2% DEF',
-        when: 'Mengamankan Keunggulan (Menit 65+)',
-        situation: 'Unggul Tipis & Lawan Menekan',
-        shout: 'Tighten Up (Fechar Atrás)',
-        effect: '+1.2% DEF selama 15 menit (kombinasikan dengan Order Defend Lead +4% DEF)',
-        avoid: 'Jangan biarkan pemain energi <60% tetap di lapangan (kuota ganti 5 pemain di #21779!).',
+        name: 'Fire Up — ATK (Kalah +1.2% / Menang 0%)',
+        when: 'Hanya saat Tertinggal (+1.2% ATK) atau Imbang (+0.8% ATK)',
+        situation: 'Tertinggal dan butuh dorongan serangan maksimal',
+        shout: 'Fire Up',
+        effect: 'Menang 0% (sia-sia!) · Imbang +0.8% ATK · Kalah +1.2% ATK (+cepat lelah & +risiko kartu lebih tinggi)',
+        avoid: 'Jangan buang kuota shout saat sedang unggul karena memberi 0% efek sambil menguras stamina.',
       },
       {
-        name: 'Calm Down (Acalmar) — -1.2% ATK, +1.2% DEF & -30% Kartu',
-        when: 'Wasit Ketat / Banyak Kartu Kuning',
-        situation: 'Tim Terlalu Agresif / Rawannya Kartu Merah',
-        shout: 'Calm Down (Acalmar)',
-        effect: '+1.2% DEF, -1.2% ATK, dan menurunkan risiko kartu (foulMul 0.70x / -30%) selama 15 menit',
-        avoid: 'Segera tarik keluar pemain berkartu kuning atau ganti Order ke Stay Calm (-25% kartu).',
+        name: 'Focus — DEF (+1.2% Menang / +1.0% Imbang)',
+        when: 'Mengamankan keunggulan / meredam serangan balik',
+        situation: 'Unggul tipis atau ingin merapatkan pertahanan',
+        shout: 'Focus',
+        effect: 'Menang +1.2% DEF · Imbang +1.0% DEF · Kalah +0.6% DEF (tanpa penalti kartu)',
+        avoid: 'Selingi dengan Calm Down jika butuh pengurangan kartu sekaligus mempertahankan +1.2% DEF.',
       },
       {
-        name: 'Demand More (Cobrar Mais) — +1.2% MID & +15% Risiko Kartu',
-        when: 'Tim Lesu / Tertinggal',
-        situation: 'Butuh Intensitas Ekstra di Lini Tengah',
-        shout: 'Demand More (Cobrar Mais)',
-        effect: '+1.2% MID selama 15 menit dengan kompensasi foulMul 1.15x (+15% risiko kartu)',
-        avoid: 'Hindari saat wasit Strict (+20% kartu) dan banyak pemain sudah mengantongi kartu kuning.',
+        name: 'Praise — MID (Menang +1.2% / Kalah -0.8%!)',
+        when: 'Hanya saat UNGGUL (+1.2% MID)',
+        situation: 'Menjaga momentum penguasaan bola saat memimpin',
+        shout: 'Praise',
+        effect: 'Menang +1.2% MID · Imbang +0.4% MID · Kalah -0.8% MID (MERUGIKAN saat tertinggal!)',
+        avoid: 'JANGAN pernah dipakai saat tertinggal karena menurunkan MID -0.8%!',
       },
       {
-        name: 'Focus (Concentrar) — +1.2% DEF',
-        when: 'Menjaga Konsentrasi Lini Belakang',
-        situation: 'Menjelang Akhir Babak / Bola Mati Lawan',
-        shout: 'Focus (Concentrar)',
-        effect: '+1.2% DEF selama 15 menit (alternatif bebas cooldown dari Tighten Up)',
-        avoid: 'Rotasikan dengan Tighten Up setiap 15 menit agar tidak terkena decay pengulangan 25 menit!',
+        name: 'Calm Down — DEF (Menang +1.2% & −Kartu)',
+        when: 'Saat Unggul / Banyak Pemain Terkena Kartu',
+        situation: 'Wasit ketat atau agresivitas tim terlalu tinggi',
+        shout: 'Calm Down',
+        effect: 'Menang +1.2% DEF · Imbang +0.6% DEF · Kalah 0% (menurunkan risiko pelanggaran & kartu)',
+        avoid: 'Ganti ke Focus saat imbang (+1.0% DEF) atau Encourage jika butuh mendorong penguasaan MID.',
       },
     ],
     orders: [
       {
-        cond: 'Unggul 1–2 Gol (Menit 65+)',
-        order: 'Defend Lead (+4% DEF, -3% ATK) + Shout Tighten Up / Focus',
-        note: 'Kunci kemenangan dengan +4% DEF (atau Hold Ball +3% MID, +2% DEF, -4% ATK) dan manfaatkan 5 pergantian pemain (#21779).',
+        cond: 'Unggul Skor — Kunci Laga',
+        order: 'Lock the Door (+1.5% DEF, -1.5% ATK, -5% Lelah, +5% Kartu)',
+        note: 'Aktif permanen sampai diganti (#3700). Menguatkan DEF +1.5% dengan kelelahan sedikit lebih ringan dibanding membiarkan tim terbuka.',
       },
       {
-        cond: 'Imbang / Tertinggal 1 Gol (Menit 60–75)',
-        order: 'Attacking (+4% ATK, -3% DEF) atau High Press (+3% MID, +2% ATK, -3% DEF)',
-        note: 'High Press menguras stamina 1.25x — masukkan Supersub VEL/FIN segar untuk menggantikan pemain <60% energi.',
+        cond: 'Unggul di Menit Akhir (75+)',
+        order: 'Time-Wasting (+1.0% DEF, +0.5% MID, -1.5% ATK, -10% Lelah, +30% Kartu)',
+        note: 'Efek DEF/MID/ATK HANYA aktif saat sedang memimpin! Hindari jika wasit ketat (+30% risiko kartu kuning).',
       },
       {
-        cond: 'Tertinggal di Menit 78+ / Butuh Gol Cepat',
-        order: 'All-Out Attack (+8% ATK, -7% DEF, +15% kartu) + Direct Play (+4% ATK, -3% MID)',
-        note: 'All-Out Attack menguras stamina 1.30x dan membuka pertahanan -7%, gunakan hanya di 12 menit terakhir!',
+        cond: 'Kontrol Bola & Hemat Stamina',
+        order: 'Pass and Move (+1.2% MID, -0.6% ATK, Lebih Hemat Stamina & Lebih Sedikit Kartu)',
+        note: 'Order paling seimbang saat imbang atau unggul tipis: menaikkan duel MID sekaligus menurunkan kelelahan dan pelanggaran.',
       },
       {
-        cond: 'Rawan Kartu Merah / Wasit Strict (+20% Kartu)',
-        order: 'Stay Calm (-2% ATK, +1% DEF, -25% risiko kartu) + Denda Manual 20% jika Merah',
-        note: 'Stay Calm menurunkan foulMul 0.75x (-25% kartu). Jika tetap kena Kartu Merah, beri denda manual 20% usai laga (0% slump!).',
+        cond: 'Punya Sayap CRS + Penyerang CAB',
+        order: 'Crosses (+1.0% ATK, -1.0% MID) / Long Ball (+1.2% ATK, -1.2% MID)',
+        note: 'Crosses butuh winger/fullback ber-skill CRS & penyerang CAB (minimal orderFit 0.30). Long Ball butuh penyerang ber-skill VEL/CAB.',
+      },
+      {
+        cond: 'Mengejar Gol (Menit 70+ / Tertinggal)',
+        order: 'All-Out Attack (+1.5% ATK, -1.5% DEF, +Lebih Lelah & +Lebih Banyak Kartu)',
+        note: 'Aktifkan hanya satu order per waktu (order baru menggantikan order lama). Siapkan sub segar karena stamina terkuras lebih cepat.',
+      },
+      {
+        cond: 'Bertahan Total / Sapu Bersih',
+        order: 'Clear It (+1.2% DEF, -1.2% MID, 0% ATK)',
+        note: 'Membuang bola dari kotak penalti: memperkuat pertahanan +1.2% tanpa memotong ATK, namun melepaskan kendali lini tengah -1.2%.',
       },
     ],
-    subsRule: 'Di v1.2.0 (#21779 & #35197), kuota pergantian adalah 5 pemain (6 jika Extra Time). AI otomatis mengganti pemain energi <60% (<90% setelah menit 85). Masukkan 1–2 pemain moodTier=1 (target 8% menit) saat unggul, dan gunakan sisa kuota untuk Supersub VEL/FIN segar.',
-    redCardRule: 'Jika pemainmu kena Kartu Merah: (1) Setelah laga beri denda manual tepat 20% gaji (0% peluang fineSlump + dapat kas gratis!), (2) Di lapangan langsung ganti 1 penyerang/AM ke posisi bek/DM yang kosong dan aktifkan Order Defend Lead / Stay Calm.',
+    subsRule: 'Di #21779 & #35197, kuota pergantian adalah 5 pemain (6 jika Extra Time). Hanya 1 Order yang aktif pada satu waktu sampai kamu menggantinya. AI Match Order dapat menyisipkan pemain rotation atau memasukkan supersub VEL/FIN segar.',
+    redCardRule: 'Jika terkena Kartu Merah: (1) Usai laga beri denda manual tepat 20% gaji (0% fineSlump!), (2) Di lapangan segera ganti ke Lock the Door (+1.5% DEF) / Clear It (+1.2% DEF) dan isi sektor kosong.',
   };
 
   // Bytecode #19825 matchTicketKind & Env[15] continental map

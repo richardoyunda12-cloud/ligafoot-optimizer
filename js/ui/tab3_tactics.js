@@ -313,7 +313,7 @@ function renderTab3Pitch() {
   const defSlots = res.xi.filter(a => ['LE', 'LD', 'Z', 'ZE', 'ZD', 'ZAG', 'LAT'].includes(a.slot));
   const isFiveBack = defSlots.length >= 5;
   const is433 = fkStr.startsWith('4-3-3') || fkStr === '3-4-3' || fkStr === '4-2-4';
-  const isMidWings = fkStr === '4-1-4-1' || fkStr === '4-4-1-1' || fkStr === '5-4-1';
+  const isMidWings = fkStr === '4-1-4-1' || fkStr === '4-4-1-1' || fkStr === '5-4-1' || fkStr === '3-4-1-2';
 
   const bands = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
   res.xi.forEach(a => {
@@ -376,13 +376,17 @@ function renderTab3Pitch() {
   const poolSp = outPls.length ? outPls : xiPls;
   const pickMax = (arr, scoreFn) => arr.reduce((b, x) => (!b || scoreFn(x) > scoreFn(b)) ? x : b, null);
   const pen = pickMax(poolSp, p => (p.s1 === 'FIN' ? 2000 : (p.s2 === 'FIN' ? 1000 : 0)) + p.force);
-  const cor = pickMax(poolSp, p => (p.s1 === 'CRU' ? 2000 : (p.s2 === 'CRU' ? 1000 : 0)) + ((p.s1 === 'PAS' || p.s1 === 'ARM') ? 300 : 0) + p.force);
-  const fkT = pickMax(poolSp, p => ((p.s1 === 'FIN' || p.s2 === 'FIN') ? 1000 : 0) + ((p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM') ? 400 : 0) + p.force);
-  const cap = pickMax(xiPls, p => (p.age >= 28 ? 1000 : 0) + p.force * 5 + p.age);
+  const cor = pickMax(poolSp, p => (p.s1 === 'CRU' ? 2000 : (p.s2 === 'CRU' ? 1000 : 0)) + p.force);
+  const fkT = pickMax(poolSp, p => ((p.s1 === 'FIN' || p.s2 === 'FIN') ? 1000 : 0) + p.force);
+  const autoPkPick = pickMax(poolSp, p => (p.s1 === 'FIN' ? 1000 : 0) + p.force);
+  const cap = pickMax(xiPls, p => (p.age || 0) * 10000 + p.force);
 
   const spWarns = [];
   if (pen && pen.s2 === 'FIN' && pen.s1 !== 'FIN') {
-    spWarns.push(`Penalti: ${pen.name} punya FIN di slot 2 — tombol Auto game akan melewatinya, wajib pilih manual!`);
+    spWarns.push(`Penalti: ${pen.name} punya FIN di slot 2 (+4%) — tombol Auto game akan melewatinya, wajib pilih manual!`);
+  }
+  if (fkT && autoPkPick && fkT.id !== autoPkPick.id && fkT.s2 === 'FIN' && fkT.s1 !== 'FIN') {
+    spWarns.push(`Free Kick: ${fkT.name} punya FIN di slot 2 (+2% FK) — Auto game fallback ke algo Penalti (buta s2 FIN), set manual!`);
   }
   const cS1 = poolSp.filter(p => p.s1 === 'CRU'), cS2 = poolSp.filter(p => p.s2 === 'CRU' && p.s1 !== 'CRU');
   if (cS1.length && cS2.length) {
@@ -398,10 +402,10 @@ function renderTab3Pitch() {
 
   document.getElementById('t3-setpieces').innerHTML = pen ? `
     <div class="sp-2grid">
-      <div class="sp-box"><span class="c-muted" style="font-size:10px">Penalti:</span>${spLink(pen, (pen.s1 === 'FIN' || pen.s2 === 'FIN') ? ' (FIN)' : '', 'c-green')}</div>
+      <div class="sp-box"><span class="c-muted" style="font-size:10px">Penalti:</span>${spLink(pen, pen.s1 === 'FIN' ? ' (FIN +8%)' : (pen.s2 === 'FIN' ? ' (FIN s2 +4%)' : ''), 'c-green')}</div>
       <div class="sp-box"><span class="c-muted" style="font-size:10px">Corner:</span>${spLink(cor, cor.s1 === 'CRU' ? ' [CRS s1 +3%]' : (cor.s2 === 'CRU' ? ' [CRS s2]' : ''), 'c-sky')}</div>
-      <div class="sp-box"><span class="c-muted" style="font-size:10px">Free Kick:</span>${spLink(fkT, '', 'c-purple')}</div>
-      <div class="sp-box"><span class="c-muted" style="font-size:10px">Kapten:</span>${spLink(cap, ` (${cap.age}th ${cap.age >= 28 ? '✓' : '⚠<28'})`, 'c-amber')}</div>
+      <div class="sp-box"><span class="c-muted" style="font-size:10px">Free Kick:</span>${spLink(fkT, (fkT.s1 === 'FIN' || fkT.s2 === 'FIN') ? ' (FIN)' : '', 'c-purple')}</div>
+      <div class="sp-box"><span class="c-muted" style="font-size:10px">Kapten:</span>${spLink(cap, ` (${cap.age}th ${cap.age >= 28 ? '✓ -10%' : '+3% cb'})`, 'c-amber')}</div>
     </div>
     ${spWarns.length ? `<div class="alert-item HIGH" style="padding:7px 10px;margin-top:4px"><span class="badge b-warn">AUTO BLIND SPOT</span><div style="font-size:11px">${spWarns.map(w => esc(w)).join('<br/>')}</div></div>` : ''}` : '';
 

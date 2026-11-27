@@ -28,6 +28,42 @@
    * - DES+MAR di DEF tidak menumpuk (cuma +5% sekali); PAS+ARM di MID tidak menumpuk (cuma +3% sekali).
    * - GK SAI: +3% di s1, +1% di s2 (#35011).
    */
+  /**
+   * Bytecode #36792 (pv / sectorSkillBonus) OTA 2.1.0:
+   * Evaluasi bonus skill murni berdasarkan sektor TARGET slot ('G'|'D'|'M'|'A'|'X').
+   * - 'G' / 'X': 0% bonus sektor (REF/COL hanya memengaruhi keeperSaveMul #22455).
+   * - 'D': (DES||MAR)+5%, VEL+2%, CAB+4%
+   * - 'M': (PAS||ARM)+3%, DRI+2%
+   * - 'A': VEL+2%, DRI+3%, CAB+3%
+   */
+  function evalSkillStackingForSector(sectorCode, s1Raw, s2Raw) {
+    const sec = String(sectorCode || 'M').toUpperCase();
+    const s1 = String(s1Raw || '').trim().toUpperCase();
+    const s2 = String(s2Raw || '').trim().toUpperCase();
+    const skills = new Set([s1, s2].filter(Boolean));
+    let bonus = 1.0;
+    if (sec === 'D') {
+      if (skills.has('DES') || skills.has('MAR')) bonus *= 1.05;
+      if (skills.has('VEL')) bonus *= 1.02;
+      if (skills.has('CAB')) bonus *= 1.04;
+    } else if (sec === 'M') {
+      if (skills.has('PAS') || skills.has('ARM')) bonus *= 1.03;
+      if (skills.has('DRI')) bonus *= 1.02;
+    } else if (sec === 'A') {
+      if (skills.has('VEL')) bonus *= 1.02;
+      if (skills.has('DRI')) bonus *= 1.03;
+      if (skills.has('CAB')) bonus *= 1.03;
+    }
+    return {
+      mul: bonus,
+      stackPct: U.roundTo((bonus - 1.0) * 100, 2),
+    };
+  }
+
+  /**
+   * Bytecode #35011, #21893, #36792: Evaluasi badge skill di Roster / UI.
+   * - GK: REF/COL (+4% s1, +2% s2 Save), SAI (+2% s1, +1% s2 Save). Tidak menambah sector power.
+   */
   function evalSkillStacking(posCode, s1Raw, s2Raw) {
     const pos = String(posCode || 'MC').toUpperCase();
     const cat = (C.EXACT_CAT && (pos in C.EXACT_CAT)) ? C.EXACT_CAT[pos] : U.posCategory(pos);
@@ -36,23 +72,25 @@
     const skills = new Set([s1, s2].filter(Boolean));
 
     if (cat === 0) {
-      let bonus = 1.0;
+      let saveBonus = 1.0;
       const notes = [];
       if (s1 === 'REF' || s1 === 'COL') {
-        bonus *= 1.04;
-        notes.push(`${U.skillEn(s1)}(s1)+4%`);
+        saveBonus *= 1.04;
+        notes.push(`${U.skillEn(s1)}(s1)+4%Save`);
       } else if (s1 === 'SAI') {
-        notes.push('RUS(s1)+2%Save'); // #21834 keeperSaveMul: s1 SAI = +2% save
+        saveBonus *= 1.02;
+        notes.push('RUS(s1)+2%Save'); // #22455 keeperSaveMul: s1 SAI = +2% save
       }
       if (s2 === 'REF' || s2 === 'COL') {
-        bonus *= 1.02;
-        notes.push(`${U.skillEn(s2)}(s2)+2%`);
+        saveBonus *= 1.02;
+        notes.push(`${U.skillEn(s2)}(s2)+2%Save`);
       } else if (s2 === 'SAI') {
-        notes.push('RUS(s2)+1%Save'); // #21834 keeperSaveMul: s2 SAI = +1% save
+        saveBonus *= 1.01;
+        notes.push('RUS(s2)+1%Save'); // #22455 keeperSaveMul: s2 SAI = +1% save
       }
       if (skills.has('DPE') || skills.has('PEN')) notes.push('PEN(+8% penalti)');
-      const pct = U.roundTo((bonus - 1.0) * 100, 2);
-      const grade = (pct >= 5.0 || (pct >= 4.0 && skills.has('SAI'))) ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD');
+      const pct = U.roundTo((saveBonus - 1.0) * 100, 2);
+      const grade = pct >= 5.0 ? 'GOD' : (pct >= 3.0 ? 'GOOD' : 'STD');
       return { stackPct: pct, pct, grade, nonStack: false, note: notes.join(' ') || 'Standar' };
     }
 
@@ -327,9 +365,8 @@
       if (Array.isArray(ri.exact) && ri.exact.includes(playerPos)) {
         return 1.00;
       }
-      const pCat4 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
-      const pRuleCat = pCat4 === 0 ? 0 : (pCat4 <= 2 ? 1 : (pCat4 === 3 ? 2 : 3));
-      return pRuleCat === ri.cat ? 1.00 : 0.70;
+      const pCat5 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
+      return pCat5 === ri.cat ? 1.00 : 0.70;
     }
     if (targetSlot === 'G') {
       return playerPos === 'G' ? 1.00 : 0.20;
@@ -340,11 +377,9 @@
     if (playerPos === targetSlot) {
       return 1.00;
     }
-    const pCat4 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
-    const tCat4 = (C.EXACT_CAT && (targetSlot in C.EXACT_CAT)) ? C.EXACT_CAT[targetSlot] : U.posCategory(targetSlot);
-    const pRuleCat = pCat4 === 0 ? 0 : (pCat4 <= 2 ? 1 : (pCat4 === 3 ? 2 : 3));
-    const tRuleCat = tCat4 === 0 ? 0 : (tCat4 <= 2 ? 1 : (tCat4 === 3 ? 2 : 3));
-    return pRuleCat === tRuleCat ? 1.00 : 0.70;
+    const pCat5 = (C.EXACT_CAT && (playerPos in C.EXACT_CAT)) ? C.EXACT_CAT[playerPos] : U.posCategory(playerPos);
+    const tCat5 = (C.EXACT_CAT && (targetSlot in C.EXACT_CAT)) ? C.EXACT_CAT[targetSlot] : U.posCategory(targetSlot);
+    return pCat5 === tCat5 ? 1.00 : 0.70;
   }
 
   function isPlayerStar(p) {
@@ -354,15 +389,22 @@
   /**
    * Bytecode #21807, #21813, #21826, #35201: Evaluasi kontribusi efektif pemain pada slot formasi.
    */
-  function evalPlayerForSlot(p, targetSlot, includeEnergy = true, repLevel = 3, ruleId = null) {
+  /**
+   * Bytecode #22444 & #36792 (OTA 2.1.0): Evaluasi kontribusi efektif pemain pada slot formasi.
+   * - Skill stacking dihitung dari sektor TARGET slot (bukan posisi alami pemain).
+   * - isPlayerStar dicek sebelum p.top -> starMul = 1.05 (rep >= 70) / 1.02.
+   * - humanBoost = isHuman ? 1.05 : 1.00 (berlaku flat untuk tim user saja, tidak digate OOP).
+   */
+  function evalPlayerForSlot(p, targetSlot, includeEnergy = true, repLevel = 3, ruleId = null, isHuman = true) {
     const compat = slotCompatFactor(p.pos, targetSlot, ruleId);
 
-    // #21826: wrongFoot (-5%) dicek pada slot dengan category===1 & side 'D' atau 'E'
+    // #22444: wrongFoot (-5%) dicek pada slot dengan category===1 & side 'D' atau 'E' (termasuk wildcard 10/17)
     let wrongFoot = false;
     const foot = (p.foot || 'D').toUpperCase();
     let checkSide = null;
-    if (ruleId !== null && ruleId !== undefined && C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[ruleId]) {
-      const ri = C.RULE_SLOT_INFO[ruleId];
+    const ri = (ruleId !== null && ruleId !== undefined && C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[ruleId])
+      ? C.RULE_SLOT_INFO[ruleId] : null;
+    if (ri) {
       if (ri.cat === 1 && ri.side) checkSide = ri.side;
     } else if (targetSlot === 'LD') {
       checkSide = 'D';
@@ -373,29 +415,34 @@
     else if (checkSide === 'E' && foot !== 'E' && foot !== 'A') wrongFoot = true;
     const footMul = wrongFoot ? 0.95 : 1.00;
 
-    // #35201: skill bonus tetap dihitung pada sektor tempat pemain dipasang (tidak dinolkan saat OOP)
-    const stackBonus = p.stackPct || 0.0;
+    // #36792: skill bonus dihitung berdasarkan sektor TARGET slot ('G'|'D'|'M'|'A'|'X')
+    let targetSec = ri ? ri.sec : null;
+    if (!targetSec) {
+      const tCat5 = (C.EXACT_CAT && (targetSlot in C.EXACT_CAT)) ? C.EXACT_CAT[targetSlot] : U.posCategory(targetSlot);
+      targetSec = tCat5 === 0 ? 'G' : (tCat5 <= 2 ? 'D' : (tCat5 === 3 ? 'M' : 'A'));
+    }
+    const stackBonus = evalSkillStackingForSector(targetSec, p.s1, p.s2).stackPct;
 
-    // #21826 L1656530: p.top mendapat bonus lebih besar (1.10 / 1.05) dibanding star biasa (1.05 / 1.02)
+    // #22444 OTA 2.1.0: isPlayerStar dicek sebelum p.top -> cap 1.05 (repLevel > 3 / rep >= 70) / 1.02
     let starMul = 1.00;
-    if (p && p.top) {
-      starMul = repLevel > 3 ? 1.10 : 1.05;
-    } else if (isPlayerStar(p)) {
+    if (isPlayerStar(p)) {
       starMul = repLevel > 3 ? 1.05 : 1.02;
+    } else if (p && p.top) {
+      starMul = repLevel > 3 ? 1.10 : 1.05;
     }
 
-    // #21826: pemain yang bermain di posisi valid (!oop -> compat >= 1.0) mendapat same-club bonus * 1.05
-    const clubSyncMul = compat >= 1.0 ? 1.05 : 1.00;
+    // #22444: +5% flat untuk tim human saja (AI = 1.00), tidak bergantung OOP
+    const humanBoostMul = isHuman ? 1.05 : 1.00;
 
-    // #21826: pemain unhappy terkena * 0.97 (-3%)
+    // #22444: pemain unhappy terkena * 0.97 (-3%)
     const moodMul = (p && p.mood === 'unhappy') ? 0.97 : 1.00;
 
-    // #21826: fineSlump dibatasi maksimal 0.20 (lantai 0.80)
+    // #22444: fineSlump dibatasi maksimal 0.20 (lantai 0.80)
     const slumpVal = U.safeNum(p.fineSlump, 0.0);
     const slumpFrac = slumpVal <= 1.0 ? slumpVal : (slumpVal / 100.0);
     const slumpMul = slumpVal > 0 ? (1.0 - Math.min(0.20, slumpFrac)) : 1.00;
 
-    // #21807 & #35201: Continuous energyFactor = max(0.92, 1 - 0.001 * deficit), RES memotong deficit 40%
+    // #22444: Continuous energyFactor = max(0.92, 1 - 0.001 * deficit), RES memotong deficit 40%
     let energyMul = 1.00;
     if (includeEnergy) {
       const en = U.clamp(U.safeNum(p.energy, 100), 0, 100);
@@ -405,7 +452,7 @@
     }
 
     const baseF = U.safeNum(p.effForce !== undefined ? p.effForce : p.force, 10.0);
-    const score = baseF * compat * clubSyncMul * footMul * (1.0 + stackBonus / 100.0) * starMul * moodMul * slumpMul * energyMul;
+    const score = baseF * compat * humanBoostMul * footMul * (1.0 + stackBonus / 100.0) * starMul * moodMul * slumpMul * energyMul;
 
     return {
       score,
@@ -415,22 +462,19 @@
   }
 
   /**
-   * Audit Set-Piece & Kapten (#21818, #21822, #21823, #21825, #35438, #35439):
-   * - Captain: auto (#35438) memilih starter tertua; hanya age >= 28 yang memberi +3% MID (+6% saat babak 2 & tertinggal).
-   * - Free Kick: auto (#35439) memilih s1==='FIN' || s2==='FIN'; di #21823 hanya FIN yang memberi +2% konversi (PAS/ARM = 0%).
-   * - Corner: auto (#35439) memilih s1==='CRU' || s2==='CRU'; di #21823/#21825 s1 CRU = +3% konv & +4 header, s2 CRU = +1.5% konv & +4 header.
-   * - Penalty: auto (#21818) memilih starter dengan s1==='FIN' tertinggi (buta PEN & s2==='FIN'!). Di #21824 s1/s2 FIN memberi +3% gol penalti.
+   * Audit Set-Piece & Kapten (#22450, #23468, #36781 OTA 2.1.0):
+   * - Captain (#22450): auto memilih starter tertua (sort by age desc, force desc — tanpa filter >=28);
+   *   HANYA aktif saat Babak 2 & sedang tertinggal (+6% MID jika >=28th, +3% MID jika <28th) + kurangi kartu (-10% >=28th, -5% <28th).
+   * - Penalty (#23468/#22450): s1==='FIN' (+8%), s2==='FIN' (+4%); auto hanya cek s1==='FIN' else outfield.
+   * - Free Kick (#22450/#22454): hanya FIN (+2% konv); auto fallback sama dengan autoPk (hanya s1==='FIN'!).
+   * - Corner (#22450/#22454): s1 CRU (+3% konv & +4 header), s2 CRU (+1.5% konv & +4 header); auto cek s1||s2 CRU.
    */
   function auditSetPieces(xiPlayers) {
     if (!xiPlayers || !xiPlayers.length) {
       return { captain: [], freeKick: [], corner: [], penalty: [], warnings: [], autoSame: {} };
     }
 
-    const capRanked = [...xiPlayers].sort((a, b) => {
-      const vetA = (a.age || 0) >= 28 ? 1 : 0;
-      const vetB = (b.age || 0) >= 28 ? 1 : 0;
-      return (vetB - vetA) || ((b.age || 0) - (a.age || 0)) || (b.force - a.force);
-    });
+    const capRanked = [...xiPlayers].sort((a, b) => ((b.age || 0) - (a.age || 0)) || (b.force - a.force));
 
     const fkRanked = [...xiPlayers].sort((a, b) => {
       const finA = (a.s1 === 'FIN' || a.s2 === 'FIN') ? 1 : 0;
@@ -444,23 +488,24 @@
       return (cruB - cruA) || (b.force - a.force);
     });
 
+    // #23468 penaltyKickAdj: s1 FIN (+8%) > s2 FIN (+4%)
     const pkRanked = [...xiPlayers].sort((a, b) => {
-      const finA = (a.s1 === 'FIN' || a.s2 === 'FIN') ? 1 : 0;
-      const finB = (b.s1 === 'FIN' || b.s2 === 'FIN') ? 1 : 0;
+      const finA = a.s1 === 'FIN' ? 2 : (a.s2 === 'FIN' ? 1 : 0);
+      const finB = b.s1 === 'FIN' ? 2 : (b.s2 === 'FIN' ? 1 : 0);
       return (finB - finA) || (b.force - a.force);
     });
 
-    // #21818 autoPenaltyTaker: hanya cek s1 === 'FIN'
+    // #22450 autoPk: hanya cek s1 === 'FIN', fallback pemain outfield pertama (pos !== 'G')
     const autoPk = [...xiPlayers].sort((a, b) => {
-      const s1A = a.s1 === 'FIN' ? 1 : 0;
-      const s1B = b.s1 === 'FIN' ? 1 : 0;
+      const s1A = a.s1 === 'FIN' ? 2 : (a.pos !== 'G' ? 1 : 0);
+      const s1B = b.s1 === 'FIN' ? 2 : (b.pos !== 'G' ? 1 : 0);
       return (s1B - s1A) || (b.force - a.force);
     });
 
-    // #35439 auto freeKick: cek s1 === 'FIN' || s2 === 'FIN'
-    const autoFk = [...fkRanked];
+    // #22450 L632 autoFk: memanggil resolver yang sama dengan autoPk (buta s2==='FIN'!)
+    const autoFk = [...autoPk];
 
-    // #35439 auto corner: cek s1 === 'CRU' || s2 === 'CRU' (tanpa membedakan s1 vs s2)
+    // #22450 autoCk: cek s1 === 'CRU' || s2 === 'CRU' (tanpa membedakan s1 vs s2)
     const autoCk = [...xiPlayers].sort((a, b) => {
       const cA = (a.s1 === 'CRU' || a.s2 === 'CRU') ? 1 : 0;
       const cB = (b.s1 === 'CRU' || b.s2 === 'CRU') ? 1 : 0;
@@ -469,28 +514,38 @@
 
     const warnings = [];
     if (pkRanked[0].id !== autoPk[0].id) {
+      const gapNote = pkRanked[0].s1 === 'FIN' ? 's1 FIN (+8%)' : 'FIN slot 2 (+4%)';
       warnings.push(
-        `Penalti (#21818): Auto memilih ${autoPk[0].name} (F${autoPk[0].force}), padahal ${pkRanked[0].name} (F${pkRanked[0].force}, ${pkRanked[0].s1}/${pkRanked[0].s2}) punya FIN di slot 2 (+3% konversi penalti — Auto hanya membaca s1==='FIN'!).`
+        `Penalti (#22450/#23468): Auto memilih ${autoPk[0].name} (F${autoPk[0].force}), padahal ${pkRanked[0].name} (F${pkRanked[0].force}, ${U.skillEn(pkRanked[0].s1)}/${U.skillEn(pkRanked[0].s2)}) punya ${gapNote} — Auto hanya membaca s1==='FIN'!`
+      );
+    }
+    if (fkRanked[0].id !== autoFk[0].id) {
+      warnings.push(
+        `Freekick (#22450): Auto fallback ke algo Penalti (${autoFk[0].name}), padahal ${fkRanked[0].name} punya FIN di slot 2 (+2% konversi FK). Set FK manual!`
       );
     }
     if (ckRanked[0].id !== autoCk[0].id) {
       warnings.push(
-        `Corner (#21823): Set manual ke ${ckRanked[0].name} (${U.skillEn(ckRanked[0].s1)}/${U.skillEn(ckRanked[0].s2)}) karena CRS di slot 1 memberi +3% konversi (slot 2 hanya +1.5%).`
+        `Corner (#22454): Set manual ke ${ckRanked[0].name} (${U.skillEn(ckRanked[0].s1)}/${U.skillEn(ckRanked[0].s2)}) karena CRS di slot 1 memberi +3% konversi (slot 2 hanya +1.5%).`
       );
     }
     if ((capRanked[0].age || 0) < 28) {
       warnings.push(
-        `Kapten (#21822): Tidak ada starter berusia ≥28 tahun di XI (kapten ${capRanked[0].name} ${capRanked[0].age}th belum mengaktifkan bonus +3% MID / +6% comeback).`
+        `Kapten (#22450): Starter tertua ${capRanked[0].name} (${capRanked[0].age}th < 28th) hanya memberi +3% MID comeback & -5% kartu (≥28th memberi +6% comeback & -10% kartu).`
       );
     }
 
     const fmtTaker = (p, roleType) => {
       const sk = [U.skillEn(p.s1), U.skillEn(p.s2)].filter(Boolean).join('/');
       let reason = `F:${p.force}`;
-      if (roleType === 'cap') reason = (p.age >= 28) ? `Usia ${p.age}th (+3% MID / +6% Comeback)` : `Tertua (${p.age}th, <28th)`;
-      else if (roleType === 'pk' && p.s2 === 'FIN' && p.s1 !== 'FIN') reason = 'FIN Slot 2 (+3% Penalti, Lewat di Auto!)';
-      else if (roleType === 'pk' && p.s1 === 'FIN') reason = 'FIN Slot 1 (+3% Penalti)';
-      else if (roleType === 'fk' && (p.s1 === 'FIN' || p.s2 === 'FIN')) reason = 'FIN (+2% Konversi Freekick #21823)';
+      if (roleType === 'cap') {
+        reason = (p.age >= 28)
+          ? `Usia ${p.age}th (+6% Comeback H2 Kalah, -10% Kartu)`
+          : `Usia ${p.age}th (+3% Comeback H2 Kalah, -5% Kartu)`;
+      } else if (roleType === 'pk' && p.s1 === 'FIN') reason = 'FIN Slot 1 (+8% Penalti #23468)';
+      else if (roleType === 'pk' && p.s2 === 'FIN') reason = 'FIN Slot 2 (+4% Penalti, Lewat di Auto!)';
+      else if (roleType === 'fk' && p.s1 === 'FIN') reason = 'FIN Slot 1 (+2% Konversi Freekick)';
+      else if (roleType === 'fk' && p.s2 === 'FIN') reason = 'FIN Slot 2 (+2% Konv FK, Lewat di Auto!)';
       else if (roleType === 'ck' && p.s1 === 'CRU') reason = 'CRS Slot 1 (+3% Konv & +4 Header)';
       else if (roleType === 'ck' && p.s2 === 'CRU') reason = 'CRS Slot 2 (+1.5% Konv & +4 Header)';
       return {
@@ -650,7 +705,7 @@
 
   function solveBestXi(
     roster, formationKey = '4-3-3', foreignCap = 7, userCountry = '',
-    excludeIds = null, rotationMode = false, repLevel = 3
+    excludeIds = null, rotationMode = false, repLevel = 3, isHuman = true
   ) {
     const spec = resolveFormationSpec(formationKey);
     const fk = spec.key;
@@ -691,7 +746,7 @@
         const isForeign = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
         if (isForeign && foreignUsed >= foreignCap) continue;
 
-        const ev = evalPlayerForSlot(p, sCode, true, repLevel, ruleId);
+        const ev = evalPlayerForSlot(p, sCode, true, repLevel, ruleId, isHuman);
         let sc = ev.score;
         if (rotationMode) {
           sc += (U.safeNum(p.energy, 100) - 80) * 0.35;
@@ -717,7 +772,7 @@
         for (const p of avail) {
           if (!usedIds.has(p.id)) {
             bestP = p;
-            const ev = evalPlayerForSlot(p, sCode, true, repLevel, ruleId);
+            const ev = evalPlayerForSlot(p, sCode, true, repLevel, ruleId, isHuman);
             bestScore = ev.score;
             bestWf = ev.wrongFoot;
             bestCompat = ev.compat;
@@ -760,8 +815,8 @@
           const ri = assigned[i].ruleId;
           const rj = assigned[j].ruleId;
           const curSum = assigned[i].score + assigned[j].score;
-          const evI = evalPlayerForSlot(pj, si, true, repLevel, ri);
-          const evJ = evalPlayerForSlot(pi, sj, true, repLevel, rj);
+          const evI = evalPlayerForSlot(pj, si, true, repLevel, ri, isHuman);
+          const evJ = evalPlayerForSlot(pi, sj, true, repLevel, rj, isHuman);
           if (evI.score + evJ.score > curSum + 0.01) {
             assigned[i] = { ...assigned[i], player: pj, score: U.roundTo(evI.score, 2), wrongFoot: evI.wrongFoot, compat: evI.compat };
             assigned[j] = { ...assigned[j], player: pi, score: U.roundTo(evJ.score, 2), wrongFoot: evJ.wrongFoot, compat: evJ.compat };
@@ -790,7 +845,7 @@
           if (sCode !== 'G' && p.pos === 'G') continue;
           const newIsF = Boolean(userCountry && p.nationality && p.nationality !== userCountry);
           if ((foreignUsed - (curIsF ? 1 : 0) + (newIsF ? 1 : 0)) > foreignCap) continue;
-          const evB = evalPlayerForSlot(p, sCode, true, repLevel, ruleId);
+          const evB = evalPlayerForSlot(p, sCode, true, repLevel, ruleId, isHuman);
           if (evB.score > (bestCandEv ? bestCandEv.score : curItem.score + 0.01)) {
             bestCand = p;
             bestCandEv = evB;
@@ -816,8 +871,8 @@
         for (let j = i + 1; j < assigned.length; j++) {
           if (!assigned[i] || !assigned[j]) continue;
           const curSum = assigned[i].score + assigned[j].score;
-          const evI = evalPlayerForSlot(assigned[j].player, assigned[i].slot, true, repLevel, assigned[i].ruleId);
-          const evJ = evalPlayerForSlot(assigned[i].player, assigned[j].slot, true, repLevel, assigned[j].ruleId);
+          const evI = evalPlayerForSlot(assigned[j].player, assigned[i].slot, true, repLevel, assigned[i].ruleId, isHuman);
+          const evJ = evalPlayerForSlot(assigned[i].player, assigned[j].slot, true, repLevel, assigned[j].ruleId, isHuman);
           if (evI.score + evJ.score > curSum + 0.01) {
             const pI = assigned[i].player, pJ = assigned[j].player;
             assigned[i] = { ...assigned[i], player: pJ, score: U.roundTo(evI.score, 2), wrongFoot: evI.wrongFoot, compat: evI.compat };
@@ -941,6 +996,9 @@
     const F9_ELIGIBLE_POS = ['MA', 'MO', 'ATA', 'A', 'SA']; // #42849 PartidaScreen picker
     let f9Applied = false;
     let midWeightNum = 0, midWeightDen = 0, atkRawSum = 0;
+    let velCount = 0, amxCount = 0;
+    let captainAge = U.safeNum(opts.captainAge, 0);
+    let maxCapAge = -1, maxCapForce = -1;
     if (xiList.length) {
       xiList.forEach((item, idx) => {
         const p = item.player || item;
@@ -948,6 +1006,17 @@
         const rId = item.ruleId !== undefined ? item.ruleId : ruleSlots[idx];
         const ri = (C.RULE_SLOT_INFO && C.RULE_SLOT_INFO[rId]) || null;
         const sec = item.sectorCode || (ri ? ri.sec : (idx === 0 ? 'G' : 'M'));
+        const pAge = U.safeNum(p && p.age, 25);
+        const pForce = U.safeNum(p && p.force, sc);
+        if (pAge > maxCapAge || (pAge === maxCapAge && pForce > maxCapForce)) {
+          maxCapAge = pAge;
+          maxCapForce = pForce;
+          captainAge = pAge;
+        }
+        if (sec === 'A' || sec === 'M' || sec === 'X') {
+          amxCount++;
+          if (p && (p.s1 === 'VEL' || p.s2 === 'VEL')) velCount++;
+        }
         if (sec === 'G') { sumG += sc; cntG++; }
         else if (sec === 'D') { sumD += sc; cntD++; }
         else if (sec === 'M') {
@@ -983,21 +1052,28 @@
       atkRawSum = sumA;
       midWeightNum = sumM;
       midWeightDen = Math.max(1, cntM);
+      if (!captainAge) captainAge = 28;
     }
+    if (!captainAge) captainAge = 25;
 
     const lockerMul = Math.max(0.96, 1.0 - lockerHitPct / 100.0);
     const chem = (xiObj && xiObj.chemistry !== undefined) ? xiObj.chemistry : 100;
     const chemMul = chemistryMul(chem);
     const altHitSide = (!neutral && !isHome) ? Math.max(0, U.safeNum(opts.altHit, 0)) : 0.0;
-    const altMul = altHitSide > 0 ? Math.max(0.85, 1.0 - 0.12 * altHitSide) : 1.00; // #22073 altSector=0.12
+    const altMul = altHitSide > 0 ? Math.max(0.85, 1.0 - 0.12 * altHitSide) : 1.00; // #22453 L1159: diterapkan SETELAH clamp ±8%
     const condEnergyMul = U.safeNum(opts.energyMul, 1.0);
     const condFatigueMul = condEnergyMul > 1.0 ? Math.max(0.95, 1.0 - 0.001 * ((condEnergyMul - 1.0) * 14.0)) : 1.0;
-    const outfieldGlobalMul = lockerMul * chemMul * altMul * condFatigueMul;
+    const outfieldGlobalMul = lockerMul * chemMul * condFatigueMul;
+
+    // #22453 & #3700 Marking: markAdj (+0 / +0.04 / +0.08) masuk pembilang sumM sebelum /5.0 (0% DEF!)
+    const isVeryHeavyMark = marking.includes('very') || marking.includes('sangat');
+    const isHeavyMark = !isVeryHeavyMark && (marking.includes('heavy') || marking.includes('ketat'));
+    const markAdj = isVeryHeavyMark ? 0.08 : (isHeavyMark ? 0.04 : 0.0);
 
     // #22453: Denominator tetap /5, /5, /3; lockerMul, chemMul & cond hanya berlaku pada DEF, MID, ATK (bukan GK)
     const baseGk = (cntG > 0 ? sumG / cntG : 15.0);
     const baseDef = (sumD / 5.0);
-    const baseMid = (sumM / 5.0);
+    const baseMid = ((sumM + markAdj) / 5.0);
     const baseAtk = (sumA / 3.0);
 
     let rawGk = baseGk;
@@ -1005,24 +1081,25 @@
     let rawMid = baseMid * outfieldGlobalMul;
     let rawAtk = baseAtk * outfieldGlobalMul;
 
-    // #21822: Kapten berusia >= 28 memberi +3% MID (+6% saat babak ke-2 & tertinggal)
-    const hasVetCaptain = xiList.length
-      ? xiList.some(item => ((item.player || item).age || 0) >= 28)
-      : true;
-    if (hasVetCaptain) {
-      rawMid *= 1.03;
+    // #22450 & #22453: Kapten TIDAK memberi +3% MID pasif; hanya aktif Babak 2 saat kalah (+6% >=28th, +3% <28th)
+    // serta memotong risiko kartu sepanjang laga (-10% >=28th, -5% <28th).
+    const captainComebackPct = captainAge >= 28 ? 6 : 3;
+    const captainCardCutPct = captainAge >= 28 ? 10 : 5;
+    if (opts.secondHalf && opts.losing) {
+      rawMid *= (1.0 + captainComebackPct / 100.0);
     }
 
     if (isHome && crowdOver70) {
       rawMid *= 1.02;
     }
 
-    // OTA 01a20f1b (#22238 effectiveSectors, #3652 morale: 0.03): hanya sektor MID
+    // OTA #22453 (#3652 morale: 0.03): hanya sektor MID
     if (opts.morale !== undefined && opts.morale !== null && Number(opts.morale) !== 0) {
       const mVal = U.clamp(U.safeNum(opts.morale, 0), -1.0, 1.0);
       rawMid *= (1.0 + 0.03 * mVal);
     }
 
+    const speedRatio = amxCount > 0 ? (velCount / amxCount) : 0.33;
     let convBonusPct = 0.0;
     if (style.includes('off') || style.includes('serang')) {
       rawAtk *= 1.08;
@@ -1032,44 +1109,54 @@
       rawDef *= 1.08;
     } else if (style.includes('counter') || style.includes('balik')) {
       rawMid *= 0.94;
-      convBonusPct = 9.0;
+      // #22454: Counter-Attack konversi + (0.06 + 0.06 * speedRatio) berdasarkan rasio pemain VEL di lini A/M/X
+      convBonusPct = U.roundTo((0.06 + 0.06 * speedRatio) * 100.0, 1);
     }
 
-    let cardRiskLabel = 'Rendah';
-    let staminaDrainLabel = 'Normal';
-    let markCardMul = 1.0;
-    if (marking.includes('very') || marking.includes('sangat')) {
-      rawDef *= 1.08;
-      markCardMul = 1.65;
-      cardRiskLabel = 'Tinggi (+65% kartu, waspada penalti!)';
-      staminaDrainLabel = 'Cepat (-35% stamina)';
-    } else if (marking.includes('heavy') || marking.includes('ketat')) {
-      rawDef *= 1.04;
-      markCardMul = 1.25;
-      cardRiskLabel = 'Sedang (+25% kartu)';
-      staminaDrainLabel = 'Agak Cepat (-18% stamina)';
+    // #3700 & #22453 Marking card multipliers: Light 0.80x (+30 den), Heavy 1.05x (+10 den), Very Heavy 1.35x (+0 den)
+    let cardRiskLabel = 'Rendah (merah 0.80×, kuning lebih jarang)';
+    const staminaDrainLabel = 'Normal'; // #3700: Light/Heavy/Very Heavy semua memiliki kelelahan Normal
+    let redMarkMul = 0.80;
+    if (isVeryHeavyMark) {
+      redMarkMul = 1.35;
+      cardRiskLabel = 'Tinggi (merah 1.35×, kuning jauh lebih sering)';
+    } else if (isHeavyMark) {
+      redMarkMul = 1.05;
+      cardRiskLabel = 'Sedang (merah 1.05× · fullback assist+)';
     }
+    const shoutCardMul = (shout.includes('calm') || shout.includes('calma')) ? 0.85 : 1.0;
     if (opts.cardMul !== undefined && opts.cardMul !== null) {
-      // Dampak ekspektasi risiko kartu kuning kedua/kartu merah (#21365 cardMul + #22095 manUp)
-      const redProb = Math.min(0.35, 0.045 * markCardMul * Math.max(0.5, U.safeNum(opts.cardMul, 1.0)));
+      const redProb = Math.min(0.35, 0.045 * redMarkMul * (1.0 - captainCardCutPct / 100.0) * shoutCardMul * Math.max(0.5, U.safeNum(opts.cardMul, 1.0)));
       const redMul = 1.0 - redProb * 0.14;
       rawDef *= redMul;
       rawMid *= redMul;
       rawAtk *= redMul;
     }
 
-    if (shout.includes('praise') || shout.includes('elogiar') || shout.includes('encourage')) {
-      rawMid *= 1.012;
+    // #3700 6 Shout resmi OTA 2.1.0 (tergantung status skor saat diteriakkan)
+    const scoreState = String(opts.scoreState || 'tied').toLowerCase();
+    const isWinState = scoreState.includes('win') || scoreState.includes('lead') || scoreState.includes('unggul');
+    const isLoseState = scoreState.includes('los') || scoreState.includes('trail') || scoreState.includes('kalah');
+    if (shout.includes('encourage') || shout.includes('incentivar')) {
+      rawMid *= isWinState ? 1.010 : 1.015;
+    } else if (shout.includes('demand') || shout.includes('cobrar')) {
+      if (isWinState) { rawDef *= 0.985; rawMid *= 0.990; }
+      else rawAtk *= 1.015;
+    } else if (shout.includes('fire') || shout.includes('incendiar') || shout.includes('motiv')) {
+      if (isLoseState) rawAtk *= 1.020;
+      else if (!isWinState) rawAtk *= 1.010;
     } else if (shout.includes('focus') || shout.includes('concentrar') || shout.includes('tighten')) {
-      rawDef *= 1.012;
-    } else if (shout.includes('push') || shout.includes('avan') || shout.includes('attack')) {
-      rawAtk *= 1.012;
+      rawDef *= isWinState ? 1.015 : 1.008;
+    } else if (shout.includes('praise') || shout.includes('elogiar')) {
+      if (isLoseState) rawMid *= 0.990;
+      else rawMid *= 1.012;
+    } else if (shout.includes('calm') || shout.includes('calma')) {
+      rawDef *= 1.005;
     }
 
-    const totalPower = rawDef + rawMid + rawAtk + rawGk * 0.35;
     const bugInfo = (C.FORMATION_BUGS && C.FORMATION_BUGS[fk]) || null;
 
-    // Hitung pengumpan silang sayap, playmaker tengah, bonus FIN/SAI, & skor penembak (#21822, #21833, #21834, #21835)
+    // #22455 keeperSaveMul (REF/COL + SAI), #36800 Wings Crosser (tanpa MD/ME), #22465 shooterWeight (top 1.4, star 1.25)
     let wingCrossers = 0;
     let centerPlaymakers = 0;
     let finAttackers = 0;
@@ -1079,15 +1166,18 @@
     if (xiList.length) {
       for (const item of xiList) {
         const p = item.player || item;
-        const pos = p.pos || item.slot || '';
-        const s1 = p.s1 || '';
-        const s2 = p.s2 || '';
+        const pos = String(p.pos || item.slot || '').toUpperCase();
+        const s1 = String(p.s1 || '').toUpperCase();
+        const s2 = String(p.s2 || '').toUpperCase();
         const sec = item.sectorCode || 'M';
         if (sec === 'G') {
-          if (s1 === 'SAI') gkSaveBonus += 0.02;
+          if (s1 === 'REF' || s1 === 'COL') gkSaveBonus += 0.04;
+          else if (s1 === 'SAI') gkSaveBonus += 0.02;
+          if (s2 === 'REF' || s2 === 'COL') gkSaveBonus += 0.02;
           else if (s2 === 'SAI') gkSaveBonus += 0.01;
         }
-        if (['LD', 'LE', 'LAT', 'MD', 'ME', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU')) {
+        // #36800: hanya LD, LE, LAT, PD, PE (TIDAK termasuk MD/ME!)
+        if (['LD', 'LE', 'LAT', 'PD', 'PE'].includes(pos) && (s1 === 'CRU' || s2 === 'CRU')) {
           wingCrossers++;
         }
         if (sec === 'M' && (s1 === 'PAS' || s2 === 'PAS' || s1 === 'ARM' || s2 === 'ARM')) {
@@ -1098,7 +1188,9 @@
         }
         if (sec !== 'G' && sec !== 'X') {
           let w = sec === 'A' ? 5.0 : sec === 'M' ? 2.0 : 0.4;
-          if (s1 === 'FIN' || s2 === 'FIN') w += 4.0; // #21835: FIN menambah bobot shooter +4
+          if (s1 === 'FIN' || s2 === 'FIN') w += 4.0;
+          if (p && p.top) w *= 1.4;
+          else if (isPlayerStar(p)) w *= 1.25;
           const sc = U.safeNum(item.score !== undefined ? item.score : p.force, 0);
           shooterNum += sc * w;
           shooterDen += w;
@@ -1109,12 +1201,13 @@
       ? shooterNum / shooterDen
       : U.safeNum(xiObj && xiObj.avgScore, (rawGk + rawDef + rawMid + rawAtk) / 4);
     const finBonusMul = 1.0 + Math.min(0.05, finAttackers * 0.025);
-    const gkSaveMul = 1.0 + gkSaveBonus;
+    const gkSaveMul = U.clamp(1.0 + gkSaveBonus, 0.92, 1.08);
+    const conversionMul = 0.965 * U.clamp((1.0 + convBonusPct / 100.0) * finBonusMul, 0.88, 1.12);
 
     // #22453 effectiveSectors (+ #36802/#36803):
     // Focus Center: atk *= (0.8 + 0.2 * (midWeightedAvg / atkPerPlayerAvg)), bobot PAS/ARM di MID = 1.5x
     // Focus Wings: rawAtk * (wingCrossers > 0 ? 1 + 0.02*min(3, wingCrossers) : 0.96)
-    // Lalu di-clamp ke ±8% (sectorCap = 0.08) terhadap baseDef / baseMid / baseAtk!
+    // Clamp ±8% terhadap baseDef/baseMid/baseAtk TERLEBIH DAHULU, BARU kalikan altMul di luar clamp (#22453 L1159-1204)!
     const clampCap = (val, base) => base > 0 ? U.clamp(val, base * 0.92, base * 1.08) : val;
     const focusOpt = String(opts.focus || opts.attackFocus || '').toLowerCase();
     const midWeightedAvg = midWeightDen > 0 ? (midWeightNum / midWeightDen) : 0;
@@ -1126,15 +1219,17 @@
     const wingMul = wingCrossers > 0 ? (1.0 + 0.02 * Math.min(3, wingCrossers)) : 0.96;
     const rawAtkWings = rawAtk * wingMul;
 
-    rawDef = clampCap(rawDef, baseDef);
-    rawMid = clampCap(rawMid, baseMid);
-    const atkCenter = clampCap(rawAtkCenter, baseAtk);
-    const atkWings = clampCap(rawAtkWings, baseAtk);
-    rawAtk = clampCap(rawAtk, baseAtk);
+    rawDef = clampCap(rawDef, baseDef) * altMul;
+    rawMid = clampCap(rawMid, baseMid) * altMul;
+    const atkCenter = clampCap(rawAtkCenter, baseAtk) * altMul;
+    const atkWings = clampCap(rawAtkWings, baseAtk) * altMul;
+    rawAtk = clampCap(rawAtk, baseAtk) * altMul;
 
     let effAtk = rawAtk;
     if (focusOpt.includes('wing') || focusOpt.includes('sayap')) effAtk = atkWings;
     else if (focusOpt.includes('center') || focusOpt.includes('tengah')) effAtk = atkCenter;
+
+    const totalPower = rawDef + rawMid + effAtk + rawGk * 0.35;
 
     return {
       formation: fk,
@@ -1150,6 +1245,14 @@
       centerPlaymakers,
       finBonusMul: U.roundTo(finBonusMul, 4),
       gkSaveMul: U.roundTo(gkSaveMul, 4),
+      conversionMul: U.roundTo(conversionMul, 4),
+      speedRatio: U.roundTo(speedRatio, 3),
+      markAdj,
+      redMarkMul,
+      captainAge,
+      captainComebackPct,
+      captainCardCutPct,
+      altMul: U.roundTo(altMul, 4),
       shooterVal: U.roundTo(shooterVal, 1),
       totalPower: U.roundTo(totalPower, 1),
       convBonusPct,
@@ -1265,16 +1368,16 @@
       shooter: U.safeNum(oPow.shooterVal, 40) / 10,
     };
 
-    // #21833 conversionMul: convBase = 0.965 * (counter ? 1.07 : 1.0) * finBonusMul
+    // #22454 conversionMul: 0.965 * clamp(0.88, 1.12, counterMul * finBonusMul * ...)
     const uFinMul = U.safeNum(uPow.finBonusMul, 1.025);
     const oFinMul = U.safeNum(oPow.finBonusMul, 1.025);
     const uGkSaveMul = U.safeNum(uPow.gkSaveMul, 1.0);
     const oGkSaveMul = U.safeNum(oPow.gkSaveMul, 1.0);
-    const uConvMul = 0.965 * (uStyle.includes('counter') ? 1.07 : 1.0) * uFinMul;
-    const oConvMul = 0.965 * (oStyle.includes('counter') ? 1.07 : 1.0) * oFinMul;
+    const uConvMul = U.safeNum(uPow.conversionMul, 0.965 * U.clamp((uStyle.includes('counter') ? 1.09 : 1.0) * uFinMul, 0.88, 1.12));
+    const oConvMul = U.safeNum(oPow.conversionMul, 0.965 * U.clamp((oStyle.includes('counter') ? 1.09 : 1.0) * oFinMul, 0.88, 1.12));
     const hU = (!neutral && isHome) ? 0.3 : 0.0;
     const hO = (!neutral && !isHome) ? 0.3 : 0.0;
-    const nPerSide = 48; // 96 total lances rata-rata per laga (#21844: 45+stop1 + 45+stop2)
+    const nPerSide = 48; // 96 total lances rata-rata per laga
 
     function sideRates(att, def, attHomeBonus, attIsHome, convMul, defGkSaveMul) {
       const midD = gapDamp(att.MID - def.MID);
@@ -1289,30 +1392,34 @@
 
       const diffGk = def.GK - att.shooter;
       const dampGk = diffGk < 0 ? gapDamp(diffGk) : diffGk;
-      const sideHomeAdj = (!neutral && attIsHome) ? 0.1 : 0.0;
+      // #22476: tandang non-netral mendapat -0.1 (kandang +0.1, netral 0.0)
+      const sideHomeAdj = neutral ? 0.0 : (attIsHome ? 0.1 : -0.1);
       const gkF = Math.max(0.2, 1 + dampGk / 8 + sideHomeAdj) * defGkSaveMul;
       const missF = Math.max(0.2, 1 - dampGk / 8 + sideHomeAdj);
 
-      // #49145: 15 * missF * condMissMul (rain=1.12, snow=1.18)
-      const conv0 = (5.5 * convMul) / (5.5 * convMul + 35.55 * gkF + 15 * missF * missMul);
-      const conv2 = (4.5 * convMul) / (4.5 * convMul + 40.55 * gkF + 15 * missF * missMul);
-      return { duelProb, shotProb: duelProb * shotGivenDuel, conv0, conv2 };
+      // #22476 scoreBrake tiers: <3 (5.5/35.55), 3..4 (4.9/40.55), 5 (4.5/40.55), 6..9 (4.0/40.55), >=10 (0)
+      const mkConv = (numC, gkDen) => (numC * convMul) / (numC * convMul + gkDen * gkF + 15 * missF * missMul);
+      const convLt3 = mkConv(5.5, 35.55);
+      const conv34 = mkConv(4.9, 40.55);
+      const conv5 = mkConv(4.5, 40.55);
+      const conv69 = mkConv(4.0, 40.55);
+      return { duelProb, shotProb: duelProb * shotGivenDuel, convLt3, conv34, conv5, conv69 };
     }
 
     const rU = sideRates(uSec, oSec, hU, isHome, uConvMul, oGkSaveMul);
     const rO = sideRates(oSec, uSec, hO, !isHome, oConvMul, uGkSaveMul);
 
     function goalDist(r) {
-      const maxG = 8;
+      const maxG = 10;
       let dp = new Array(maxG + 1).fill(0);
       dp[0] = 1;
       for (let i = 0; i < nPerSide; i++) {
-        // #48031: earlyGoalDamp = 0.35 pada 15 menit pertama, setelah itu earlyGoalComp = 1.05
-        const early = i < 4 ? 0.35 : 1.05;
+        // #22476 OTA 2.1.0 EARLY_GOAL = [0.1, 0.15, 0.2, 0.3, 0.4, 0.5] lalu 1.05 setelah menit awal
+        const early = i === 0 ? 0.125 : (i === 1 ? 0.25 : (i === 2 ? 0.45 : 1.05));
         const ndp = new Array(maxG + 1).fill(0);
         for (let g = 0; g <= maxG; g++) {
           if (dp[g] === 0) continue;
-          const baseC = g >= 3 ? r.conv2 * 0.65 : (g >= 2 ? r.conv2 : r.conv0);
+          const baseC = g >= 10 ? 0 : (g >= 6 ? r.conv69 : (g === 5 ? r.conv5 : (g >= 3 ? r.conv34 : r.convLt3)));
           const pGoal = r.shotProb * Math.min(0.8, baseC * early);
           ndp[g] += dp[g] * (1 - pGoal);
           if (g < maxG) ndp[g + 1] += dp[g] * pGoal;
@@ -1326,16 +1433,16 @@
     const dpU = goalDist(rU);
     const dpO = goalDist(rO);
     let pWin = 0, pDraw = 0, pLoss = 0, xGF = 0, xGA = 0;
-    for (let gu = 0; gu <= 8; gu++) {
+    for (let gu = 0; gu <= 10; gu++) {
       xGF += gu * dpU[gu];
-      for (let go = 0; go <= 8; go++) {
+      for (let go = 0; go <= 10; go++) {
         const p = dpU[gu] * dpO[go];
         if (gu > go) pWin += p;
         else if (gu === go) pDraw += p;
         else pLoss += p;
       }
     }
-    for (let go = 0; go <= 8; go++) xGA += go * dpO[go];
+    for (let go = 0; go <= 10; go++) xGA += go * dpO[go];
 
     const possPct = (rU.duelProb / Math.max(0.01, rU.duelProb + rO.duelProb)) * 100;
     return {
@@ -1389,17 +1496,17 @@
     }
 
     let aiStyle = 'Balanced';
-    let styleReason = `Selisih Force Top-11 (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}) di rentang -4 s.d. +6 (#24016) → AI memilih Balanced`;
+    let styleReason = `Selisih Force Top-11 (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}) di rentang -4 s.d. +6 (#24891) → AI memilih Balanced`;
     if (diff >= 6.0) {
-      aiStyle = 'Offensive';
-      styleReason = `Lawan unggul Force +${diff.toFixed(1)} (≥ +6.0 di #24016) → AI 60% pilih Offensive (+8% ATK, -8% DEF) / 40% Balanced`;
+      aiStyle = 'Balanced';
+      styleReason = `Lawan unggul Force +${diff.toFixed(1)} (≥ +6.0 di #24891) → AI 60% pilih Balanced / 40% Offensive (+8% ATK, -8% DEF)`;
     } else if (diff <= -4.0) {
       if (velDefCount >= 2) {
         aiStyle = 'Counter-Attack';
-        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & punya ${velDefCount} pemain cepat VEL (≥2) → AI otomatis Counter-Attack (-6% MID, +7% konversi)`;
+        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & punya ${velDefCount} pemain cepat VEL (≥2) → AI otomatis Counter-Attack (-6% MID, +6..12% konversi)`;
       } else {
         aiStyle = 'Balanced';
-        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & pemain VEL <2 → AI 60% Balanced / 40% Defensive (-8% ATK, +8% DEF di #24218)`;
+        styleReason = `Lawan kalah Force ${diff.toFixed(1)} (≤ -4.0) & pemain VEL <2 → AI 60% Balanced / 40% Defensive (-8% ATK, +8% DEF di #24891)`;
       }
     } else if (velDefCount >= 3) {
       aiStyle = 'Balanced';
@@ -1407,10 +1514,10 @@
     }
 
     let aiFocus = 'Center';
-    let focusReason = `Pemain sayap (RB/LB/RW/LW) ber-skill CRS hanya ${wingCruCount} (< 2 di #24016) → AI otomatis fokus Center`;
+    let focusReason = `Pemain sayap (RB/LB/RW/LW) ber-skill CRS hanya ${wingCruCount} (< 2 di #24891) → AI otomatis fokus Center`;
     if (wingCruCount >= 2) {
       aiFocus = 'Wings';
-      focusReason = `Lawan punya ${wingCruCount} pemain RB/LB/RW/LW ber-skill CRS (≥ 2 di #24016: ${wingNames.join(', ')}) → AI otomatis fokus Wings`;
+      focusReason = `Lawan punya ${wingCruCount} pemain RB/LB/RW/LW ber-skill CRS (≥ 2 di #24891: ${wingNames.join(', ')}) → AI otomatis fokus Wings`;
     }
 
     let counterTip = 'Balanced';
@@ -1800,30 +1907,30 @@
     // Uji 4 Play Style resmi (#21959) pada formasi terbaik via Markov #48031 + autoCond
     const bestXiObj = solveBestXi(userRoster, best.formation, foreignCap, userCountry, excludeForRec, safeRotate, repLevel);
 
-    let bestMark = 'Heavy (+4% DEF)';
+    let bestMark = 'Heavy (+0.04 MID, FB Assist+)';
     let recMarkingWhy = '';
     if (condF.userCardMul >= 1.15 && !(isKnockout && recEdge <= -1.5)) {
-      bestMark = 'Light (0%)';
+      bestMark = 'Light (Kartu 0.80×)';
       recMarkingWhy = condF.refStyle === 'home' && !isHome
-        ? `Wasit Pro-Kandang saat kita TANDANG (cardMul ${condF.userCardMul}×) → turunkan ke Light (0%) + Order Stay Calm untuk hindari kartu merah.`
-        : `Wasit Ketat (cardMul ${condF.userCardMul}×) → gunakan Light (0%) untuk menekan risiko kartu kuning/merah (#21365).`;
+        ? `Wasit Pro-Kandang saat TANDANG (cardMul ${condF.userCardMul}×) → pilih Light (merah 0.80×, kuning jarang, stamina Normal) untuk hindari kartu merah.`
+        : `Wasit Ketat (cardMul ${condF.userCardMul}×) → pilih Light (merah 0.80×, kuning jarang) demi menekan risiko kartu.`;
     } else if (condF.userCardMul <= 0.88 && (isKnockout || isBig || recEdge <= 1.0)) {
-      bestMark = 'Very Heavy (+8% DEF)';
+      bestMark = 'Very Heavy (+0.08 MID, Merah 1.35×)';
       recMarkingWhy = condF.refStyle === 'home' && isHome
-        ? `Wasit Pro-Kandang di markas sendiri (cardMul ${condF.userCardMul}×) → manfaatkan untuk menekan ke Very Heavy (+8% DEF)!`
-        : `Wasit Longgar (cardMul ${condF.userCardMul}×) → aman menaikkan agresivitas ke Very Heavy (+8% DEF)!`;
+        ? `Wasit Pro-Kandang di markas sendiri (cardMul ${condF.userCardMul}×) → aman dorong Very Heavy (+0.08 sumM MID; tidak menambah DEF; stamina Normal).`
+        : `Wasit Longgar (cardMul ${condF.userCardMul}×) → manfaatkan untuk Very Heavy (+0.08 sumM MID; waspada kartu merah 1.35×).`;
     } else if (safeRotate && recEdge >= 4.0) {
-      bestMark = 'Light (0%)';
-      recMarkingWhy = `Unggul jauh (+${recEdge.toFixed(1)} Force) di laga rotasi → gunakan Light untuk menghemat stamina dan menghindari kartu kuning.`;
+      bestMark = 'Light (Kartu 0.80×)';
+      recMarkingWhy = `Unggul jauh (+${recEdge.toFixed(1)} Force) → pakai Light agar terhindar kartu (0.80× merah); seluruh opsi marking punya lelah Normal (#3700).`;
     } else if ((isKnockout || isBig) && recEdge <= -1.5) {
-      bestMark = 'Very Heavy (+8% DEF)';
-      recMarkingWhy = `Laga hidup-mati melawan tim lebih kuat (${recEdge.toFixed(1)} Force) → Very Heavy memberi +8% DEF ekstra (waspada kartu kuning: siapkan shout Calm Down!).`;
+      bestMark = 'Heavy (+0.04 MID, FB Assist+)';
+      recMarkingWhy = `Laga krusial melawan tim lebih kuat (${recEdge.toFixed(1)} Force) → Heavy memberi dorongan MID (+0.04 sumM) + fullback assist lebih sering tanpa lonjakan merah 1.35× seperti Very Heavy.`;
     } else if (ySet.size >= 2 && !isKnockout) {
-      bestMark = 'Light (0%)';
-      recMarkingWhy = `Ada ${ySet.size} pemain berisiko akumulasi kartu kuning → gunakan Light (0%) agar tidak kehilangan starter di laga berikutnya.`;
+      bestMark = 'Light (Kartu 0.80×)';
+      recMarkingWhy = `Ada ${ySet.size} pemain rawan akumulasi kuning → pakai Light (kuning jauh lebih jarang, 0.80× merah).`;
     } else {
-      bestMark = 'Heavy (+4% DEF)';
-      recMarkingWhy = `Sweet-spot v1.2.0: memberi +4% DEF gratis dengan risiko kartu & kuras stamina yang masih terkendali.`;
+      bestMark = 'Heavy (+0.04 MID, FB Assist+)';
+      recMarkingWhy = `Sweet-spot OTA 2.1.0 (#3700/#22467): sedikit mendorong MID (+0.04 sumM) + fullback sering bantu assist dengan merah 1.05× (Heavy TIDAK menambah +4% DEF maupun kelelahan).`;
     }
     const recMarking = bestMark;
 
@@ -2053,21 +2160,21 @@
 
     const shoutPlan = [
       {
-        phase: 'Kickoff / Babak 1 (Menit 15–30)',
-        shout: recEdge >= 0 ? 'Encourage (Incentivar)' : 'Tighten Up (Fechar Atrás)',
+        phase: 'Babak 1 / Imbang (Menit 15–30)',
+        shout: recEdge >= 0 ? 'Encourage' : 'Focus',
         why: recEdge >= 0
-          ? '+1.2% MID selama 15 menit (#3640) untuk memenangkan duel penguasaan bola & shot attempt.'
-          : '+1.2% DEF selama 15 menit (#3640) untuk meredam peluang gol awal lawan.',
+          ? 'Encourage mendorong MID di skor apa pun (lebih efektif saat imbang/kalah) dengan kelelahan sedikit ekstra.'
+          : 'Focus mengetatkan pertahanan di fase imbang/awal tanpa penalti kartu.',
       },
       {
         phase: 'Babak 2 — Jika Unggul (Menit 65+)',
-        shout: 'Focus (Concentrar) + Order Defend Lead',
-        why: 'Focus memberi +1.2% DEF (bebas decay pengulangan 25m jika bergantian dengan Tighten Up) + Order Defend Lead (+4% DEF, -3% ATK) + gunakan 5 kuota sub (#21779) untuk pemain <60% energi.',
+        shout: 'Focus / Calm + Order Lock the Door / Clear It',
+        why: 'JANGAN pakai Demand More/Fire Up saat unggul (Demand More merusak shape & Fire Up tidak berefek saat menang)! Pakai Focus/Praise/Calm + Order Lock the Door (kuat saat unggul, bisa 5 sub #21779).',
       },
       {
         phase: 'Babak 2 — Jika Imbang/Tertinggal (Menit 75+)',
-        shout: 'Attack More (Atacar Mais) + Order All-Out Attack',
-        why: '+1.2% ATK dari shout + Order All-Out Attack (+8% ATK, -7% DEF) + masukkan Supersub PAC/FIN segar.',
+        shout: 'Demand More / Fire Up + Order All-Out Attack',
+        why: 'Demand More & Fire Up mengangkat ATK saat tertinggal/imbang (waspada lebih lelah & kartu) + Order All-Out Attack (+ATK, -DEF) + Supersub segar.',
       },
     ];
 
@@ -2075,8 +2182,8 @@
     const scoreGain = U.roundTo(Math.max(0, best.winPct - activeComp.winPct), 1);
     const ptsGain = U.roundTo(Math.max(0, best.xPts - activeComp.xPts), 2);
     const reasons = [
-      `Peluang Simulasi (#48031): ${best.winPct}% Menang · ${best.drawPct}% Seri · ${best.lossPct}% Kalah (xG ${best.xGF}–${best.xGA} · Ball ${best.possPct}%)`,
-      `Duel Sektor Engine (#21822): MID ${best.midVsMid >= 0 ? '+' : ''}${best.midVsMid} (Penentu Ball/Shot!) · ATK vs DEF ${best.atkVsDef >= 0 ? '+' : ''}${best.atkVsDef} · DEF vs ATK ${best.defVsAtk >= 0 ? '+' : ''}${best.defVsAtk}`,
+      `Peluang Simulasi (#22476): ${best.winPct}% Menang · ${best.drawPct}% Seri · ${best.lossPct}% Kalah (xG ${best.xGF}–${best.xGA} · Ball ${best.possPct}%)`,
+      `Duel Sektor Engine (#22453): MID ${best.midVsMid >= 0 ? '+' : ''}${best.midVsMid} (Penentu Ball/Shot!) · ATK vs DEF ${best.atkVsDef >= 0 ? '+' : ''}${best.atkVsDef} · DEF vs ATK ${best.defVsAtk >= 0 ? '+' : ''}${best.defVsAtk}`,
       best.wrongFootCount === 0
         ? `Bebas penalti salah kaki Fullback (-5%) · Chemistry ${best.chemistry}/100`
         : `Terdapat ${best.wrongFootCount} slot Fullback salah kaki (-5%) · Chemistry ${best.chemistry}/100`,
@@ -2084,9 +2191,9 @@
 
     const refereePlan = {
       strict: {
-        marking: 'Light (0%)',
+        marking: 'Light (Kartu 0.80×)',
         badge: 'b-info',
-        note: 'Wasit Ketat (#21365/#21836: +20% risiko pelanggaran/kartu, cardMul 1.20x): pakai Light (0%) atau Order Stay Calm (-25% kartu).',
+        note: 'Wasit Ketat (#21365: +20% risiko pelanggaran/kartu, cardMul 1.20x): pakai Light (merah 0.80×, kuning jarang) atau Shout Calm / Order Pass and Move (-kartu).',
       },
       normal: {
         marking: recMarking,
@@ -2094,20 +2201,20 @@
         note: recMarkingWhy,
       },
       lenient: {
-        marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+8% DEF)' : 'Heavy (+4% DEF)',
+        marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+0.08 MID, Merah 1.35×)' : 'Heavy (+0.04 MID, FB Assist+)',
         badge: 'b-good',
-        note: 'Wasit Longgar (#21365/#21836: -18% risiko kartu, cardMul 0.82x): manfaatkan untuk menaikkan marking demi +4% s.d. +8% DEF!',
+        note: 'Wasit Longgar (#21365: -18% risiko kartu, cardMul 0.82x): aman naikkan ke Heavy/Very Heavy untuk dorongan MID & assist fullback (0% DEF).',
       },
       home: isHome
         ? {
-            marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+8% DEF)' : 'Heavy (+4% DEF)',
+            marking: (isKnockout || isBig || recEdge <= 0) ? 'Very Heavy (+0.08 MID, Merah 1.35×)' : 'Heavy (+0.04 MID, FB Assist+)',
             badge: 'b-good',
-            note: 'Wasit Pro-Kandang (#21365): kartu kita 0.85x (-15%) & lawan 1.20x (+20%) karena bermain di KANDANG! Aman tekan Heavy / Very Heavy (+4%..+8% DEF).',
+            note: 'Wasit Pro-Kandang (#21365): kartu kita 0.85x (-15%) & lawan 1.20x di KANDANG! Aman pilih Heavy/Very Heavy untuk dorongan MID & assist FB.',
           }
         : {
-            marking: 'Light (0%)',
+            marking: 'Light (Kartu 0.80×)',
             badge: 'b-warn',
-            note: 'Wasit Pro-Kandang (#21365): kartu kita 1.20x (+20%) & tuan rumah 0.85x karena TANDANG! Turunkan ke Light (0%) atau Order Stay Calm.',
+            note: 'Wasit Pro-Kandang (#21365): kartu kita 1.20x (+20%) & tuan rumah 0.85x karena TANDANG! Turunkan ke Light (0.80× merah) atau Shout Calm.',
           },
     };
 
@@ -2135,9 +2242,9 @@
     };
 
     const halftimePlan = {
-      win: "Unggul di HT (#3642): Pilih 'Praise (Elogiar)' (+1.5% DEF & +1.5% MID selama 20 menit babak ke-2) atau 'Calm' jika unggul ≥2 gol (+2% DEF, -15% kartu).",
-      draw: "Seri di HT (#3642): Pilih 'Demand More (Cobrar)' (+2.0% ATK & +1.0% MID selama 20 menit babak ke-2).",
-      lose: "Tertinggal di HT (#3642): Pilih 'Motivate (Motivar)' (+2.0% MID & +2.0% ATK selama 20 menit jika tertinggal) + siapkan 5 kuota sub!",
+      win: "Unggul di HT (#4437): Pilih 'Calm' (+2% DEF sepanjang Babak 2) atau 'Encourage' (+2% MID sepanjang Babak 2) — efek berlaku penuh di 1 sektor.",
+      draw: "Seri di HT (#4437): Pilih 'Encourage' (+2% MID sepanjang Babak 2) atau 'Demand More' (+2% ATK sepanjang Babak 2).",
+      lose: "Tertinggal di HT (#4437): Pilih 'Fire up' / 'Demand More' (+2% ATK sepanjang Babak 2) atau 'Encourage' (+2% MID) + pakai hingga 5 kuota sub!",
     };
 
     const top3List = candidates.slice(0, 3).map(c => ({
@@ -2655,6 +2762,7 @@
   LF.tactics = {
     repToLevel,
     evalSkillStacking,
+    evalSkillStackingForSector,
     integrationOf,
     rhythmOf,
     teamChemistry,

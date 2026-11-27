@@ -480,7 +480,7 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
   };
   const newCondF = Tac.resolveMatchCondFactors(simCond, fx.isHome, Boolean(fx.neutral));
 
-  const redMulHeavy = (cMul) => 1.0 - Math.min(0.35, 0.045 * 1.25 * Math.max(0.5, Number(cMul) || 1.0)) * 0.14;
+  const redMulHeavy = (cMul) => 1.0 - Math.min(0.35, 0.045 * 1.05 * Math.max(0.5, Number(cMul) || 1.0)) * 0.14;
   const fatMul = (eMul) => (Number(eMul) > 1.0 ? Math.max(0.95, 1.0 - 0.001 * ((Number(eMul) - 1.0) * 14.0)) : 1.0);
   const scalePow = (pObj, r) => ({
     ...pObj,
@@ -1163,19 +1163,19 @@ function renderWarLiveShouts(activeFx = null) {
       {
         name: '2. Kunci Skor',
         when: 'Min 70 · Babak 2 · Winning (1+)',
-        does: 'Style: Defensive (+8% DEF) · Marking: Light · Sub tired → Same slot',
-        why: 'Amankan keunggulan sambil menekan risiko kartu merah menit akhir.',
+        does: 'Style: Defensive (+8% DEF) · Marking: Light (0.80× merah) · Order: Lock the Door',
+        why: 'Amankan keunggulan dengan Order Lock the Door + kurangi risiko kartu merah menit akhir.',
       },
       {
         name: '3. Kejar Gol',
         when: 'Min 65 · Babak 2 · Losing (1+)',
-        does: `Style: Offensive (+8% ATK) · Focus: ${recFocus} · Sub tired → Forwards/Mid`,
-        why: 'Dorong gol balasan dengan fokus terkuat skuad vs lawan ini.',
+        does: `Style: Offensive (+8% ATK) · Focus: ${recFocus} · Order: All-Out Attack`,
+        why: 'Dorong gol balasan dengan Order All-Out Attack + fokus terkuat skuad vs lawan ini.',
       },
       {
         name: '4. Darurat Kartu Merah Kita',
         when: 'Min 1 · Any · I have a player sent off',
-        does: 'Style: Counter-attack (+7% konversi) · Marking: Light',
+        does: 'Style: Counter-attack (+6..12% konv) · Marking: Light (0.80× merah)',
         why: '⚠ Jangan isi ganti Formasi (otomatis diblokir aturan formationBlocked).',
       },
       {
@@ -1266,7 +1266,7 @@ function renderTab2() {
     </div>
     <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Uji Lawan Bebas</div>
     <div class="c-muted" style="font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-      ${list.length ? 'Tes 15 formasi vs rival' : 'Jeda musim — aktif'}
+      ${list.length ? 'Tes 16 formasi vs rival' : 'Jeda musim — aktif'}
     </div>
   </button>`;
 
@@ -1286,7 +1286,7 @@ function renderTab2() {
       <div class="wr-sim-bar">
         <div style="font-size:12px">
           <span class="badge b-accent">MODE SIMULASI LAWAN</span>
-          <span class="c-muted" style="margin-left:5px">${!list.length ? 'Jadwal resmi selesai — uji persiapan musim depan!' : 'Uji 15 formasi & taktik melawan klub mana pun (11 starter penuh).'}</span>
+          <span class="c-muted" style="margin-left:5px">${!list.length ? 'Jadwal resmi selesai — uji persiapan musim depan!' : 'Uji 16 formasi & taktik melawan klub mana pun (11 starter penuh).'}</span>
         </div>
         <select id="wr-sim-opp" onchange="setWarSimOpp(this.value)">
           ${simOpps.map(o => {
@@ -1326,9 +1326,9 @@ function renderTab2() {
   // 3. Render Halftime Talk & Pelacak 3 Shout
   const htEl = document.getElementById('t2-halftime');
   const htPlan = (activeFx && activeFx.matchup && activeFx.matchup.halftimePlan) || {
-    win: "Unggul di HT: Pilih 'Focus / Don't Get Complacent' (jaga konsentrasi).",
-    draw: "Seri di HT: Pilih 'Encourage / Demand More' (dorong intensitas babak 2).",
-    lose: "Tertinggal di HT: Pilih 'Fire Up / Passion' + masukkan supersub PAC/FIN menit 58.",
+    win: "Unggul di HT (#4437): Pilih 'Calm' (+2% DEF sepanjang Babak 2) atau 'Encourage' (+2% MID).",
+    draw: "Seri di HT (#4437): Pilih 'Encourage' (+2% MID sepanjang Babak 2) atau 'Demand More' (+2% ATK).",
+    lose: "Tertinggal di HT (#4437): Pilih 'Fire up' / 'Demand More' (+2% ATK sepanjang Babak 2) + masukkan supersub PAC/FIN.",
   };
   if (htEl) {
     htEl.innerHTML = `

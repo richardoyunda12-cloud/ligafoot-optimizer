@@ -766,7 +766,7 @@
         if (orderZone.gf >= orderZone.ga * 2 && lateShareGa <= 32) {
           orderVerdict = `Match Orders menit akhir dominan: cetak ${orderZone.gf} gol (${lateShareGf}% total gol) vs hanya kebobolan ${orderZone.ga} (${lateShareGa}%).`;
         } else if (lateShareGa >= 36 && orderZone.ga > orderZone.gf) {
-          orderVerdict = `WASPADA menit 66–90+': ${lateShareGa}% kebobolan (${orderZone.ga} gol) terjadi di menit akhir! Aktifkan Order Defend Lead + sub pemain <60% stamina lebih awal.`;
+          orderVerdict = `WASPADA menit 66–90+': ${lateShareGa}% kebobolan (${orderZone.ga} gol) terjadi di menit akhir! Aktifkan Order Lock the Door + sub pemain <60% stamina lebih awal.`;
         } else if (lateShareGa >= 34) {
           orderVerdict = `Cukup rapat tapi ${lateShareGa}% kebobolan (${orderZone.ga} dari ${ga}) muncul di menit 66–90+'. Pertimbangkan sub bertahan menit 65.`;
         } else {
@@ -1116,7 +1116,7 @@
     const foreignCap = C.FOREIGN_FIELD_LIMITS[userCountry] || foreignLims.field || 7;
     const foreignMax = foreignLims.max || 9;
 
-    prog(25, `Membedah skuad ${userName} & menghitung Best XI (15 formasi)...`);
+    prog(25, `Membedah skuad ${userName} & menghitung Best XI (16 formasi)...`);
     const { roster: userRoster, youth: userYouth } = R.extractTeamRoster(
       uTeam, staticPlayers, true, userId, userName, userCountry, userDiv
     );
@@ -1716,7 +1716,7 @@
         }
         let oppXi = null;
         for (const fk of oppForms) {
-          const rXi = T.solveBestXi(oppPool, fk, 99, '');
+          const rXi = T.solveBestXi(oppPool, fk, 99, '', null, false, 3, false);
           if (!oppXi || rXi.avgScore > oppXi.avgScore) oppXi = { ...rXi, formation: fk };
         }
         const Cond = LF.conditions || null;
@@ -2533,7 +2533,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.5 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.6 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
