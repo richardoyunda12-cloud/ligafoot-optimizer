@@ -426,7 +426,7 @@ function renderTrainingAudit() {
   }).join('');
 
   const autoWarn = tr.mode === 'auto'
-    ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">AUTO AKTIF</span><div><b>Mode AUTO Special Training aktif!</b> Di bytecode #22099, <code>trainAutoPicks</code> hanya memilih gap potCap tertinggi lalu sisa slot over-cap usia ≤30 (bukan prioritas Wonderkid &amp; Skill Stack terbaikmu). Sebaiknya ubah ke <b>MANUAL</b>!</div></div>`
+    ? `<div class="alert-item CRITICAL mb-8"><span class="badge b-crit">AUTO AKTIF</span><div><b>Mode AUTO Special Training aktif!</b> Di bytecode #22099, <code>trainAutoPicks</code> Pass 1 hanya memilih usia termuda (&lt;32 thn) tanpa cek potCap, lalu Pass 2 mengisi sisa slot over-cap usia ≤30 (bukan prioritas Wonderkid &amp; Skill Stack terbaikmu). Sebaiknya ubah ke <b>MANUAL</b>!</div></div>`
     : '';
   el.innerHTML = `
     <div class="mb-8">Mode: <b class="${tr.mode === 'auto' ? 'c-red' : 'c-green'}">${tr.mode.toUpperCase()}</b> | Kapasitas CT Lv ${D.meta.ctLevel}: <b class="c-sky">${totalSlots} slot</b></div>
@@ -724,7 +724,7 @@ function renderBTeamPanel() {
     kpiEl.innerHTML = `<div class="alert-item INFO mb-8">
       <span class="badge b-info">BELUM PUNYA TIM B</span>
       <div>
-        Klub belum memiliki Tim B aktif. Biaya pembuatan Tim B (#22346): <b class="mono">${fmtM((bt && bt.creationCost) || 2600000)}</b>.
+        Klub belum memiliki Tim B aktif. Biaya pembuatan Tim B (#22346): <b class="mono">${fmtM((bt && bt.creationCost) || Math.round((2000000 + 600000 * Math.max(1, (D.meta && D.meta.userTeamLevel) || 1)) / 100000) * 100000)}</b>.
         Kuota pemain asing Tim Utama saat ini: <b class="mono">${(bt && bt.curForeign) || 0}/${(bt && bt.foreignCap) || 7}</b>.
       </div>
     </div>`;

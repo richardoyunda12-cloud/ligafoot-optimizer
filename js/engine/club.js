@@ -68,7 +68,7 @@
         val: trainMode === 'auto' ? 'AUTO' : 'MANUAL',
         status: trainMode === 'auto' ? 'crit' : 'ok',
         advice: trainMode === 'auto'
-          ? 'MATIKAN! Mode auto 100% buta potCap (#34840) — cuma pilih usia termuda.'
+          ? 'MATIKAN! Mode auto (#22099) Pass 1 memilih usia termuda <32 thn tanpa cek potCap, lalu Pass 2 isi sisa slot over-cap usia ≤30.'
           : `Manual aktif ✓ (${trainAudit.slots} slot bisa diarahkan ke gap potCap terbesar).`,
       },
       {
@@ -865,8 +865,8 @@
           'Matikan segera! Auto-Fine langsung denda 100%/50% (risiko slump 50%/25%). Beri denda manual 20% = 0% risiko + uang gratis.');
       }
       if (autoGuard.trainMode === 'auto') {
-        add('HIGH', 'Auto-Guard', 'Auto Special Training masih ON (Buta potCap)!',
-          'Ubah ke Manual! Mode auto (#34840) cuma pilih usia termuda meski sudah mentok potCap.');
+        add('HIGH', 'Auto-Guard', 'Auto Special Training masih ON (Prioritas Usia Termuda)!',
+          'Ubah ke Manual! Mode auto (#22099) Pass 1 hanya memilih usia termuda <32 thn tanpa cek potCap (lalu Pass 2 over-cap usia ≤30), bukan Wonderkid & Skill Stack terbaik.');
       }
       if (autoGuard.autoBy === 'force') {
         add('HIGH', 'Auto-Guard', "Auto Lineup mode 'force' aktif!",
@@ -2542,7 +2542,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.7 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.8 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,

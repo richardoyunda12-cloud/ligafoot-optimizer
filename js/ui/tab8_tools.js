@@ -70,34 +70,47 @@ function populateCalcSquadSelects() {
 }
 
 function calcAll() {
-  // 1. Counter-Offer (+40% aman vs 1.43x batal, realisasi 1.25x + Jackpot Arab 2.5-3.0x)
+  const CFG = (D.cfg && typeof D.cfg === 'object') ? D.cfg : ((window.LFEngine && LFEngine.config) || {});
+  const ctrMax = Number(CFG.COUNTER_MAX_NORMAL || 1.40);
+  const ctrAvg = Number(CFG.COUNTER_AVG_REALIZED || 1.25);
+  const arabLo = Number(CFG.ARAB_OFFER_MIN_MUL || 2.5);
+  const arabHi = Number(CFG.ARAB_OFFER_MAX_MUL || 3.0);
+  const renewDiscDays = Number(CFG.RENEWAL_DISCOUNT_FROM_DAYS || 60);
+
+  // 1. Counter-Offer (SSOT dari LFEngine.config)
   const raw = parseFloat((document.getElementById('c-offer') || {}).value) || 0;
   const u = (document.getElementById('c-offer-u') || {}).value || 'K';
   const fmtU = v => u === 'M' ? v.toFixed(2) + ' M' : Math.round(v).toLocaleString('id-ID') + ' K';
   const arabRef = calcSelectedOfferPlayer ? (calcSelectedOfferPlayer.marketValue / (u === 'M' ? 1e6 : 1e3)) : raw;
   const arabNote = calcSelectedOfferPlayer
     ? (calcSelectedOfferPlayer.isTop5Arab
-        ? `💎 <b>Jackpot Arab Aktif (Top-5 ≥26th):</b> Tawaran Arab ~<b class="mono c-purple">${fmtU(arabRef * 2.5)} – ${fmtU(arabRef * 3.0)}</b> (cair utuh 0% fee, tapi tawaran Arab tidak bisa di-counter!)`
-        : `<span class="c-muted">Info Arab (2.5x–3x MV, 0% fee, no counter): hanya aktif untuk Top-5 skuad usia ≥26th (~${fmtU(arabRef * 2.5)}–${fmtU(arabRef * 3.0)}).</span>`)
-    : `<span class="c-muted">💎 <b>Jackpot Arab (2.5–3x MV):</b> ${fmtU(raw * 2.5)} – ${fmtU(raw * 3.0)} untuk Top-5 skuad ≥26th (0% fee, tidak bisa di-counter).</span>`;
+        ? `💎 <b>Jackpot Arab Aktif (Top-5 ≥26th):</b> Tawaran Arab ~<b class="mono c-purple">${fmtU(arabRef * arabLo)} – ${fmtU(arabRef * arabHi)}</b> (cair utuh 0% fee, tapi tawaran Arab tidak bisa di-counter!)`
+        : `<span class="c-muted">Info Arab (${arabLo}x–${arabHi}x MV, 0% fee, no counter): hanya aktif untuk Top-5 skuad usia ≥26th (~${fmtU(arabRef * arabLo)}–${fmtU(arabRef * arabHi)}).</span>`)
+    : `<span class="c-muted">💎 <b>Jackpot Arab (${arabLo}–${arabHi}x MV):</b> ${fmtU(raw * arabLo)} – ${fmtU(raw * arabHi)} untuk Top-5 skuad ≥26th (0% fee, tidak bisa di-counter).</span>`;
 
   document.getElementById('c-offer-out').innerHTML = `
-    <div>Counter Optimal (<b>+40% / 1.40x</b>): <b class="mono c-green" style="font-size:16px">${fmtU(raw * 1.40)}</b> <span class="badge b-good">0% Batal</span></div>
-    <div class="c-muted" style="margin-top:4px">Realisasi Realistis (<b>1.25x</b>): <b class="mono">${fmtU(raw * 1.25)}</b> (AI bayar ${fmtU(raw * 1.10)} – ${fmtU(raw * 1.40)})</div>
-    <div class="c-muted">Jurang batal AI (1.43x): ${fmtU(raw * 1.43)} — jangan lewati 1.40x!</div>
+    <div>Counter Optimal (<b>+${Math.round((ctrMax - 1) * 100)}% / ${ctrMax.toFixed(2)}x</b>): <b class="mono c-green" style="font-size:16px">${fmtU(raw * ctrMax)}</b> <span class="badge b-good">0% Batal</span></div>
+    <div class="c-muted" style="margin-top:4px">Realisasi Realistis (<b>${ctrAvg.toFixed(2)}x</b>): <b class="mono">${fmtU(raw * ctrAvg)}</b> (AI bayar ${fmtU(raw * 1.10)} – ${fmtU(raw * ctrMax)})</div>
+    <div class="c-muted">Jurang batal AI (1.43x): ${fmtU(raw * 1.43)} — jangan lewati ${ctrMax.toFixed(2)}x!</div>
     <div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--border);font-size:11px">${arabNote}</div>`;
 
   // 2. Golden Window Renew (#24161 >=60d = -12%) + Loophole Auto-Renew 0% + Trik Bangku Cadangan (#24160)
   const days = parseInt((document.getElementById('c-days') || {}).value, 10);
   const sal = parseFloat((document.getElementById('c-sal') || {}).value) || 0;
   let muls, msg, cls, extraNote = '';
-  if (!isNaN(days) && days >= 60) {
-    muls = [0.99, 0.97, 0.95, 0.88]; msg = '✅ DISKON KONTRAK AKTIF (>=60 hari, #24161) — RENEW 3 TAHUN (-12% GAJI GRATIS!)'; cls = 'c-green';
+  if (!isNaN(days) && days >= renewDiscDays) {
+    muls = (CFG.RENEWAL_DISCOUNT || [-0.01, -0.03, -0.05, -0.12]).map(d => 1 + d);
+    msg = `✅ DISKON KONTRAK AKTIF (>=${renewDiscDays} hari, #24161) — RENEW 3 TAHUN (${Math.round((CFG.RENEWAL_DISCOUNT ? CFG.RENEWAL_DISCOUNT[3] : -0.12) * 100)}% GAJI GRATIS!)`;
+    cls = 'c-green';
   } else if (!isNaN(days) && days <= 10) {
-    muls = [1.25, 1.30, 1.35, 1.20]; msg = '🚨 ZONA JEBAKAN (<=10 hari) — Manual naik +20% s.d. +35%!'; cls = 'c-red';
+    muls = (CFG.RENEWAL_RAISE_LAST || [0.25, 0.30, 0.35, 0.20]).map(d => 1 + d);
+    msg = '🚨 ZONA JEBAKAN (<=10 hari) — Manual naik +20% s.d. +35%!';
+    cls = 'c-red';
     extraNote = `<div class="c-sky" style="margin-top:4px">💎 <b>Loophole Auto-Renew 0% (#37498):</b> Nyalakan Auto-Renew sementara (tandai <code>noAutoRenew</code> di cadangan) → saat 0 hari otomatis diperpanjang <b>+180 hari dengan gaji lama (${sal.toFixed(1)}K, 0% naik)</b>!</div>`;
   } else {
-    muls = [1.10, 1.12, 1.15, 1.05]; msg = '⚠ ZONA MINTA NAIK (11–59 hari, #24161) — Renew manual sekarang menaikkan gaji +5% s.d. +15%! Tunggu <=10 hari (Loophole 0%).'; cls = 'c-amber';
+    muls = (CFG.RENEWAL_RAISE_MID || [0.10, 0.12, 0.15, 0.05]).map(d => 1 + d);
+    msg = `⚠ ZONA MINTA NAIK (11–${renewDiscDays - 1} hari, #24161) — Renew manual sekarang menaikkan gaji +5% s.d. +15%! Tunggu <=10 hari (Loophole 0%).`;
+    cls = 'c-amber';
   }
   const pAge = calcSelectedRenewPlayer ? calcSelectedRenewPlayer.age : 25;
   const pCuts = calcSelectedRenewPlayer ? calcSelectedRenewPlayer.salaryCuts : 0;
@@ -250,7 +263,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.10.7 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.10.8 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -944,13 +957,13 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.7`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.7</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.8`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.8</span>`;
   const rsTag = D.meta.realScale ? ' • 📏 Real 0–100' : '';
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}${rsTag}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)})${rsTag} • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.10.7 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.10.8 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],

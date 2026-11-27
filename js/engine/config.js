@@ -743,8 +743,8 @@
   const VALUE_K_MIN = 60;
   const VALUE_YOUTH_FRACTION = 0.03;
   const VALUE_YOUTH_RAMP = { ageFrom: 19, ageTo: 22, forceFrom: 40, forceTo: 60 };
-  const EURO_TOP_BONUS = 1.4;
-  const EURO_TOP_MIN_LEVEL = 21;
+  const EURO_TOP_BONUS = 1.05;
+  const EURO_TOP_MIN_LEVEL = 20;
 
   // Bytecode #3545: Red Card Fine
   const FINE_CFG = {

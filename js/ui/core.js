@@ -272,36 +272,53 @@ function solveBestXiJS(formKey, rotMode) {
   return { xi: [], bench: [], tot: 0, avg: 0, fCnt: 0, wfCnt: 0, falseNine: false, chemistry: 100, f9Players: [] };
 }
 
-// ==================== KAMUS ISTILAH & TOOLTIP OTOMATIS (v7.1) ====================
-const BADGE_TIPS = {
-  BOSMAN: 'Kontrak tersisa ≤180 hari (≤6 bulan) — bisa direkrut GRATIS (biaya transfer 0) via Pra-Kontrak saat kontraknya habis!',
-  UNH: 'Pemain tidak bahagia (Unhappy) di klub AI — diskon harga beli -15% dan tuntutan gaji dipotong -50%!',
-  FREE: 'Free Agent (tanpa klub) — gratis biaya transfer. Catatan: terkunci tidak bisa Sell Now selama 1 tahun.',
-  SALE: 'Pemain masuk daftar jual (For Sale) oleh klub AI — harga normal 1.0x MV tanpa markup klub penjual.',
-  LOAN: 'Tersedia untuk dipinjam (Loanable) oleh klub AI.',
-  SCARCE: 'Klub AI hanya punya 2 stok di sektor ini — harga naik +50% (pemain terbaik) atau +30% (pelapis). Jika cuma 1 stok, klub menolak jual (LAST_POS).',
-  TRAP: 'Jebakan Potensi: Potential tampilan jauh lebih tinggi daripada PotCap asli (≥4 poin) — pertumbuhannya bakal mentok lebih cepat!',
-  GEM: 'Hidden Gem / Permata Tersembunyi: PotCap asli lebih tinggi dari tampilan atau punya ruang tumbuh sangat besar.',
-  GOD: 'Kombinasi Skill Stack kelas atas (efek kedua skill menumpuk penuh di Match Engine).',
-  LOCAL: 'Pemain domestik (satu negara dengan klubmu) — tidak memakan kuota pemain asing & adaptasi 2x lebih cepat!',
-  INJ: 'Pemain sedang cedera.',
-  F9: 'False Nine: pasang pada 1 pemain ST/SS/CAM di lini depan untuk turun membantu lini tengah (-40% bobot ATK-nya → +50% ke MID jika punya PAS/PLY, atau +35% tanpa PAS/PLY). Tidak tersedia untuk winger (LW/RW); ideal saat lini depan ≥2 penyerang.',
-  SLUMP: 'Fine Slump: penurunan performa dinamis -(3 + 0.05×pct)% (mis. -4.1% @21%, -5.5% @50%, -8.0% @100%; total cap -20%) selama 30 hari karena denda kartu merah >20%.',
-  NONSTACK: 'Skill tidak menumpuk (TCK+MRK di bek cuma +5% sekali; PAS+PLY di gelandang cuma +3% sekali).',
-  ARAB: 'Arab Watch: pemain Top-5 skuad usia ≥26 thn punya peluang harian 0.33%/hari (sekitar 10% per bulan) ditawar klub Arab 2.5x–3.0x Market Value!',
-  GOLDEN: 'Golden Window (60–120 hari, syarat >=60 hari di #24161): perpanjang kontrak 3 tahun di jendela ini untuk potong gaji -12% GRATIS! Di 11–59 hari mereka justru minta naik +5–15%.',
-  LOOPHOLE: 'Loophole Auto-Renew 0%: nyalakan Auto-Renew sementara untuk pemain inti ≤10 hari agar diperpanjang +180 hari dengan gaji lama (0% naik).',
-  SWAP: 'Rekomendasi tukar beli target + jual pemain skuad lama (hitung net kas, selisih gaji & upgrade performa Eff).',
-  FLIP: 'Strategi beli pemain muda (17–21 thn) murah, latih 1–2 musim, lalu jual mahal (+40% counter) untuk cetak kas!',
-  REFUSEDIST: 'Menolak Pindah (#24936 refusesDistance): pemain lintas benua tanpa afiliasi/satu grup negara menolak pindah (Div 3-4 ditolak total jika tanpa afiliasi).',
-  REFUSELVL: 'Menolak Turun Kasta (#24939/#24938): selisih level ≥5 untuk pemain top/star atau Force melewati batas plafon +5.',
-  PERSUADE: 'Bisa Dibujuk (#24940/#24941 buyPersuadable): mau dibujuk (+2 levelGap & +5 forceOver di atas plafon) bila gaji >=2.5x & harga cocok (peluang 25%–85%).',
-  CEIL2X: 'Di Atas Plafon Force (#24938): biaya transfer tetap normal 1.0x, tetapi pemain menuntut Gaji 2.0x (Double Salary)!',
-  KEYLOCK: 'Dikunci Klub AI (#25603/#24951): pemain Top/Star/Top-3 yang tidak unhappy otomatis diperpanjang sebelum Bosman, atau minta tebus Release Clause.',
-  YSCOUT: 'Prospek U-21 (#25091): pemain senior U-21 dengan margin potensi tinggi (rawan ditawar AI ~2.0x MV). Untuk bajak akademi junior rival, cek panel Olheiro da Base di Tab Akademi.',
-  INJDISC: 'Diskon Cedera (#23498 INJURED_SALE): harga pasar sedang terpotong -30% (≤10d), -45% (≤28d), -60% (≤70d), atau -75% (>70d) karena cedera.',
-  BUG343: 'Bug Engine v1.2.0 (#34992): slot ke-11 pada formasi 3-4-3 memakai rule 18 yang jatuh ke sektor X (ATK hilang -33%)!'
-};
+// ==================== KAMUS ISTILAH & TOOLTIP OTOMATIS (SSOT dari LFEngine.config) ====================
+function buildBadgeTips() {
+  const C = (window.LFEngine && window.LFEngine.config) || {};
+  const inj = C.INJURED_SALE || { minorMaxDays: 10, moderateMaxDays: 28, majorMaxDays: 70, minorFactor: 0.70, moderateFactor: 0.55, majorFactor: 0.40, severeFactor: 0.25 };
+  const sc = (C.SELLER_STANCE && C.SELLER_STANCE.scarce) || { starter: 0.50, backup: 0.30 };
+  const bp = C.BUY_PERSUADE || { levelGap: 2, forceOver: 5, wageFloor: 2.5, base: 0.25, max: 0.85 };
+  const sp = C.STAR_PULL || { minGap: 5, top: 5 };
+  const preDays = C.PRECONTRACT_DAYS || 180;
+  const ctrPct = Math.round(((C.COUNTER_MAX_NORMAL || 1.40) - 1) * 100);
+  const arabLo = C.ARAB_OFFER_MIN_MUL || 2.5;
+  const arabHi = C.ARAB_OFFER_MAX_MUL || 3.0;
+  const renewMin = C.RENEWAL_DISCOUNT_FROM_DAYS || 60;
+  const renewGoldLo = C.RENEW_GOLDEN_MIN || 60;
+  const renewGoldHi = C.RENEW_GOLDEN_MAX || 120;
+  const pctOff = (f) => Math.round((1 - (f || 1)) * 100);
+
+  return {
+    BOSMAN: `Kontrak tersisa ≤${preDays} hari menuju akhir musim — bisa direkrut GRATIS (biaya transfer 0) via Pra-Kontrak saat kontraknya habis!`,
+    UNH: 'Pemain tidak bahagia (Unhappy) di klub AI — diskon harga beli -15% dan tuntutan gaji dipotong -50%!',
+    FREE: 'Free Agent (tanpa klub) — gratis biaya transfer. Catatan: terkunci tidak bisa Sell Now selama 1 tahun.',
+    SALE: 'Pemain masuk daftar jual (For Sale) oleh klub AI — harga normal 1.0x MV tanpa markup klub penjual.',
+    LOAN: 'Tersedia untuk dipinjam (Loanable) oleh klub AI.',
+    SCARCE: `Klub AI hanya punya 2 stok di sektor ini — harga naik +${Math.round((sc.starter || 0.5) * 100)}% (pemain terbaik) atau +${Math.round((sc.backup || 0.3) * 100)}% (pelapis). Jika cuma 1 stok, klub menolak jual (LAST_POS).`,
+    TRAP: 'Jebakan Potensi: Potential tampilan jauh lebih tinggi daripada PotCap asli (≥4 poin) — pertumbuhannya bakal mentok lebih cepat!',
+    GEM: 'Hidden Gem / Permata Tersembunyi: PotCap asli lebih tinggi dari tampilan atau punya ruang tumbuh sangat besar.',
+    GOD: 'Kombinasi Skill Stack kelas atas (efek kedua skill menumpuk penuh di Match Engine).',
+    LOCAL: 'Pemain domestik (satu negara dengan klubmu) — tidak memakan kuota pemain asing & adaptasi 2x lebih cepat!',
+    INJ: 'Pemain sedang cedera.',
+    F9: 'False Nine: pasang pada 1 pemain ST/SS/CAM di lini depan untuk turun membantu lini tengah (-40% bobot ATK-nya → +50% ke MID jika punya PAS/PLY, atau +35% tanpa PAS/PLY). Tidak tersedia untuk winger (LW/RW); ideal saat lini depan ≥2 penyerang.',
+    SLUMP: 'Fine Slump: penurunan performa dinamis -(3 + 0.05×pct)% (mis. -4.1% @21%, -5.5% @50%, -8.0% @100%; total cap -20%) selama 30 hari karena denda kartu merah >20%.',
+    NONSTACK: 'Skill tidak menumpuk (TCK+MRK di bek cuma +5% sekali; PAS+PLY di gelandang cuma +3% sekali).',
+    ARAB: `Arab Watch: pemain Top-5 skuad usia ≥26 thn punya peluang harian 0.33%/hari (sekitar 10% per bulan) ditawar klub Arab ${arabLo}x–${arabHi}x Market Value!`,
+    GOLDEN: `Golden Window (${renewGoldLo}–${renewGoldHi} hari, syarat >=${renewMin} hari di #24161): perpanjang kontrak 3 tahun di jendela ini untuk potong gaji -12% GRATIS! Di 11–${renewMin - 1} hari mereka justru minta naik +5–15%.`,
+    LOOPHOLE: 'Loophole Auto-Renew 0%: nyalakan Auto-Renew sementara untuk pemain inti ≤10 hari agar diperpanjang +180 hari dengan gaji lama (0% naik).',
+    SWAP: 'Rekomendasi tukar beli target + jual pemain skuad lama (hitung net kas, selisih gaji & upgrade performa Eff).',
+    FLIP: `Strategi beli pemain muda (17–21 thn) murah, latih 1–2 musim, lalu jual mahal (+${ctrPct}% counter) untuk cetak kas!`,
+    REFUSEDIST: 'Menolak Pindah (#24936 refusesDistance): pemain lintas benua tanpa afiliasi/satu grup negara menolak pindah (Div 3-4 ditolak total jika tanpa afiliasi).',
+    REFUSELVL: `Menolak Turun Kasta (#24939/#24938): selisih level ≥${sp.minGap} untuk Top-${sp.top}/star atau Force melewati batas plafon +${bp.forceOver}.`,
+    PERSUADE: `Bisa Dibujuk (#24940/#24941 buyPersuadable): mau dibujuk (+${bp.levelGap} levelGap & +${bp.forceOver} forceOver di atas plafon) bila gaji >=${bp.wageFloor}x & harga cocok (peluang ${Math.round((bp.base || 0.25) * 100)}%–${Math.round((bp.max || 0.85) * 100)}%).`,
+    CEIL2X: 'Di Atas Plafon Force (#24938): biaya transfer tetap normal 1.0x, tetapi pemain menuntut Gaji 2.0x (Double Salary)!',
+    KEYLOCK: `Dikunci Klub AI (#25603/#24951): pemain Top/Star/Top-${(C.SELLER_STANCE && C.SELLER_STANCE.refuseTop) || 3} yang tidak unhappy otomatis diperpanjang sebelum Bosman, atau minta tebus Release Clause.`,
+    YSCOUT: 'Prospek U-21 (#25091): pemain senior U-21 dengan margin potensi tinggi (rawan ditawar AI ~2.0x MV). Untuk bajak akademi junior rival, cek panel Olheiro da Base di Tab Akademi.',
+    INJDISC: `Diskon Cedera (#23498 INJURED_SALE): harga pasar sedang terpotong -${pctOff(inj.minorFactor)}% (≤${inj.minorMaxDays}d), -${pctOff(inj.moderateFactor)}% (≤${inj.moderateMaxDays}d), -${pctOff(inj.majorFactor)}% (≤${inj.majorMaxDays}d), atau -${pctOff(inj.severeFactor)}% (>${inj.majorMaxDays}d) karena cedera.`,
+    BUG343: 'Bug Engine v1.2.0 (#34992): slot ke-11 pada formasi 3-4-3 memakai rule 18 yang jatuh ke sektor X (ATK hilang -33%)!',
+  };
+}
+const BADGE_TIPS = buildBadgeTips();
 function tipFor(code) {
   const k = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   return BADGE_TIPS[k] || '';

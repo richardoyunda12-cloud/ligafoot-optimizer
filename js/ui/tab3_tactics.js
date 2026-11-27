@@ -185,19 +185,26 @@ function renderMoodTable() {
   const riskCnt = roster.filter(p => !p.injured && p.mood !== 'unhappy' && p.moodTier > 0 && p.minPct < (p.reqPct + 5)).length;
   const immuneCnt = roster.filter(p => p.moodImmune || p.moodTier === 0).length;
 
+  const mc = (D.cfg && D.cfg.MOOD_CFG) || (window.LFEngine && LFEngine.config && LFEngine.config.MOOD_CFG) || {};
+  const natPct = Math.round((mc.starterQuota ?? 0.25) * 100);
+  const expPct = Math.round((mc.explicitStarterQuota ?? 0.40) * 100);
+  const subPct = Math.round((mc.youngQuota ?? 0.08) * 100);
+  const hapTop = Math.round((mc.happyTop ?? 0.60) * 100);
+  const hapSub = Math.round((mc.happySub ?? 0.35) * 100);
+  const hapRes = Math.round((mc.happyRes ?? 0.15) * 100);
   const sumEl = document.getElementById('t3-mood-summary');
   if (sumEl) {
     sumEl.innerHTML = `
       <div class="t3-mini-strip" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px">
         <div class="t3-mini-card">
-          <div class="kpi-lbl">Unhappy (≥4 = Penalti)</div>
+          <div class="kpi-lbl">Unhappy (≥${(D.cfg && D.cfg.LOCKER_UNHAPPY_MIN) || 4} = Penalti)</div>
           <div class="kpi-val mono ${unhCnt >= 4 ? 'c-red' : (unhCnt > 0 ? 'c-amber' : 'c-green')}">${unhCnt}</div>
           <div class="kpi-sub">${unhCnt >= 4 ? `Penalti -${D.meta.lockerHitPct}%!` : 'Aman (<4 org)'}</div>
         </div>
         <div class="t3-mini-card">
           <div class="kpi-lbl">Rawan Menit</div>
           <div class="kpi-val mono ${riskCnt > 0 ? 'c-amber' : 'c-green'}">${riskCnt}</div>
-          <div class="kpi-sub">Dekat batas 8%/25%/40%</div>
+          <div class="kpi-sub">Dekat batas ${subPct}%/${natPct}%/${expPct}%</div>
         </div>
         <div class="t3-mini-card">
           <div class="kpi-lbl">Kebal (Reserve)</div>
@@ -205,7 +212,7 @@ function renderMoodTable() {
           <div class="kpi-sub">0% risiko unhappy</div>
         </div>
       </div>
-      <div class="c-muted" style="font-size:11px">Kuota bytecode #22134 (aktif setelah ≥6 laga): <b>25%</b> Natural Top-11 <code>auto</code> (1 GK + 10 Outfield, &gt;19th) · <b>40%</b> hanya bila <code>role=starter</code> / <code>roleSore</code> · <b>8%</b> <code>rotation</code> / Cadangan #12–#18 (&gt;19th). Status <b class="c-green">HAPPY</b> bila ≥60% (Top-11) / ≥35% (Sub) / ≥15% (Res). Usia ≤19th (auto) &amp; <code>reserve</code> kebal 0%!</div>`;
+      <div class="c-muted" style="font-size:11px">Kuota bytecode #22134 (aktif setelah ≥${mc.minGames || 6} laga): <b>${natPct}%</b> Natural Top-11 <code>auto</code> (1 GK + 10 Outfield, &gt;19th) · <b>${expPct}%</b> hanya bila <code>role=starter</code> / <code>roleSore</code> · <b>${subPct}%</b> <code>rotation</code> / Cadangan #12–#18 (&gt;19th). Status <b class="c-green">HAPPY</b> bila ≥${hapTop}% (Top-11) / ≥${hapSub}% (Sub) / ≥${hapRes}% (Res). Usia ≤19th (auto) &amp; <code>reserve</code> kebal 0%!</div>`;
   }
 
   const sumHdr = document.getElementById('t3-mood-sum-hdr');

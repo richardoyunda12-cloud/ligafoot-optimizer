@@ -90,6 +90,19 @@ function runStage2Engine(savePath) {
   const expectedVer = checkVersionParity();
   console.log(`  Version parity OK: ${expectedVer}`);
 
+  const parityPy = path.join(REPO_ROOT, 'scripts', 'check_bytecode_parity.py');
+  if (fs.existsSync(parityPy)) {
+    const pyRunners = process.platform === 'win32' ? [['python', []], ['py', ['-3']]] : [['python3', []], ['python', []]];
+    for (const [cmd, prefix] of pyRunners) {
+      const pr = spawnSync(cmd, [...prefix, parityPy], { cwd: REPO_ROOT, stdio: 'inherit' });
+      if (pr.error && pr.error.code === 'ENOENT') continue;
+      if (pr.status !== 0) {
+        throw new Error(`Bytecode parity check gagal (exit code ${pr.status})`);
+      }
+      break;
+    }
+  }
+
   global.window = global;
   for (const f of ['config', 'utils', 'conditions', 'tactics', 'economy', 'roster', 'scout', 'club']) {
     require(path.join(REPO_ROOT, 'js', 'engine', f + '.js'));
@@ -425,6 +438,42 @@ function runStage2Engine(savePath) {
   assert(U.computeMarketValue({ force: 60, age: 20, potCap: 75, pos: 'ATA', star: true }, { level: 21, country: 'ES' }) > 10000000);
   assert(D.bTeamInfo.creationCost >= 2600000, 'bTeamCost minimum 2.6M tanpa cap 2M');
   assert(Array.isArray(D.rivalYouthTargets), 'D.rivalYouthTargets harus ada');
+
+  // 11. Golden Regression Checks (False Nine, sellerStance, lastInPosition, Economy)
+  const stRes = T.sellerStance(
+    { id: 's1', pos: 'MC', force: 70, age: 25, forSale: true, marketValue: 1000000 },
+    { id: 'c1', level: 10, division: 1, country: 'BR', budget: -100000, players: [{ id: 's1', pos: 'MC', force: 70, salary: 50000 }, { id: 's2', pos: 'MC', force: 60, salary: 40000 }] },
+    { level: 10, division: 1, country: 'BR' }
+  );
+  assert.strictEqual(stRes.mult, 0.80, 'forSale (0%) + redCash (-20%) harus menghasilkan mult 0.80');
+  const stScarce = T.sellerStance(
+    { id: 's1', pos: 'MC', force: 75, age: 24, forSale: false, marketValue: 1000000 },
+    { id: 'c1', level: 10, division: 1, country: 'BR', budget: 50000000, players: [{ id: 's1', pos: 'MC', force: 75, salary: 10000 }, { id: 's2', pos: 'MC', force: 60, salary: 10000 }] },
+    { level: 10, division: 1, country: 'BR' }
+  );
+  assert(stScarce.reasons.some(r => r.key === 'scarce' && r.delta === 0.5), 'SCARCE starter harus +0.50');
+  assert.strictEqual(T.lastInPosition({ id: 'only1', pos: 'PD', forSale: false }, [{ id: 'only1', pos: 'PD' }]), true, 'lastInPosition harus menolak semua posisi jika stok 1');
+  const f9GateXi = {
+    formation: '4-3-3',
+    xi: [
+      { slot: 'G', sectorCode: 'G', score: 60, player: { id: 'g1', pos: 'G', force: 60, age: 25 } },
+      { slot: 'LD', sectorCode: 'D', score: 60, player: { id: 'd1', pos: 'LD', force: 60, age: 25 } },
+      { slot: 'ZD', sectorCode: 'D', score: 60, player: { id: 'd2', pos: 'ZD', force: 60, age: 25 } },
+      { slot: 'ZE', sectorCode: 'D', score: 60, player: { id: 'd3', pos: 'ZE', force: 60, age: 25 } },
+      { slot: 'LE', sectorCode: 'D', score: 60, player: { id: 'd4', pos: 'LE', force: 60, age: 25 } },
+      { slot: 'MC', sectorCode: 'M', score: 60, player: { id: 'm1', pos: 'MC', force: 60, age: 25 } },
+      { slot: 'MC', sectorCode: 'M', score: 60, player: { id: 'm2', pos: 'MC', force: 60, age: 25 } },
+      { slot: 'MC', sectorCode: 'M', score: 60, player: { id: 'm3', pos: 'MC', force: 60, age: 25 } },
+      { slot: 'PD', sectorCode: 'A', score: 60, player: { id: 'w1', pos: 'PD', force: 60, age: 25, s1: 'PAS', s2: 'CRU' } },
+      { slot: 'ATA', sectorCode: 'A', score: 60, player: { id: 'st1', pos: 'ATA', force: 60, age: 25, s1: 'PAS', s2: 'FIN' } },
+      { slot: 'ATA', sectorCode: 'A', score: 60, player: { id: 'st2', pos: 'ATA', force: 60, age: 25, s1: 'FIN', s2: 'DRI' } },
+    ],
+  };
+  const f9GateBase = T.computeEngineSectorPower(f9GateXi, '4-3-3', {});
+  const f9GateWing = T.computeEngineSectorPower(f9GateXi, '4-3-3', { falseNineId: 'w1' });
+  const f9GateSt = T.computeEngineSectorPower(f9GateXi, '4-3-3', { falseNineId: 'st1' });
+  assert.strictEqual(f9GateWing.MID, f9GateBase.MID, 'Winger PD/PE TIDAK boleh memakai False Nine (MID harus tetap)');
+  assert(f9GateSt.MID > f9GateBase.MID && f9GateSt.rawATK < f9GateBase.rawATK, 'False Nine pada ST/SS/CAM harus transfer ATK->MID');
 
   console.log(
     `  PASS: Parse ${D.meta.parseSec}s | Skuad ${D.roster.length} | BestXI ${D.bestXi.avgScore} | ` +
