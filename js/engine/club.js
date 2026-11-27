@@ -1121,10 +1121,14 @@
       uTeam, staticPlayers, true, userId, userName, userCountry, userDiv
     );
 
-    const totalPayroll = userRoster.reduce((s, p) => s + p.salary, 0) + U.safeNum(uTeam.loanOutPay, 0);
+    const seniorPayroll = userRoster.reduce((s, p) => s + p.salary, 0);
+    const seniorRawPayroll = userRoster.reduce((s, p) => s + (p.rawSalary !== undefined ? p.rawSalary : p.salary), 0);
+    const loanOutPay = U.safeNum(uTeam.loanOutPay, 0);
     const youthPayroll = userYouth.reduce((s, y) => s + y.salary, 0);
+    const totalPayroll = seniorPayroll + youthPayroll + loanOutPay;
     const totalSquadVal = userRoster.reduce((s, p) => s + p.marketValue, 0);
-    // #19856: PAYROLL_REF tahunan eksak (28,500,000 untuk ID div 1 repLvl 3)
+    // #21951/#21952 shop & #22076 ctUpgradeCost memakai PAYROLL_REF dasar (repLvl = 0), bukan PAYROLL_REF_BIG
+    const shopBasePayrollRef = U.payrollRef(userCountry, userDiv, 0);
     const payrollRef = U.payrollRef(userCountry, userDiv, repLevel);
     const foreignCountSquad = userRoster.filter(p => userCountry && p.nationality && p.nationality !== userCountry).length;
 
@@ -1309,7 +1313,7 @@
     };
 
     const memberAudit = E.evalMemberPlan(uTeam.memberPlan, uTeam.members, fanConf, userCountry, userDiv, repLevel);
-    const shopAudit = E.evalClubShop(uTeam.shopPrice, uTeam.shopLog, userRoster, currentDate, fanConf, payrollRef);
+    const shopAudit = E.evalClubShop(uTeam.shopPrice, uTeam.shopLog, userRoster, currentDate, fanConf, shopBasePayrollRef);
     const cashflowMeta = E.computeCashflow3m(uTeam, uTeam.ledger, uTeam.lastLedger, totalPayroll, stadiumOps);
 
     // Multi-format lookup laga selesai di world.comps (resolusi nama lawan matchLog & GD klasemen)
@@ -1595,7 +1599,9 @@
         marketValue: p.marketValue,
         loanedFrom: p.loanedFrom,
         loanDays: p.loanDays,
+        loanDaysLeft: p.loanDays,
         loanBuyFee: p.loanBuyFee,
+        loanBuyPrice: p.loanBuyFee,
         loanBuyChance: p.loanBuyChance,
       }));
 
@@ -2139,8 +2145,8 @@
 
     const cashflowPayload = E.buildCashflowPayload(
       cashflowMeta, uTeam, curSim, spContracts, shopAudit, memberAudit,
-      totalPayroll, stadiumOps, userDiv,
-      { country: userCountry, repLvl: repLevel, youthPayroll }
+      seniorPayroll, stadiumOps, userDiv,
+      { country: userCountry, repLvl: repLevel, youthPayroll, seniorPayroll, seniorRawSalaries: seniorRawPayroll, loanOutPay }
     );
     const rawPresets = Array.isArray(save.ticketPresets) ? save.ticketPresets : [];
     const activePresetId = uTeam.ticketPresetId || save.ticketPresetId || null;
@@ -2377,10 +2383,16 @@
     const minByRep = C.BUYER_MIN_FORCE_BY_REP || [1, 10, 20, 40, 50, 55];
     const repCeilTbl = C.REP_CEILING || { 0: 20, 1: 30, 2: 45, 3: 85, 4: 100, 5: 100 };
     const ownBId = bTeamInfo && bTeamInfo.bTeamId ? String(bTeamInfo.bTeamId) : '';
+    const useRealWindows = Boolean(save.gameOptions && save.gameOptions.realTransferWindows && !save.onlineLeagueId);
+    const isWindowOpenNow = save.transferWindow === 'open' || save.transferWindow === 'midseason';
+    const canDeferredOutsideWindow = !isWindowOpenNow && useRealWindows && !save.onlineHumans && !save.choosingTeam;
+    const filterBuyersByWindow = useRealWindows && !canDeferredOutsideWindow;
     const aiBuyersPool = [];
     for (const [tid, tObj] of Object.entries(compactTeams)) {
       if (!tObj || typeof tObj !== 'object' || tid === userId || (ownBId && tid === ownBId) || String(tid).endsWith('_B')) continue;
       const stC = U.getStaticClub(clubsMeta, tid);
+      const cCountry = String(tObj.country || stC.country || 'BR').toUpperCase();
+      if (filterBuyersByWindow && typeof U.isWindowOpenOn === 'function' && !U.isWindowOpenOn(cCountry, currentDate)) continue;
       const dynMap = new Map();
       const rawDyn = tObj.playerDynamic;
       if (Array.isArray(rawDyn)) {
@@ -2409,13 +2421,14 @@
         const sp = staticPlayers[pid];
         const ex = extraMap.get(pid);
         const dy = dynMap.get(pid);
+        // static_db compact array: ["Name","Pos","S1","S2","Nat","Foot",age,force,star,hash] -> sp[6]=age, sp[7]=force
         const pf = U.safeInt(
           dy && dy.force,
-          U.safeInt(ex && ex.force, Array.isArray(sp) ? U.safeInt(sp[3], 20) : U.safeInt(sp && sp.force, 20))
+          U.safeInt(ex && ex.force, Array.isArray(sp) ? U.safeInt(sp[7], 20) : U.safeInt(sp && sp.force, 20))
         );
         const pAge = U.safeInt(
           dy && dy.age,
-          U.safeInt(ex && ex.age, Array.isArray(sp) ? U.safeInt(sp[2], 24) : U.safeInt(sp && sp.age, 24))
+          U.safeInt(ex && ex.age, Array.isArray(sp) ? U.safeInt(sp[6], 24) : U.safeInt(sp && sp.age, 24))
         );
         const pYouth = Boolean((dy && dy.isYouth) || (ex && ex.isYouth));
         const pLoaned = Boolean((dy && dy.loanedFrom) || (ex && ex.loanedFrom));
@@ -2463,7 +2476,7 @@
         buyerDemandNote = 'Pemain pinjaman dari klub lain — tidak bisa dijual';
       } else if (p.freeSigned) {
         buyerDemandTier = 'LOCKED';
-        buyerDemandNote = 'Terkunci aturan freeNoSale (baru rekrut gratis — tunggu 1 musim)';
+        buyerDemandNote = 'Terkunci aturan freeNoSale (baru rekrut gratis — tunggu 365 hari)';
       } else if (p.pos === 'G' && userGkCount <= 1) {
         buyerDemandTier = 'LOCKED';
         buyerDemandNote = 'Terkunci aturan minimal 1 kiper di skuad';
@@ -2481,15 +2494,16 @@
         const injSuffix = p.injured
           ? ` ⚠ Sedang cedera: harga terpotong jadi ${Math.round((p.injurySaleMul || 1) * 100)}% MV — sebaiknya tunggu sembuh.`
           : '';
+        const defSuffix = canDeferredOutsideWindow ? ' [Bursa tutup → Deal Tertunda: pindah saat bursa buka]' : '';
         if (estBuyersCount >= 50) {
           buyerDemandTier = 'HOT';
-          buyerDemandNote = `Ramai peminat (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV) atau Lelang maks ~${U.fmtMoney(maxAuctionPrice)}.${injSuffix}`;
+          buyerDemandNote = `Ramai peminat (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV) atau Lelang maks ~${U.fmtMoney(maxAuctionPrice)}.${injSuffix}${defSuffix}`;
         } else if (estBuyersCount >= 10) {
           buyerDemandTier = 'WARM';
-          buyerDemandNote = `Peminat cukup (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV).${injSuffix}`;
+          buyerDemandNote = `Peminat cukup (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Batas minta Purchase Offers ≤ ${U.fmtMoney(maxAskPrice)} (1.10x MV).${injSuffix}${defSuffix}`;
         } else if (estBuyersCount >= 1) {
           buyerDemandTier = 'LOW';
-          buyerDemandNote = `Peminat terbatas (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Jangan pasang harga > ${U.fmtMoney(maxAskPrice)} (1.10x MV) agar tawaran tetap muncul.${injSuffix}`;
+          buyerDemandNote = `Peminat terbatas (${estBuyersCount} klub AI cocok syarat, tampil ${offerSlotsRange} tawaran/roll). Jangan pasang harga > ${U.fmtMoney(maxAskPrice)} (1.10x MV) agar tawaran tetap muncul.${injSuffix}${defSuffix}`;
         }
       }
       cp.estBuyersCount = estBuyersCount;
@@ -2508,10 +2522,18 @@
     const pad2 = n => String(n).padStart(2, '0');
     const generatedAt = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 
+    const nextCtLv = Math.min(10, ctLevel + 1);
+    const ctUpgradeCost = ctLevel < 10
+      ? Math.round((shopBasePayrollRef * ((C.CT_COST_SHARE && C.CT_COST_SHARE[nextCtLv]) || 0)) / 10000) * 10000
+      : 0;
+    const ctUpgrade = (ctLevel < 10 && ctUpgradeCost > 0)
+      ? { from: ctLevel, to: nextCtLv, cost: ctUpgradeCost, buildDays: (C.CT_BUILD_DAYS && C.CT_BUILD_DAYS[nextCtLv]) || 0 }
+      : null;
+
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.4 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.5 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
@@ -2612,6 +2634,7 @@
       presGoals: cleanPresGoals(uTeam.presGoals, worldComps),
       preContracts,
       ctMilestones: C.CT_MILESTONES,
+      ctUpgrade,
       cashHistory: cashHist,
       statement: stmt35,
       recentMatches: recentMatches.slice(-10).reverse(),

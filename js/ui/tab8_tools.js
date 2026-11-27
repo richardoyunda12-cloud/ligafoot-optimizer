@@ -77,9 +77,9 @@ function calcAll() {
   const arabRef = calcSelectedOfferPlayer ? (calcSelectedOfferPlayer.marketValue / (u === 'M' ? 1e6 : 1e3)) : raw;
   const arabNote = calcSelectedOfferPlayer
     ? (calcSelectedOfferPlayer.isTop5Arab
-        ? `💎 <b>Jackpot Arab Aktif (Top-5 ≥26th):</b> Tawaran awal Arab ~<b class="mono c-purple">${fmtU(arabRef * 2.5)} – ${fmtU(arabRef * 3.0)}</b> (sebelum counter +40%!)`
-        : `<span class="c-muted">Info Arab (2.5x–3x MV): hanya aktif untuk Top-5 skuad usia ≥26th (~${fmtU(arabRef * 2.5)}–${fmtU(arabRef * 3.0)}).</span>`)
-    : `<span class="c-muted">💎 <b>Jackpot Arab (2.5–3x MV):</b> ${fmtU(raw * 2.5)} – ${fmtU(raw * 3.0)} untuk Top-5 skuad ≥26th.</span>`;
+        ? `💎 <b>Jackpot Arab Aktif (Top-5 ≥26th):</b> Tawaran Arab ~<b class="mono c-purple">${fmtU(arabRef * 2.5)} – ${fmtU(arabRef * 3.0)}</b> (cair utuh 0% fee, tapi tawaran Arab tidak bisa di-counter!)`
+        : `<span class="c-muted">Info Arab (2.5x–3x MV, 0% fee, no counter): hanya aktif untuk Top-5 skuad usia ≥26th (~${fmtU(arabRef * 2.5)}–${fmtU(arabRef * 3.0)}).</span>`)
+    : `<span class="c-muted">💎 <b>Jackpot Arab (2.5–3x MV):</b> ${fmtU(raw * 2.5)} – ${fmtU(raw * 3.0)} untuk Top-5 skuad ≥26th (0% fee, tidak bisa di-counter).</span>`;
 
   document.getElementById('c-offer-out').innerHTML = `
     <div>Counter Optimal (<b>+40% / 1.40x</b>): <b class="mono c-green" style="font-size:16px">${fmtU(raw * 1.40)}</b> <span class="badge b-good">0% Batal</span></div>
@@ -249,7 +249,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.10.4 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.10.5 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -943,13 +943,13 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.4`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.4</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.5`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.5</span>`;
   const rsTag = D.meta.realScale ? ' • 📏 Real 0–100' : '';
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}${rsTag}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)})${rsTag} • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.10.4 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.10.5 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],

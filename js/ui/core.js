@@ -513,7 +513,7 @@ function calcDrawerCounter(mv = 0, isArab = false) {
   out.innerHTML = `
     <div style="margin-top:5px">Counter Aman (<b>+40%</b>): <b class="mono c-green" style="font-size:14px">${fmtU(raw * 1.40)}</b> <span class="badge b-good">0% Batal</span></div>
     <div class="c-muted mono" style="font-size:10.5px;margin-top:2px">Est. Cair (1.25x): <b>${fmtU(raw * 1.25)}</b> · Batas Batal (1.43x): <span class="c-red">${fmtU(raw * 1.43)}</span></div>
-    ${isArab ? `<div class="c-purple mono" style="font-size:10.5px;margin-top:2px">💎 Tawaran Arab 2.5–3x MV: <b>${fmtU(arabRef * 2.5)} – ${fmtU(arabRef * 3.0)}</b></div>` : ''}`;
+    ${isArab ? `<div class="c-purple mono" style="font-size:10.5px;margin-top:2px">💎 Tawaran Arab 2.5–3x MV: <b>${fmtU(arabRef * 2.5)} – ${fmtU(arabRef * 3.0)}</b> (0% fee, tidak bisa di-counter)</div>` : ''}`;
 }
 
 function energyPillHtml(en) {
@@ -653,7 +653,7 @@ function openPlayerDrawer(kind, id) {
         ${p.benchCutSave ? `<div class="drawer-kv"><span>Trik Bangku Cadangan</span><b class="mono c-sky">Cadangan -12% floor → Hemat -${fmtM(p.benchCutSave)}/bln</b></div>` : ''}
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)} ${p.injured ? `<b class="c-red">(Diskon cedera ${Math.round((p.injurySaleMul || 1) * 100)}%)</b>` : ''}</span></div>
         <div class="drawer-kv"><span>Minat Pasar (Peminat AI)</span><span id="drw-buyer-demand">${buyerDemandBadgeHtml(p)}${p.estBuyersCount > 0 && p.offerSlotsRange ? ` <span class="c-muted mono" style="font-size:10.5px">(${esc(p.offerSlotsRange)} klub/roll)</span>` : ''}</span></div>
-        <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +40%: ${fmtM(p.estCounter40)}</span></b></div>
+        <div class="drawer-kv"><span>Fixed/Offer (−${Math.round((p.termFeeRate ?? 0) * 100)}% fee) vs Ctr Masuk (0%)</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr 1.25x: ${fmtM(p.estRealSale)}</span></b></div>
         ${(() => {
           const gkCnt = (D.roster || []).filter(x => x.pos === 'G').length;
           const effMv = p.injured ? Math.round((p.marketValue || 0) * (p.injurySaleMul || 1)) : (p.marketValue || 0);
@@ -666,8 +666,8 @@ function openPlayerDrawer(kind, id) {
           else if (p.injured) stTxt += ' <span class="c-red">(terpotong cedera!)</span>';
           return `<div class="drawer-kv" id="drw-sell-ceiling" title="Jika memasang harga di atas 1.10x MV pada Purchase Offers, game tidak memunculkan klub peminat (0 tawaran)."><span>🏷️ Batas Harga Jual</span><span class="mono">${stTxt}</span></div>`;
         })()}
-        <div class="drawer-kv"><span>Biaya Putus Kontrak (${Math.round((p.termFeeRate || 0.5) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
-        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
+        <div class="drawer-kv"><span>Biaya Putus / Fee Jual (${Math.round((p.termFeeRate ?? 0) * 100)}%)</span><span class="mono c-red">-${fmtM(p.estTerminationCost || 0)}</span></div>
+        ${p.isTop5Arab ? `<div class="drawer-kv"><span>Potensi Jackpot Arab (0% Fee, No Ctr)</span><b class="mono c-purple">${fmtM(p.estArabLow)} – ${fmtM(p.estArabHigh)}</b></div>` : ''}
         <div class="drawer-calc-box">
           <b>🧮 Mini Kalkulator Counter-Offer (+40%)</b>
           <div class="drawer-calc-row">
@@ -845,7 +845,7 @@ function openPlayerDrawer(kind, id) {
         <div class="drawer-kv"><span>Status Diskon 3Th (-12%)</span><span class="mono">${p.contractDays <= 10 ? '<b class="c-red">Zona Jebakan ≤10d</b>' : (p.contractDays < 60 ? '<b class="c-amber">Minta naik +5–15%</b>' : (p.contractDays <= 120 ? '<b class="c-green">GOLDEN WINDOW AKTIF!</b>' : `Bisa diskon (Golden dlm ~${toGolden}d)`))}</span></div>
         <div class="drawer-kv"><span>Gaji Bulanan</span><b class="mono">${fmtM(p.salary)}/bln</b></div>
         <div class="drawer-kv"><span>Market Value</span><span class="mono">${fmtM(p.marketValue)}</span></div>
-        <div class="drawer-kv"><span>Jual Langsung vs Counter +40%</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr +40%: ${fmtM(p.estCounter40)}</span></b></div>
+        <div class="drawer-kv"><span>Fixed/Offer (−${Math.round((p.termFeeRate ?? 0) * 100)}% fee) vs Ctr Masuk (0%)</span><b class="mono c-green">Net ${fmtM(p.estDirectSaleNet)} <span class="c-muted">· Ctr 1.25x: ${fmtM(p.estRealSale)}</span></b></div>
       </div>
       <div class="c-muted mt-12" style="font-size:11px">Routing Tim B ↔ Tim Utama <b>100% gratis</b> di menu Skuad game. Memindahkan pemain asing ke Tim B juga membebaskan 1 slot kuota asing di Tim Utama!</div>
       <div class="pill-row mt-12">

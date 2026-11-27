@@ -173,8 +173,9 @@
 
     const gainPct = curYield > 0 ? ((bestYield - curYield) / curYield) * 100.0 : 0.0;
 
-    // Launch Hype Boost (#21265–#21268): Mega Signing (365d, +30%: top || fee >= 30% PayrollRef, non-loan),
-    // Big/Star Signing (90d, +8%: isPlayerStar || fee >= 8% PayrollRef, non-loan; only applies if no active Mega)
+    // Launch Hype Boost (#21951 isBigSigning & #21952 isMegaSigning):
+    // Membaca p.clubHistory?.[0] (.date, .fee, .loan) dengan payrollRef(country, div, repLvl=0).
+    // Mega (+30%, 365d) mengecualikan pinjaman; Big (+8%, 90d) mengizinkan pinjaman.
     const annualRef = Math.max(5900000, U.safeNum(payrollRef, 28500000));
     const megaThreshold = annualRef * 0.30;
     const bigThreshold = annualRef * 0.08;
@@ -185,13 +186,15 @@
     let hasBigActive = false;
 
     for (const p of (roster || [])) {
-      if (p.loanedFrom) continue;
-      const bdate = p.boughtDate;
+      const h0 = (Array.isArray(p.clubHistory) && p.clubHistory.length) ? p.clubHistory[0] : null;
+      const bdate = (h0 && h0.date) || p.boughtDate || null;
       if (!bdate) continue;
       const days = U.daysBetweenDates(bdate, currentDate);
-      const fee = U.safeNum(p.boughtPrice, 0);
+      if (!Number.isFinite(days) || days < 0) continue;
+      const fee = U.safeNum(h0 ? h0.fee : p.boughtPrice, 0);
+      const isLoan = Boolean((h0 && h0.loan) || p.loanedFrom);
       const isStar = Boolean(p.star || p.top || p.starAwarded);
-      if (days <= megaDaysLim && (p.top || fee >= megaThreshold)) {
+      if (!isLoan && days <= megaDaysLim && (p.top || fee >= megaThreshold)) {
         const daysLeft = Math.max(0, megaDaysLim - days);
         hypeEvents.push({
           name: p.name,
@@ -266,8 +269,9 @@
 
     const lastRev = recentLog.length ? recentLog[recentLog.length - 1].rev : 0;
     const lastUnits = recentLog.length ? recentLog[recentLog.length - 1].units : 0;
-    const topCnt = (roster || []).filter(p => p.top).length;
-    const starCnt = (roster || []).filter(p => !p.top && (p.star || p.starAwarded)).length;
+    const isStarShop = p => Boolean(p && (p.star || p.top || p.starAwarded));
+    const topCnt = (roster || []).filter(p => isStarShop(p) && p.top).length;
+    const starCnt = (roster || []).filter(p => isStarShop(p) && !p.top).length;
     // #21265: +8% per p.top, else +4% per isPlayerStar(p), capped at 30% (SHOP_STAR_MAX = 0.30)
     const starBonusPct = Math.min(30, topCnt * 8 + starCnt * 4);
     const megaSignings = hypeEvents.filter(e => e.boostPct >= 25);
@@ -364,13 +368,8 @@
     const baseAttArr = (C.BASE_ATTENDANCE && C.BASE_ATTENDANCE[homeRepLvl]) || [4000, 20000, 2500, 300];
     const extraArr = (C.EXTRA_DRAW && C.EXTRA_DRAW[div]) || [100, 500, 200, 10];
 
-    const kindScale = kind === 'state'
-      ? 0.70
-      : (kind === 'friendly'
-        ? 0.40
-        : (kind === 'continental1'
-          ? 1.35
-          : ((kind === 'continental2' || kind === 'supercup') ? 1.15 : (kind === 'cup' ? 1.10 : 1.0))));
+    // #20312 calculateSectorAttendance: kindScale hanya 0.70 (state), 0.40 (friendly), 1.0 (lainnya)
+    const kindScale = kind === 'state' ? 0.70 : (kind === 'friendly' ? 0.40 : 1.0);
 
     const fillBonus = (isKnockout ? 0.45 : 0.30)
       + (kind === 'continental1' ? 0.30 : ((kind === 'continental2' || kind === 'supercup') ? 0.15 : 0.0))
@@ -393,13 +392,19 @@
     let totalRev = 0;
     const bySector = {};
 
+    const rawMuls = (o.rawMuls && typeof o.rawMuls === 'object') ? o.rawMuls : null;
+
     for (let i = 0; i < SECTORS.length; i++) {
       const s = SECTORS[i];
       const cap = Math.max(0, U.safeInt(sections && sections[s], 0));
       const bp = U.safeNum(basePrices[s], 10);
       const price = Math.max(1, U.safeInt(prices && prices[s], bp));
       const effMul = bp > 0 ? (price / bp) : 1.0;
-      const dem = ticketDemandV9(effMul, bigForDemand);
+      // #35817: demand memakai priceMul[i] mentah bila tersedia, sementara revenue memakai harga bulat (#35816)
+      const demandMul = (rawMuls && rawMuls[s] !== undefined && Number.isFinite(Number(rawMuls[s])))
+        ? Number(rawMuls[s])
+        : effMul;
+      const dem = ticketDemandV9(demandMul, bigForDemand);
 
       let demandRaw = 0;
       let att = 0;
@@ -470,7 +475,7 @@
       const bp = U.safeNum(basePrices[s], 10);
       prices[s] = Math.max(1, Math.round(bp * U.safeNum(muls[s], 1.0)));
     }
-    return simulateStadiumByPricesV9(sections, prices, fanConf, division, isKnockout, isBigMatch, repDiff, opts);
+    return simulateStadiumByPricesV9(sections, prices, fanConf, division, isKnockout, isBigMatch, repDiff, { ...o, rawMuls: muls });
   }
 
   /**
@@ -616,7 +621,7 @@
       for (const s of SECTORS) {
         curPrices[s] = Math.max(1, Math.round(basePrices[s] * curMuls[s]));
       }
-      const curSim = simulateStadiumByPricesV9(sections, curPrices, fanConf, div, sp.isKo, sp.isBig, sp.repDiff, phaseOpts);
+      const curSim = simulateStadiumV9(sections, curMuls, fanConf, div, sp.isKo, sp.isBig, sp.repDiff, phaseOpts);
       const opt = optimizeTicketPricesV9(sections, fanConf, div, sp.isKo, sp.isBig, sp.repDiff, 70.5, phaseOpts);
       const revGain = Math.max(0, opt.sim.totalRev - curSim.totalRev);
 
@@ -648,26 +653,20 @@
     return results;
   }
 
-  // Bytecode #19797 seatPrice & #19798 expansionCost & #19807 startConstruction
+  // Bytecode #20282 seatCost + #20292 calculateStadiumExpansion:
+  // Evaluasi tarif tier SATU KALI pada total kursi pasca-ekspansi (cur + qty <= tier[0]) untuk seluruh qty.
   function calcExpansionCost(sector, currentSeats, addSeats, division = 1, includeFixedWorkCost = false) {
-    if (addSeats <= 0) return 0;
-    const tiers = C.STADIUM_SEAT_TIERS[sector] || [[999999, 500]];
+    const qty = Math.max(0, U.safeInt(addSeats, 0));
+    if (qty <= 0) return 0;
+    const tiers = (C.STADIUM_SEAT_TIERS && C.STADIUM_SEAT_TIERS[sector]) || [[999999, 500]];
     const seatMul = C.SEAT_COST_MUL || 3;
     const divMulMap = C.STADIUM_COST_DIV_MUL || { 0: 0.25, 1: 1.0, 2: 0.6, 3: 0.3, 4: 0.25 };
     const divMul = divMulMap[U.clamp(U.safeInt(division, 1), 0, 4)] || 1.0;
-    let cost = 0;
-    let cur = Math.max(0, U.safeInt(currentSeats, 0));
-    const target = cur + U.safeInt(addSeats, 0);
-
-    for (const [capLimit, unitBaseCost] of tiers) {
-      if (cur >= target) break;
-      if (cur < capLimit) {
-        const chunk = Math.min(target, capLimit) - cur;
-        const unitPrice = Math.round(unitBaseCost * seatMul * divMul);
-        cost += chunk * unitPrice;
-        cur += chunk;
-      }
-    }
+    const cur = Math.max(0, U.safeInt(currentSeats, 0));
+    const target = cur + qty;
+    const hit = tiers.find(t => target <= t[0]) || tiers[tiers.length - 1];
+    const unitPrice = Math.round(hit[1] * seatMul * divMul);
+    let cost = qty * unitPrice;
     if (includeFixedWorkCost && cost > 0) {
       cost += Math.round((C.STADIUM_WORK_FIXED_COST || 300000) * divMul);
     }
@@ -785,19 +784,19 @@
   }
 
   /**
-   * Simulasi rencana cicilan transfer resmi (OTA TRANSFER_INSTALLMENTS):
-   * DP 25% + bunga { 6 bln: 3%, 12 bln: 8%, 24 bln: 18% }.
+   * Simulasi rencana cicilan transfer resmi (#21875 installmentPlan):
+   * DP = min(p, ceil(p * 0.25)), pokok = p - DP, bunga {6b:3%, 12b:8%, 24b:18%}, cicilan = floor(owed / m).
    */
   function computeInstallmentPlan(price, months = 24) {
     const p = Math.max(0, Math.round(U.safeNum(price, 0)));
     const m = [6, 12, 24].includes(Number(months)) ? Number(months) : 24;
     const rates = { 6: 0.03, 12: 0.08, 24: 0.18 };
     const rate = rates[m] ?? 0.18;
-    const dp = Math.round(p * 0.25);
+    const dp = Math.min(p, Math.ceil(p * 0.25));
     const principal = Math.max(0, p - dp);
     const totalFinanced = Math.round(principal * (1 + rate));
     const interestCost = totalFinanced - principal;
-    const monthly = m > 0 ? Math.ceil(totalFinanced / m) : totalFinanced;
+    const monthly = m > 0 ? Math.floor(totalFinanced / m) : totalFinanced;
     return { months: m, rate, dp, principal, interestCost, totalFinanced, monthly, totalPay: dp + totalFinanced };
   }
 
@@ -849,8 +848,9 @@
     };
   }
 
-  function computeLoanLimit(country = 'OTHER', division = 1, repLvl = 3) {
-    const ref = U.payrollRef(country, division, repLvl);
+  // Bytecode #20258 loanLimit + #35792: selalu memakai repLvl = 0 (bukan PAYROLL_REF_BIG)
+  function computeLoanLimit(country = 'OTHER', division = 1, _repLvl = 0) {
+    const ref = U.payrollRef(country, division, 0);
     return Math.max(250000, Math.floor((ref * 0.25) / 250000) * 250000);
   }
 
@@ -937,8 +937,9 @@
     const country = ex.country || uTeam.country || 'OTHER';
     const repLvl = ex.repLvl !== undefined ? ex.repLvl : U.reputationLevel(uTeam.reputation);
     const youthPayroll = U.safeNum(ex.youthPayroll, 0);
-    const loanOutPay = U.safeNum(uTeam && uTeam.loanOutPay, 0);
-    const combinedPayroll = totalPayroll + youthPayroll + loanOutPay;
+    const loanOutPay = U.safeNum(ex.loanOutPay !== undefined ? ex.loanOutPay : (uTeam && uTeam.loanOutPay), 0);
+    const seniorPayrollOnly = U.safeNum(ex.seniorPayroll !== undefined ? ex.seniorPayroll : totalPayroll, 0);
+    const combinedPayroll = seniorPayrollOnly + youthPayroll + loanOutPay;
 
     const estTickets = (cashflowMeta && cashflowMeta.avgTickets3m)
       ? cashflowMeta.avgTickets3m
@@ -973,7 +974,7 @@
 
     let estNaming = 0;
     const nm = uTeam && uTeam.naming;
-    if (nm && typeof nm === 'object') {
+    if (nm && typeof nm === 'object' && (nm.monthsLeft === undefined || U.safeInt(nm.monthsLeft, 0) > 0)) {
       if (nm.monthly !== undefined) estNaming = U.safeNum(nm.monthly, 0);
       else if (nm.yearly !== undefined) estNaming = U.safeNum(nm.yearly, 0) / 12.0;
       else if (nm.annualValue !== undefined) estNaming = U.safeNum(nm.annualValue, 0) / 12.0;
@@ -1010,7 +1011,7 @@
         const parcel = U.safeNum(d.parcel, 0);
         const rest = d.rest !== undefined ? U.safeNum(d.rest, parcel * left) : parcel * left;
         if (rest <= 0) continue;
-        const due = Math.round(Math.min(parcel, rest));
+        const due = Math.round(left <= 1 ? rest : Math.min(parcel, rest));
         transferDebtParcel += due;
         transferDebtTotal += Math.round(rest);
         transferDebtItems.push({
@@ -1035,8 +1036,14 @@
     const sponsorOnly = estFixedSponsor + estVarSponsor;
 
     const netMarginPct = estMonthlyRev > 0 ? U.roundTo((estProjectedNet / estMonthlyRev) * 100, 1) : 0.0;
-    const debtRoomInfo = computeTransferDebtRoom(totalPayroll, transferDebtTotal);
-    const transferBanned = Boolean(uTeam && uTeam.transferBanned);
+    // #21872 transferDebtCap memakai #20249 userMonthlyPayroll (senior*loanShare + youth*loanShare + loanOutPay)
+    const debtRoomInfo = computeTransferDebtRoom(combinedPayroll, transferDebtTotal);
+    // #21874 transferBanned + #21881 cashOverDebtLimit: punya transferDebt aktif (rest>0 && left>0) DAN -budget > 0.10 * sum(rawSeniorSalaries)
+    const rawSeniorSum = U.safeNum(ex.seniorRawSalaries !== undefined ? ex.seniorRawSalaries : seniorPayrollOnly, 0);
+    const transferBanned = Boolean(
+      (uTeam && uTeam.transferBanned)
+      || (transferDebtItems.length > 0 && curBudget < 0 && (-curBudget) > rawSeniorSum * 0.10)
+    );
 
     return {
       ...cashflowMeta,
@@ -1052,7 +1059,8 @@
       estNaming,
       estShop,
       estMember,
-      seniorPayroll: Math.round(totalPayroll),
+      seniorPayroll: Math.round(seniorPayrollOnly),
+      loanOutPay: Math.round(loanOutPay),
       youthPayroll: Math.round(youthPayroll),
       totalPayrollAll: Math.round(combinedPayroll),
       ctCost,
@@ -1087,7 +1095,8 @@
         tv: estTvQuota,
         shop: estShop,
         payroll: Math.round(combinedPayroll),
-        seniorPayroll: Math.round(totalPayroll),
+        seniorPayroll: Math.round(seniorPayrollOnly),
+        loanOutPay: Math.round(loanOutPay),
         youthPayroll: Math.round(youthPayroll),
         stadiumOps: Math.round(stadiumOps),
         ctCost,

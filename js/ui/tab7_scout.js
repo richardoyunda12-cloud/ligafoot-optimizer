@@ -840,8 +840,12 @@ function renderScoutBlueprint() {
       const mv = Number(p.marketValue) || 0;
       const lockedFree = Boolean(p.freeSigned);
       const lockedGk = p.pos === 'G' && gkCount <= 1;
-      let sellAdvice = `Auction <b>${fmtM(mv * 0.55)}–${fmtM(mv * 0.70)}</b> · Fixed <b>${fmtM(mv * 0.70)}</b> <span class="c-muted">(Hindari Sell Now 10–15%)</span>`;
-      if (lockedFree) sellAdvice = '<span class="c-amber">⚠ Terkunci freeNoSale (baru rekrut gratis — tunggu masa tunggu)</span>';
+      const feePct = Math.round((p.termFeeRate ?? 0) * 100);
+      const aucLo = p.estAuctionLowNet ?? Math.round(mv * 0.85 * (1 - (p.termFeeRate ?? 0)));
+      const aucHi = p.estAuctionHighNet ?? Math.round(mv * 1.20 * (1 - (p.termFeeRate ?? 0)));
+      const fixHi = p.estFixedMaxNet ?? Math.round(mv * 1.10 * (1 - (p.termFeeRate ?? 0)));
+      let sellAdvice = `Lelang Net <b>${fmtM(aucLo)}–${fmtM(aucHi)}</b> (85–120% − ${feePct}% fee) · Fixed maks <b>${fmtM(fixHi)}</b> <span class="c-muted">(Hindari Sell Now −10/15%)</span>`;
+      if (lockedFree) sellAdvice = '<span class="c-amber">⚠ Terkunci freeNoSale (baru rekrut gratis — tunggu 365 hari)</span>';
       else if (lockedGk) sellAdvice = '<span class="c-amber">⚠ Terkunci squadMinGk (beli kiper cadangan dulu sebelum jual)</span>';
       swapPlanRows.push({ spItem, reps, sellAdvice, locked: lockedFree || lockedGk });
     }
@@ -849,7 +853,7 @@ function renderScoutBlueprint() {
     if (swapPlanRows.length) {
       extraSmartHtml += `<div style="margin-top:10px;padding:10px 11px;background:var(--bg2);border:1px solid rgba(56,189,248,.35);border-radius:11px;font-size:11.5px">
         <div style="font-weight:800;margin-bottom:4px" class="c-sky">🔄 Swap &amp; Sell Strategy Planner (Jual Mentok/Asing → Rekrut Pot ≥60)</div>
-        <div class="c-muted" style="font-size:10.5px;margin-bottom:8px">Jual pemain mentok/kelebihan asing via Auction 55–70% atau Fixed 70% MV, lalu tukar 1-klik ke wonderkid bebas Refuse.</div>
+        <div class="c-muted" style="font-size:10.5px;margin-bottom:8px">Jual pemain mentok/kelebihan asing via Lelang (bid 85–120% MV) atau Fixed (maks 110% MV) — dipotong fee kontrak, lalu tukar 1-klik ke wonderkid bebas Refuse.</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:8px">
           ${swapPlanRows.map(({ spItem, reps, sellAdvice, locked }) => {
             const p = spItem.p;

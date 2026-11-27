@@ -343,32 +343,42 @@
     4: 0.25,
   };
 
+  // Bytecode #3611 env[62] SEAT_COST_TIERS + #20282 seatCost (#20292 calculateStadiumExpansion)
   const STADIUM_SEAT_TIERS = {
     geral: [
-      [10000, 300],
-      [25000, 400],
-      [50000, 550],
-      [999999, 800],
+      [1000, 80],
+      [2500, 160],
+      [3500, 240],
+      [10000, 500],
+      [18000, 700],
+      [20000, 700],
+      [22000, 800],
     ],
     arquibancada: [
-      [15000, 500],
-      [35000, 700],
-      [65000, 950],
-      [999999, 1400],
+      [5000, 120],
+      [15000, 380],
+      [30000, 640],
+      [60000, 700],
+      [80000, 1400],
+      [99000, 1400],
     ],
     cadeiras: [
-      [10000, 450],
-      [25000, 600],
-      [45000, 850],
-      [999999, 1200],
+      [1000, 300],
+      [2000, 600],
+      [3000, 750],
+      [5000, 800],
+      [9000, 1200],
+      [10000, 1200],
     ],
     camarotes: [
       [100, 1500],
-      [250, 2200],
-      [500, 3200],
-      [750, 4800],
+      [200, 3500],
+      [500, 4000],
+      [600, 6000],
+      [700, 6400],
+      [800, 6400],
+      [900, 7000],
       [1000, 7300],
-      [999999, 7300],
     ],
   };
 
@@ -543,15 +553,55 @@
   const LOCKER_HIT_PER_PLAYER = 0.01;
   const LOCKER_HIT_CAP = 0.04;
 
+  // #25089 AI_COUNTER {min:1.1, max:1.4, stretch:1.3} (E[maxWilling]=1.25x); #25091 AI_OFFER_MUL
   const COUNTER_MAX_NORMAL = 1.40;
-  const COUNTER_AVG_REALIZED = 1.39;
+  const COUNTER_AVG_REALIZED = 1.25;
   const COUNTER_ARAB_BONUS = 2.50;
   const ARAB_OFFER_MIN_MUL = 2.50;
   const ARAB_OFFER_MAX_MUL = 3.00;
+  const AI_OFFER_MUL = { young: 1.50, mid: 1.35, old: 1.30 };
 
-  const SELL_TAX_THRESHOLD = 1500000;
-  const SELL_TAX_LOW = 0.10;
-  const SELL_TAX_HIGH = 0.15;
+  // Legacy aliases deprecated (#25088 saleFeeRate = terminationFeeRate(contractDays); incoming offer = 0%)
+  const SELL_TAX_THRESHOLD = 0;
+  const SELL_TAX_LOW = 0.0;
+  const SELL_TAX_HIGH = 0.0;
+
+  // Bytecode #24721 windowsOf (realTransferWindows per negara, MM-DD)
+  const TRANSFER_WINDOW_DEFAULT = [['01-01', '02-02'], ['06-15', '09-01']];
+  const TRANSFER_WINDOWS = {
+    BR: [['01-01', '03-03'], ['07-20', '09-11']],
+    AR: [['01-01', '02-28'], ['06-20', '08-10']],
+    CL: [['01-01', '02-28'], ['06-20', '08-10']],
+    CO: [['01-01', '02-28'], ['06-20', '08-10']],
+    PE: [['01-01', '02-28'], ['06-20', '08-10']],
+    UY: [['01-01', '02-28'], ['06-20', '08-10']],
+    PY: [['01-01', '02-28'], ['06-20', '08-10']],
+    EC: [['01-01', '02-28'], ['06-20', '08-10']],
+    BO: [['01-01', '02-28'], ['06-20', '08-10']],
+    VE: [['01-01', '02-28'], ['06-20', '08-10']],
+    ES: [['01-01', '02-02'], ['07-01', '09-01']],
+    DE: [['01-01', '02-02'], ['07-01', '08-31']],
+    IT: [['01-01', '02-02'], ['06-29', '09-01']],
+    PT: [['01-01', '02-02'], ['07-01', '09-01']],
+    SC: [['01-01', '02-02'], ['06-15', '09-03']],
+    US: [['02-01', '04-24'], ['07-24', '08-21']],
+    CA: [['02-01', '04-24'], ['07-24', '08-21']],
+    JP: [['01-06', '03-27'], ['07-17', '08-14']],
+    KR: [['01-01', '03-26'], ['07-01', '07-31']],
+    CN: [['01-01', '02-28'], ['07-01', '07-31']],
+    NO: [['01-07', '03-31'], ['07-15', '08-31']],
+    SE: [['01-07', '03-31'], ['07-15', '08-31']],
+    FI: [['01-07', '03-31'], ['07-15', '08-31']],
+    IS: [['01-07', '03-31'], ['07-15', '08-31']],
+    FO: [['01-07', '03-31'], ['07-15', '08-31']],
+    IE: [['01-07', '03-31'], ['07-15', '08-31']],
+    LT: [['01-07', '03-31'], ['07-15', '08-31']],
+    LV: [['01-07', '03-31'], ['07-15', '08-31']],
+    EE: [['01-07', '03-31'], ['07-15', '08-31']],
+    BY: [['01-07', '03-31'], ['07-15', '08-31']],
+    KZ: [['01-07', '03-31'], ['07-15', '08-31']],
+    SA: [['01-01', '02-01'], ['06-15', '09-10']],
+  };
 
   // Bytecode #3886 env[54..56], #24929 minForceFor, #24933 buyerAcceptsPlayer, #25045 findInterestedTeams:
   // Kelayakan klub AI pembeli TIDAK memeriksa budget kas klub; memakai minForce divisi/rep, REP_CEILING, & veteranFits.
@@ -630,18 +680,13 @@
     slumpChanceHigh: 0.50,
   };
 
-  // Bytecode #3730 & #20408: Loan Buy-Option AI Decision (L806200)
+  // Bytecode #21089 loanBuyDecisionChance & #3611 env[241] LOAN_OPTION
   const LOAN_OPTION = {
-    baseChance: 0.15,
-    minGames: 5,
-    gamesTarget: 20,
-    gamesBonus: 0.35,
-    goalsBonusPerGoal: 0.02,
-    goalsBonusMax: 0.25,
-    youngAge: 23,
-    youngBonus: 0.15,
-    fitBonus: 0.15,
-    maxChance: 0.85,
+    minMul: 1,
+    star: 0.15,
+    near: 0.85,
+    maxMul: 3,
+    maxChance: 0.95,
   };
 
   // Bytecode #3640 & #35210: Shout Decay per pengulangan shout yang sama dalam 25 menit [1, 0.5, 0]
@@ -891,9 +936,14 @@
       COUNTER_MAX_NORMAL,
       COUNTER_AVG_REALIZED,
       COUNTER_ARAB_BONUS,
+      ARAB_OFFER_MIN_MUL,
+      ARAB_OFFER_MAX_MUL,
+      AI_OFFER_MUL,
       SELL_TAX_THRESHOLD,
       SELL_TAX_LOW,
       SELL_TAX_HIGH,
+      TRANSFER_WINDOW_DEFAULT,
+      TRANSFER_WINDOWS,
       BUYER_MIN_FORCE_BY_DIV,
       BUYER_MIN_FORCE_BY_REP,
       PURCHASE_OFFER_MAX_ASK_MUL,

@@ -263,24 +263,38 @@
     return 1.0;
   }
 
-  // Bytecode #20408 loanBuyDecisionChance (#3730 LOAN_OPTION L806200)
-  // games = max(seasonGames, round(seasonMinutes/70)); jika games < 5 -> 0
-  // chance = 0.15 + min(1, games/20)*0.35 + min(0.25, goals*0.02) + (age<=23 ? 0.15 : 0) + (!injured ? 0.15 : 0), cap 0.85
-  function loanBuyDecisionChance(p) {
-    if (!p || !p.loanedFrom || safeNum(p.loanBuyFee, 0) <= 0) return 0;
-    const cfg = C.LOAN_OPTION || {
-      baseChance: 0.15, minGames: 5, gamesTarget: 20, gamesBonus: 0.35,
-      goalsBonusPerGoal: 0.02, goalsBonusMax: 0.25, youngAge: 23, youngBonus: 0.15, fitBonus: 0.15, maxChance: 0.85,
-    };
-    const mins = safeNum(p.seasonMinutes, 0);
-    const games = Math.max(safeInt(p.seasonGames ?? p.gamesPlayed, 0), Math.round(mins / 70.0));
-    if (games < (cfg.minGames || 5)) return 0;
-    let chance = cfg.baseChance || 0.15;
-    chance += Math.min(1.0, games / (cfg.gamesTarget || 20)) * (cfg.gamesBonus || 0.35);
-    chance += Math.min(cfg.goalsBonusMax || 0.25, safeInt(p.seasonGoals, 0) * (cfg.goalsBonusPerGoal || 0.02));
-    if (safeInt(p.age, 25) <= (cfg.youngAge || 23)) chance += (cfg.youngBonus || 0.15);
-    if (!p.injured) chance += (cfg.fitBonus || 0.15);
-    return clamp(roundTo(chance, 2), 0, cfg.maxChance || 0.85);
+  // Bytecode #21089 loanBuyDecisionChance(buyFee, marketValue, stats, buyerBudget)
+  function loanBuyDecisionChance(p, buyerBudget = null) {
+    if (!p || !p.loanedFrom) return 0;
+    const buyFee = safeNum(p.loanBuyPrice ?? p.loanBuyFee, 0);
+    if (buyFee <= 0) return 0;
+    if (buyerBudget !== null && buyerBudget !== undefined && Number.isFinite(Number(buyerBudget)) && Number(buyerBudget) < buyFee) {
+      return 0;
+    }
+    const mv = Math.max(1, safeNum(p.marketValue, 1));
+    const r = buyFee / mv;
+    let chance = r <= 0.9 ? 0.75 : (r <= 1.1 ? 0.55 : (r <= 1.3 ? 0.35 : 0.20));
+    const games = safeInt(p.seasonGames ?? p.gamesPlayed, 0);
+    const rating = safeNum(p.avgRating ?? p.rating, 0);
+    if (games < 5) chance *= 0.4;
+    else if (rating >= 7) chance *= 1.3;
+    else if (rating > 0 && rating < 6) chance *= 0.5;
+    const forceTo = safeNum(p.forceTo ?? p.force, 0);
+    const forceFrom = safeNum(p.forceFrom ?? p.loanForceFrom ?? p.force, 0);
+    if (forceTo > forceFrom) chance *= 1.15;
+    const maxCap = (C.LOAN_OPTION && C.LOAN_OPTION.maxChance) || 0.95;
+    return clamp(roundTo(chance, 2), 0, maxCap);
+  }
+
+  // Bytecode #24721 windowsOf + #24722 windowOpenOn (realTransferWindows per negara)
+  function isWindowOpenOn(country, dateStr) {
+    const mmdd = String(dateStr || '').slice(5, 10);
+    if (mmdd.length < 5) return true;
+    const code = String(country || 'BR').toUpperCase();
+    const wins = (C.TRANSFER_WINDOWS && C.TRANSFER_WINDOWS[code])
+      || C.TRANSFER_WINDOW_DEFAULT
+      || [['01-01', '02-02'], ['06-15', '09-01']];
+    return wins.some(([start, end]) => mmdd >= start && mmdd <= end);
   }
 
   // Bytecode #19869 fixedSponsorParcel
@@ -829,6 +843,7 @@
     injurySaleFactor,
     retirementChance,
     loanBuyDecisionChance,
+    isWindowOpenOn,
     fixedSponsorParcel,
     parseStatementRow,
     daysBetweenDates,

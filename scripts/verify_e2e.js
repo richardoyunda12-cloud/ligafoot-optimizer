@@ -162,6 +162,29 @@ function runStage2Engine(savePath) {
     assert(typeof topUnlocked.offerSlotsRange === 'string' && topUnlocked.offerSlotsRange.includes('–'), 'offerSlotsRange hilang');
   }
 
+  // Regresi v8.10.5 (Batch 1 Bytecode Parity): saleFeeRate vs 0% incoming/Arab, 1.25x counter, loanBuyPrice, stadium tier single-rate, shop clubHistory[0], kindScale=1.0, loanLimit repLvl=0, installment ceil/floor
+  assert.strictEqual(global.LFEngine.roster.calcNetSaleProceeds(1000000, 365, false), 700000, 'Jual manual >180d harus kena 30% fee (#25088)');
+  assert.strictEqual(global.LFEngine.roster.calcNetSaleProceeds(1000000, 365, true), 1000000, 'Incoming/Arab offer harus 0% fee (#25025)');
+  assert.strictEqual(global.LFEngine.config.COUNTER_AVG_REALIZED, 1.25, 'COUNTER_AVG_REALIZED harus 1.25 (#25089)');
+  assert.strictEqual(global.LFEngine.economy.calcExpansionCost('cadeiras', 5000, 1000, 1, false), 3600000, 'Cadeiras 5000+1000 div1 harus single tier 6000->1200*3*1000 (#20282)');
+  assert.strictEqual(global.LFEngine.economy.calcExpansionCost('geral', 800, 500, 1, false), 240000, 'Geral 800+500 harus single tier 1300->160*3*500 (#20282)');
+  const inst24 = global.LFEngine.economy.computeInstallmentPlan(1000001, 24);
+  assert.strictEqual(inst24.dp, 250001, 'DP cicilan harus Math.ceil(p*0.25) (#21875)');
+  assert.strictEqual(inst24.monthly, Math.floor(inst24.totalFinanced / 24), 'Cicilan bulanan harus Math.floor(owed/m) (#21875)');
+  assert.strictEqual(global.LFEngine.economy.computeLoanLimit('ES', 1, 5), global.LFEngine.economy.computeLoanLimit('ES', 1, 0), 'LoanLimit harus pakai repLvl=0 (#20258)');
+  const simCont1 = global.LFEngine.economy.simulateStadiumV9({ geral: 10000, arquibancada: 30000, cadeiras: 5000, camarotes: 500 }, 1.0, 80, 1, false, false, 0, { kind: 'continental1', homeRepLvl: 3, country: 'ID' });
+  const simLigaSameBonus = global.LFEngine.economy.simulateStadiumV9({ geral: 10000, arquibancada: 30000, cadeiras: 5000, camarotes: 500 }, 1.0, 80, 1, false, false, 0, { kind: 'cup', homeRepLvl: 3, country: 'ID' });
+  const simLigaBase = global.LFEngine.economy.simulateStadiumV9({ geral: 10000, arquibancada: 30000, cadeiras: 5000, camarotes: 500 }, 1.0, 80, 1, false, false, 0, { kind: 'league', homeRepLvl: 3, country: 'ID' });
+  assert.strictEqual(simLigaSameBonus.totalAtt, simLigaBase.totalAtt, 'cup kindScale harus 1.0 sama dengan league (#20312)');
+  assert(simCont1.totalAtt > simLigaBase.totalAtt, 'continental1 harus naik karena +0.30 fillBonus');
+  assert.strictEqual(global.LFEngine.utils.loanBuyDecisionChance({ loanedFrom: 'x', loanBuyPrice: 900000, marketValue: 1000000, seasonGames: 10, avgRating: 7.2, forceTo: 45, forceFrom: 42 }, 800000), 0, 'Budget < buyFee harus 0 (#21089)');
+  assert.strictEqual(global.LFEngine.utils.loanBuyDecisionChance({ loanedFrom: 'x', loanBuyPrice: 900000, marketValue: 1000000, seasonGames: 10, avgRating: 7.2, forceTo: 45, forceFrom: 42 }, 1500000), 0.95, '0.75*1.3*1.15 capped 0.95 (#21089)');
+  assert.strictEqual(global.LFEngine.utils.isWindowOpenOn('ES', '2032-07-15'), true, 'ES window Jul harus buka');
+  assert.strictEqual(global.LFEngine.utils.isWindowOpenOn('ES', '2032-11-28'), false, 'ES window Nov harus tutup');
+  if (D.shop && D.shop.hype_events) {
+    assert(Array.isArray(D.shop.hype_events), 'shop.hype_events harus array');
+  }
+
   // 2. Best XI & Rotation XI & War Room Matchup Parity
   assert.strictEqual(D.bestXi.xi.length, 11, 'Best XI harus tepat 11 pemain');
   assert.strictEqual(D.rotXi.xi.length, 11, 'Rotation XI harus tepat 11 pemain');
