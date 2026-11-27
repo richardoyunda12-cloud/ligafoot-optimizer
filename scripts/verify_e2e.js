@@ -370,7 +370,13 @@ function runStage2Engine(savePath) {
     s56.players[seniorWk.id].gf = 0.1;
   }
   if (s28.players && s28.players[seniorWk.id]) {
-    s28.players[seniorWk.id].gf = Math.max(0, Number((s28.players[seniorWk.id].gf - 0.35).toFixed(3)));
+    const curGf = Number(s28.players[seniorWk.id].gf || 0);
+    if (curGf >= 0.15) {
+      s28.players[seniorWk.id].gf = Math.max(0, Number((curGf - Math.min(curGf, 0.35)).toFixed(3)));
+    } else {
+      s28.players[seniorWk.id].force = Math.max(1, Number(s28.players[seniorWk.id].force || 1) - 1);
+      s28.players[seniorWk.id].gf = 0.85;
+    }
   }
   const synthHist = { [uid]: { [d56]: s56, [d28]: s28 } };
   const res3 = global.LFEngine.club.analyzeSave(save, db, synthHist);

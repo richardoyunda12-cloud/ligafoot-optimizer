@@ -93,6 +93,7 @@ function matchRosterFilter(p, flt) {
   if (flt === 'DECLINE') return p.isDeclining || p.age >= p.sellWarnAge;
   if (flt === 'NONSTACK') return p.nonStack;
   if (flt === 'TRAP') return p.isTrap;
+  if (flt === 'SGEM') return Boolean(p.isSuperGem);
   if (flt === 'GEM') return p.isGem;
   if (flt === 'INJURED') return Boolean(p.injured);
   if (flt === 'UNHAPPY') return p.mood === 'unhappy' || p.roleSore || p.raiseSore;
@@ -175,6 +176,7 @@ function renderRosterQuickChips() {
     ['LOCAL', '🏠 Lokal'],
     ['GOLDEN', '✅ Golden'],
     ['DECLINE', '📉 Regresi'],
+    ['SGEM', '⭐ Super Gem'],
     ['GEM', '💎 Gem'],
     ['INJURED', '🏥 Cedera'],
     ['NONSTACK', '⚠ Non-Stack'],
@@ -237,11 +239,27 @@ function renderRosterActionRadar() {
 
   const bt = D.bTeamInfo || null;
   const btCands = (bt && Array.isArray(bt.candidates)) ? bt.candidates : [];
+  const ra = D.raiseAsksAudit || null;
+  const openRaises = (ra && Array.isArray(ra.openAsks)) ? ra.openAsks : [];
 
-  if (!harvest.length && !cutList.length && !btCands.length) {
+  if (!harvest.length && !cutList.length && !btCands.length && !openRaises.length) {
     box.innerHTML = '';
     return;
   }
+
+  const raiseHtml = openRaises.length ? `
+    <div style="margin-top:8px;background:var(--bg2);border:1px solid rgba(245,158,11,.45);border-radius:8px;padding:8px 10px;font-size:11px">
+      <div class="flex-between" style="gap:6px;flex-wrap:wrap;margin-bottom:4px">
+        <b class="c-amber">💼 Antrean Minta Naik Gaji (OPEN ${ra.openCount}/${ra.maxOpen})</b>
+        <span class="badge ${ra.slotsFull ? 'b-good' : 'b-warn'} mono">${ra.slotsFull ? '3/3 PENUH — Tahan Pemain Lain!' : `Sisa ${ra.maxOpen - ra.openCount} Slot`}</span>
+      </div>
+      <div class="c-muted" style="font-size:10.5px;margin-bottom:4px">
+        Status <b>open</b> aman (0 UNHAPPY). Klik <b>Tolak</b> memicu <code>raiseSore</code> (UNHAPPY &amp; growth 0.5x s.d. akhir musim — aman hanya jika total UNHAPPY &lt;4); klik <b>Terima</b> me-reset <code>salaryCuts = 0</code> (bisa langsung Potong Gaji ulang).
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${openRaises.map(a =>
+        `<span class="tl-pill" onclick="openPlayerDrawer('roster','${escJs(a.id)}')"><b>${esc(a.name)}</b> <span class="mono">${fmtPos(a.pos)} F${a.force} · ${fmtM(a.oldSalary)}→${fmtM(a.askSalary)} (<b class="c-amber">+${a.increasePct}%</b>)</span></span>`
+      ).join('')}</div>
+    </div>` : '';
 
   const btHtml = btCands.length ? `
     <div style="margin-top:8px;background:var(--bg2);border:1px solid rgba(168,85,247,.35);border-radius:8px;padding:8px 10px;font-size:11px">
@@ -266,7 +284,7 @@ function renderRosterActionRadar() {
 
   const radarOpen = typeof window === 'undefined' || window.innerWidth > 768;
   box.innerHTML = `<details class="glossary-inline" style="margin:6px 0 8px" ${radarOpen ? 'open' : ''}>
-    <summary>🎯 <b>Radar Keputusan Cepat:</b> Panen Jual (${harvest.length}) · Potong Gaji (${cutList.length}) · Routing Tim B (${btCands.length})</summary>
+    <summary>🎯 <b>Radar Keputusan Cepat:</b> Panen Jual (${harvest.length}) · Potong Gaji (${cutList.length}) · Routing Tim B (${btCands.length})${openRaises.length ? ` · Naik Gaji (${openRaises.length}/3)` : ''}</summary>
     <div class="grid g2" style="gap:8px;margin-top:6px">
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px">
         <div style="font-weight:800;margin-bottom:5px" class="c-gold">🌾 Radar Panen / Jual di Puncak Harga</div>
@@ -298,6 +316,7 @@ function renderRosterActionRadar() {
         }).join('') : '<div class="c-muted">Semua pemain bergaji besar sudah dipakai kuota potong gajinya.</div>'}
       </div>
     </div>
+    ${raiseHtml}
     ${btHtml}
   </details>`;
 }
@@ -338,7 +357,7 @@ function renderRosterTable() {
     const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
     const actB = { crit: 'b-crit', warn: 'b-warn', good: 'b-good', accent: 'b-accent', info: 'b-info', muted: 'b-muted' }[p.actionCls] || 'b-muted';
     const slumpBadge = (p.fineSlump > 0) ? ` <span class="badge b-crit" title="${esc(tipFor('SLUMP'))}">SLUMP -${p.fineSlumpPct}%</span>` : '';
-    const soreBadge = p.raiseSore ? ' <span class="badge b-crit" title="Kecewa permintaan naik gaji ditolak (UNHAPPY)">raiseSore</span>' : '';
+    const soreBadge = p.raiseSore ? ' <span class="badge b-crit" title="Kecewa permintaan naik gaji ditolak (UNHAPPY)">raiseSore</span>' : (p.openRaiseAsk ? ` <span class="badge b-warn" title="Minta naik gaji +${p.openRaiseAsk.increasePct}% (status open — 0 unhappy)">💼 +${p.openRaiseAsk.increasePct}%</span>` : '');
     const narTag = p.noAutoRenew ? '<div class="c-muted" style="font-size:10px">noAutoRenew ✓</div>' : '';
     const loopTag = p.autoRenewLoophole ? `<div class="c-sky" style="font-size:10px" title="${esc(tipFor('LOOPHOLE'))}">💎 Auto-Renew 0%</div>` : '';
     const isF = isRosterForeign(p);
@@ -350,7 +369,7 @@ function renderRosterTable() {
         <div><a class="clickable-name" onclick="openPlayerDrawer('roster','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.top ? '👑' : (p.star ? '⭐' : '')} ${p.injured ? `<span class="badge b-crit">🏥${p.injuryDays}d</span>` : ''}${slumpBadge}${soreBadge}</div>
         <div class="origin-meta">
           ${originNoteHtml(p)}
-          ${p.isTrap ? `<span class="badge b-crit origin-note" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isGem ? `<span class="badge b-good origin-note" title="${esc(tipFor('GEM'))}">GEM</span>` : '')}
+          ${p.isTrap ? `<span class="badge b-crit origin-note" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isSuperGem ? `<span class="badge b-accent origin-note" title="${esc(tipFor('SGEM'))}">⭐ SUPER GEM</span>` : (p.isGem ? `<span class="badge b-good origin-note" title="${esc(tipFor('GEM'))}">GEM</span>` : ''))}
         </div>
         <div class="inline-sticky-meta">
           <span class="badge ${actB}">${esc(p.action)}</span>

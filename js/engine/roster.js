@@ -107,6 +107,12 @@
     const potGap = potCap - force;
     const isTrap = (potential - potCap) >= 4;
     const isGem = (potCap - potential) >= 4 || (age <= 22 && potGap >= 8) || (age <= 23 && potGap >= 6 && !stackInfo.nonStack);
+    const isSuperGem = Boolean(
+      isGem && !isTrap && !stackInfo.nonStack && (
+        (potCap >= 70 && age <= 22 && potGap >= 15)
+        || (potCap - potential >= 25 && age <= 21 && potGap >= 20)
+      )
+    );
 
     // #25088 saleFeeRate (terminationFeeRate kontrak untuk jual manual) vs #25025/#25089/#25091 (incoming & Arab 0% fee!)
     const termFeeRate = U.terminationFeeRate(contractDays);
@@ -259,6 +265,7 @@
       isDeclining,
       isTrap,
       isGem,
+      isSuperGem,
       estInitBid: marketValue,
       estIncomingBase,
       estRealSale: estCounter25,

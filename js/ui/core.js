@@ -297,6 +297,7 @@ function buildBadgeTips() {
     SCARCE: `Klub AI hanya punya 2 stok di sektor ini — harga naik +${Math.round((sc.starter || 0.5) * 100)}% (pemain terbaik) atau +${Math.round((sc.backup || 0.3) * 100)}% (pelapis). Jika cuma 1 stok, klub menolak jual (LAST_POS).`,
     TRAP: 'Jebakan Potensi: Potential tampilan jauh lebih tinggi daripada PotCap asli (≥4 poin) — pertumbuhannya bakal mentok lebih cepat!',
     GEM: 'Hidden Gem / Permata Tersembunyi: PotCap asli lebih tinggi dari tampilan atau punya ruang tumbuh sangat besar.',
+    SGEM: 'Super Gem: Wonderkid muda (≤22 thn) non-trap & non-stack-clash dengan PotCap ≥70 dan ruang tumbuh ≥15–20 Force!',
     GOD: 'Kombinasi Skill Stack kelas atas (efek kedua skill menumpuk penuh di Match Engine).',
     LOCAL: 'Pemain domestik (satu negara dengan klubmu) — tidak memakan kuota pemain asing & adaptasi 2x lebih cepat!',
     INJ: 'Pemain sedang cedera.',
@@ -609,7 +610,8 @@ function openPlayerDrawer(kind, id) {
         ${p.injured ? `<span class="badge b-crit">🏥 Cedera ${p.injuryDays}d</span>` : ''}
         ${p.fineSlump > 0 ? `<span class="badge b-crit">SLUMP -${p.fineSlumpPct}% (${p.fineSlumpDays}d)</span>` : ''}
         ${p.isTrap ? `<span class="badge b-crit" title="${esc(tipFor('TRAP'))}">TRAP</span>` : ''}
-        ${p.isGem ? `<span class="badge b-good" title="${esc(tipFor('GEM'))}">GEM</span>` : ''}
+        ${p.isSuperGem ? `<span class="badge b-accent" title="${esc(tipFor('SGEM'))}">💎 SUPER GEM</span>` : (p.isGem ? `<span class="badge b-good" title="${esc(tipFor('GEM'))}">GEM</span>` : '')}
+        ${p.openRaiseAsk ? `<span class="badge b-warn" title="Permintaan naik gaji OPEN (belum dijawab)">💼 Naik Gaji +${p.openRaiseAsk.increasePct}%</span>` : ''}
       </div>
 
       <div class="drawer-sec">

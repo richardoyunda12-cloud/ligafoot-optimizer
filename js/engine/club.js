@@ -844,12 +844,74 @@
     };
   }
 
+  function buildRaiseAsksAudit(save, userRoster) {
+    const curSeason = U.safeInt(save && save.season, 1);
+    const rawAsks = Array.isArray(save && save.raiseAsks) ? save.raiseAsks : [];
+    const byId = new Map((userRoster || []).map(p => [String(p.id), p]));
+    const openAsks = [];
+    const acceptedResetCuts = [];
+
+    for (const a of rawAsks) {
+      if (!a || typeof a !== 'object') continue;
+      const pid = String(a.pid || '');
+      const p = byId.get(pid);
+      if (!p) continue;
+      const st = String(a.status || '').toLowerCase();
+      const oldSal = Math.round(U.safeNum(a.oldSalary, p.salary));
+      const askSal = Math.round(U.safeNum(a.salary, p.salary));
+      const incPct = oldSal > 0 ? Math.round(((askSal - oldSal) / oldSal) * 100) : 0;
+
+      if (st === 'open') {
+        const entry = {
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          age: p.age,
+          force: p.force,
+          squadRank: p.squadRank || 99,
+          contractDays: p.contractDays,
+          oldSalary: oldSal,
+          askSalary: askSal,
+          increasePct: incPct,
+        };
+        openAsks.push(entry);
+        p.openRaiseAsk = { oldSalary: oldSal, askSalary: askSal, increasePct: incPct };
+      } else if (
+        st === 'accepted'
+        && U.safeInt(a.season, curSeason) === curSeason
+        && !p.salaryCutLocked
+        && p.contractDays >= (C.RENEWAL_DISCOUNT_FROM_DAYS || 60)
+        && p.salary >= 50000
+      ) {
+        acceptedResetCuts.push({
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          force: p.force,
+          salary: p.salary,
+          floorFactor: p.salaryFloorFactor || 0.90,
+          estSaveMo: Math.round(p.salary * Math.max(0, 1 - (p.salaryFloorFactor || 0.90))),
+        });
+      }
+    }
+
+    acceptedResetCuts.sort((a, b) => b.estSaveMo - a.estSaveMo);
+    return {
+      season: curSeason,
+      maxOpen: 3,
+      openCount: openAsks.length,
+      slotsFull: openAsks.length >= 3,
+      openAsks,
+      acceptedResetCuts,
+    };
+  }
+
   function buildPriorityAlerts(
     userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
     namingObj, sponsorsObj, ticketMul, shopAudit, memberAudit,
     holes, upcomingMatches, trainAudit, preContracts, userDiv,
     autoGuard = null, bestXi = null, optLigaPrices = null, activeFormation = '4-3-3',
-    bTeamInfo = null, presetAudit = null
+    bTeamInfo = null, presetAudit = null, raiseAsksAudit = null
   ) {
     const alerts = [];
     const add = (sev, cat, title, action) => alerts.push({ sev, cat, title, action });
@@ -1043,6 +1105,30 @@
       add('MEDIUM', 'Preset Tiket',
         presetAudit.summaryAlert || presetAudit.runinAlert,
         'Buka Tab 5B (Tiket & Preset) untuk mengganti preset aktif & memperbaiki tarif Run-in.');
+    }
+
+    if (raiseAsksAudit && raiseAsksAudit.openCount > 0) {
+      const raNames = raiseAsksAudit.openAsks
+        .map(x => `${x.name} (+${x.increasePct}%, ${Math.round(x.askSalary / 1000)}K)`)
+        .join(', ');
+      const quotaNote = raiseAsksAudit.slotsFull
+        ? 'Slot antrean 3/3 PENUH — membiarkannya open aman (0 unhappy) dan menahan pemain lain agar tidak ikut meminta! '
+        : '';
+      const unSafely = unhappyCnt < (C.LOCKER_UNHAPPY_MIN || 4) - 1
+        ? `Total unhappy masih ${unhappyCnt}/3 (aman tolak maks ${Math.max(0, 3 - unhappyCnt)} lagi tanpa penalti tim).`
+        : `Total unhappy sudah ${unhappyCnt} (JANGAN tolak kalau tidak ingin memicu penalti ruang ganti ≥4 unhappy!).`;
+      add('MEDIUM', 'Naik Gaji',
+        `${raiseAsksAudit.openCount}/3 permintaan naik gaji status 'open': ${raNames}.`,
+        `${quotaNote}${unSafely} Jika Terima: salaryCuts otomatis reset ke 0 sehingga kamu bisa langsung Potong Gaji lagi!`);
+    }
+
+    if (raiseAsksAudit && raiseAsksAudit.acceptedResetCuts && raiseAsksAudit.acceptedResetCuts.length) {
+      const topCuts = raiseAsksAudit.acceptedResetCuts.slice(0, 4)
+        .map(x => `${x.name} (${Math.round(x.salary / 1000)}K, hemat -${Math.round(x.estSaveMo / 1000)}K)`)
+        .join(', ');
+      add('HIGH', 'Potong Gaji',
+        `${raiseAsksAudit.acceptedResetCuts.length} pemain pasca-naik gaji terbuka lagi jatah Potong Gaji (salaryCuts = 0)!`,
+        `${topCuts}. Terima naik gaji me-reset salaryCuts ke 0 (#39924) — potong -10% (0 risiko mood) atau cadangkan #12+ dulu sebelum renew -12%.`);
     }
 
     return alerts;
@@ -2191,11 +2277,13 @@
       promisedMap: (save.matchBonus && typeof save.matchBonus === 'object') ? save.matchBonus : {},
     };
 
+    const raiseAsksAudit = buildRaiseAsksAudit(save, userRoster);
+
     const alerts = buildPriorityAlerts(
       userRoster, youthRanked, moodsMap, unhappyCnt, lockerHit,
       uTeam.naming, uTeam.sponsors, ticketMul, shopAudit, memberAudit,
       holes, upcomingMatches, trainAudit, preContracts, userDiv,
-      autoGuard, bestXi, optLiga.prices, activeFormation, bTeamInfo, presetAudit
+      autoGuard, bestXi, optLiga.prices, activeFormation, bTeamInfo, presetAudit, raiseAsksAudit
     );
 
     const rawLastLineup = (save.lastLineup && typeof save.lastLineup === 'object') ? save.lastLineup : null;
@@ -2543,7 +2631,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.9 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.10.10 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
@@ -2656,6 +2744,7 @@
       matchOrdersAudit,
       bTeamInfo,
       lastLineup,
+      raiseAsksAudit,
     };
 
     prog(100, `Selesai! (${parseSec}s)`);

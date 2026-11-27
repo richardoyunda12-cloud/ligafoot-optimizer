@@ -159,6 +159,9 @@ function getAlertActionSpec(a) {
   if (c.includes('slump')) {
     return { lbl: 'Filter Slump →', act: "openSquadWithFilter('SLUMP')" };
   }
+  if (c.includes('naik gaji') || c.includes('potong gaji')) {
+    return { lbl: 'Cek Radar Gaji →', act: "goToView('t3','t3-squad')" };
+  }
   if (c.includes('regresi')) {
     return { lbl: 'Filter Regresi →', act: "openSquadWithFilter('DECLINE')" };
   }
