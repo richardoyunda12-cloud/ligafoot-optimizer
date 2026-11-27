@@ -1,11 +1,11 @@
 {
-  "name": "LigaFoot Optimizer v8.3",
+  "name": "LigaFoot Optimizer v8.11.0",
   "short_name": "LigaFoot Opt",
-  "description": "Optimizer 360° LigaFoot Manager v8.3 (War Room, Best XI, Auto-Scout Moneyball, Tiket & Ekonomi Bytecode v9) — 100% lokal & offline di HP.",
+  "description": "Optimizer 360° LigaFoot Manager v8.11.0 (War Room, Best XI, Auto-Scout Moneyball, Tiket & Ekonomi Bytecode v9) — 100% lokal & offline di HP.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#070c12",
   "theme_color": "#070c12",
   "icons": [

@@ -1746,11 +1746,12 @@
     userRoster, oppXi, isHome, isKnockout, isBig,
     foreignCap = 7, userCountry = '', activeFormation = '4-3-3',
     yellowIds = null, safeRotate = false, repLevel = 3,
-    autoCond = null, activeFormationRaw = null
+    autoCond = null, activeFormationRaw = null, isNeutral = false
   ) {
     const oppAvg = U.safeNum(oppXi && oppXi.avgScore, 20.0);
     const oppXiPlayers = (oppXi && Array.isArray(oppXi.xi)) ? oppXi.xi.map(x => x.player || x) : [];
     const ySet = yellowIds ? new Set(yellowIds) : new Set();
+    const neutral = Boolean(isNeutral);
 
     let excludeForRec = null;
     if (safeRotate && ySet.size) {
@@ -1762,7 +1763,7 @@
 
     const rawActiveKey = activeFormationRaw || activeFormation || '4-3-3';
     const actSpec = resolveFormationSpec(rawActiveKey);
-    const condF = resolveMatchCondFactors(autoCond, isHome, false);
+    const condF = resolveMatchCondFactors(autoCond, isHome, neutral);
     const uCondOpts = {
       altHit: condF.altHit,
       energyMul: condF.userEnergyMul,
@@ -1787,6 +1788,7 @@
     const oppFocus = oppAi.aiFocus || 'Center';
     const oppPow = computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
       isHome: !isHome,
+      neutral,
       crowdOver70: true,
       style: oppStyle,
       marking: 'Heavy',
@@ -1807,6 +1809,7 @@
 
       const uPow = computeEngineSectorPower(res, spec.key, {
         isHome,
+        neutral,
         crowdOver70: true,
         style: trialStyle,
         marking: trialMark,
@@ -1815,10 +1818,10 @@
 
       // Evaluasi kedua opsi Attack Focus (#21822): Center (0.8*ATK + 0.2*MID) vs Wings (+2%/crosser)
       const simC = simulateMatchExpectation(uPow, oppPow, {
-        isHome, neutral: false, focus: 'Center', oppFocus, style: trialStyle, oppStyle, missMul: condF.missMul,
+        isHome, neutral, focus: 'Center', oppFocus, style: trialStyle, oppStyle, missMul: condF.missMul,
       });
       const simW = simulateMatchExpectation(uPow, oppPow, {
-        isHome, neutral: false, focus: 'Wings', oppFocus, style: trialStyle, oppStyle, missMul: condF.missMul,
+        isHome, neutral, focus: 'Wings', oppFocus, style: trialStyle, oppStyle, missMul: condF.missMul,
       });
       const optFocus = simC.xPts >= simW.xPts ? 'Center' : 'Wings';
       const sim = optFocus === 'Center' ? simC : simW;
@@ -1924,6 +1927,7 @@
     const effectiveOppPow = (finalAi.aiStyle !== oppStyle)
       ? computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
           isHome: !isHome,
+          neutral,
           crowdOver70: true,
           style: finalAi.aiStyle,
           marking: 'Heavy',
@@ -1966,10 +1970,10 @@
     const styleSims = {};
     for (const stTry of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
       const pTry = computeEngineSectorPower(bestXiObj, best.formation, {
-        isHome, crowdOver70: true, style: stTry, marking: bestMark, ...uCondOpts,
+        isHome, neutral, crowdOver70: true, style: stTry, marking: bestMark, ...uCondOpts,
       });
       styleSims[stTry] = simulateMatchExpectation(pTry, effectiveOppPow, {
-        isHome, neutral: false, focus: best.optFocus, oppFocus, style: stTry, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
+        isHome, neutral, focus: best.optFocus, oppFocus, style: stTry, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
       });
     }
 
@@ -1997,10 +2001,10 @@
         const p = it.player;
         const isPm = (p.s1 === 'PAS' || p.s2 === 'PAS' || p.s1 === 'ARM' || p.s2 === 'ARM');
         const pF9 = computeEngineSectorPower(bestXiObj, best.formation, {
-          isHome, crowdOver70: true, style: recStyle, marking: bestMark, falseNineId: p.id, ...uCondOpts,
+          isHome, neutral, style: recStyle, marking: bestMark, falseNineId: p.id, ...uCondOpts,
         });
         const simF9 = simulateMatchExpectation(pF9, effectiveOppPow, {
-          isHome, neutral: false, focus: best.optFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
+          isHome, neutral, focus: best.optFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
         });
         if (!bestF9Pick || simF9.xPts > bestF9Pick.sim.xPts) {
           bestF9Pick = { player: p, isPlaymaker: isPm, sim: simF9 };
@@ -2020,10 +2024,10 @@
         compareStyleSims[stName] = bestF9Pick.sim;
       } else {
         const pF9St = computeEngineSectorPower(bestXiObj, best.formation, {
-          isHome, crowdOver70: true, style: stName, marking: bestMark, falseNineId: finalF9Id, ...uCondOpts,
+          isHome, neutral, style: stName, marking: bestMark, falseNineId: finalF9Id, ...uCondOpts,
         });
         compareStyleSims[stName] = simulateMatchExpectation(pF9St, effectiveOppPow, {
-          isHome, neutral: false, focus: best.optFocus, oppFocus, style: stName, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
+          isHome, neutral, focus: best.optFocus, oppFocus, style: stName, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
         });
       }
     }
@@ -2477,7 +2481,60 @@
     return same.length === 1 && same[0].id === p.id;
   }
 
-  // Bytecode #24951 sellerStance (OTA 2.1.0): bobot posisi/peran/keuangan/kontrak/veteran/scarce + keyPlayer buyout
+  /**
+   * Precompute metadata klub penjual 1x per klub agar sellerStance O(1) per pemain (nol sort berulang).
+   */
+  function precomputeSellerMeta(sPlayers = [], bPlayers = []) {
+    const sp = Array.isArray(sPlayers) ? sPlayers : [];
+    const bp = Array.isArray(bPlayers) ? bPlayers : [];
+    const sorted = [...sp].sort((a, b) => (U.safeNum(b.force, 0) - U.safeNum(a.force, 0)) || String(a.id).localeCompare(String(b.id)));
+    const rankMap = new Map();
+    for (let i = 0; i < sorted.length; i++) rankMap.set(sorted[i].id, i + 1);
+    let topScorerId = null;
+    let maxGoals = -Infinity;
+    let teamGames = 0;
+    let payroll = 0;
+    const secPlayersMap = new Map();
+    for (let i = 0; i < sp.length; i++) {
+      const x = sp[i];
+      if (!x) continue;
+      const g = U.safeNum(x.goals, 0);
+      if (topScorerId === null || g > maxGoals || (g === maxGoals && String(x.id).localeCompare(String(topScorerId)) < 0)) {
+        topScorerId = x.id;
+        maxGoals = g;
+      }
+      const gp = U.safeInt(x.gamesPlayed, 0);
+      if (gp > teamGames) teamGames = gp;
+      payroll += U.safeNum(x.salary, 0);
+      const xp = x.pos || x.position;
+      const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
+      let arr = secPlayersMap.get(xs);
+      if (!arr) { arr = []; secPlayersMap.set(xs, arr); }
+      arr.push(x);
+    }
+    const allSecPlayersMap = new Map();
+    for (const [k, arr] of secPlayersMap.entries()) allSecPlayersMap.set(k, arr.slice());
+    for (let i = 0; i < bp.length; i++) {
+      const x = bp[i];
+      if (!x) continue;
+      const xp = x.pos || x.position;
+      const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
+      let arr = allSecPlayersMap.get(xs);
+      if (!arr) { arr = []; allSecPlayersMap.set(xs, arr); }
+      arr.push(x);
+    }
+    return {
+      rankMap,
+      top1Id: sorted.length ? sorted[0].id : null,
+      topScorerId,
+      secPlayersMap,
+      allSecPlayersMap,
+      teamGames,
+      payroll,
+    };
+  }
+
+  // Bytecode #25402/#24951 sellerStance (OTA 2.1.0): bobot posisi/peran/keuangan/kontrak/veteran/scarce + keyPlayer buyout
   function sellerStance(p, sellerCtx = {}, buyerCtx = {}, todayDays = null) {
     const sc = (sellerCtx && typeof sellerCtx === 'object') ? sellerCtx : {};
     const bc = (buyerCtx && typeof buyerCtx === 'object') ? buyerCtx : {};
@@ -2486,24 +2543,47 @@
     const bPlayers = Array.isArray(sc.bPlayers) ? sc.bPlayers : [];
     if (!p || !sPlayers.length || !bc) return { mult: 1.0, reasons: [] };
 
-    const sorted = [...sPlayers].sort((a, b) => (U.safeNum(b.force, 0) - U.safeNum(a.force, 0)) || String(a.id).localeCompare(String(b.id)));
-    const rankIdx = sorted.findIndex(x => x.id === p.id);
-    if (rankIdx < 0) return { mult: 1.0, reasons: [] };
-    const rank = rankIdx + 1;
+    const meta = sc._meta || null;
+    const pSec = (C.EXACT_CAT && (p.pos in C.EXACT_CAT)) ? C.EXACT_CAT[p.pos] : p.pos;
+    let rank, top1Id, topScorerId, sameSector, allSec, teamGames, payroll;
+    if (meta) {
+      rank = meta.rankMap.get(p.id);
+      if (!rank) return { mult: 1.0, reasons: [] };
+      top1Id = meta.top1Id;
+      topScorerId = meta.topScorerId;
+      sameSector = meta.secPlayersMap.get(pSec) || [];
+      allSec = meta.allSecPlayersMap.get(pSec) || sameSector;
+      teamGames = meta.teamGames;
+      payroll = meta.payroll;
+    } else {
+      const sorted = [...sPlayers].sort((a, b) => (U.safeNum(b.force, 0) - U.safeNum(a.force, 0)) || String(a.id).localeCompare(String(b.id)));
+      const rankIdx = sorted.findIndex(x => x.id === p.id);
+      if (rankIdx < 0) return { mult: 1.0, reasons: [] };
+      rank = rankIdx + 1;
+      top1Id = sorted.length ? sorted[0].id : null;
+      const topScorer = [...sPlayers].sort((a, b) => (U.safeNum(b.goals, 0) - U.safeNum(a.goals, 0)) || String(a.id).localeCompare(String(b.id)))[0];
+      topScorerId = topScorer ? topScorer.id : null;
+      sameSector = sPlayers.filter(x => {
+        const xp = x.pos || x.position;
+        const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
+        return xs === pSec;
+      });
+      allSec = bPlayers.length
+        ? [...sPlayers, ...bPlayers].filter(x => {
+            const xp = x.pos || x.position;
+            const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
+            return xs === pSec;
+          })
+        : sameSector;
+      teamGames = sPlayers.reduce((m, x) => Math.max(m, U.safeInt(x.gamesPlayed, 0)), 0);
+      payroll = sPlayers.reduce((s, x) => s + U.safeNum(x.salary, 0), 0);
+    }
 
-    const topScorer = [...sPlayers].sort((a, b) => (U.safeNum(b.goals, 0) - U.safeNum(a.goals, 0)) || String(a.id).localeCompare(String(b.id)))[0];
-    const isTopScorer = Boolean(topScorer && topScorer.id === p.id && U.safeInt(p.goals, 0) >= (cfg.scorerMinGoals || 4));
-    const isCap = Boolean(sc.captain && sPlayers.some(x => x.id === p.id && sc.captain === p.id))
-      || Boolean(!sc.captain && rank === 1 && sPlayers.length > 0 && p.id === sorted[0].id);
+    const isTopScorer = Boolean(topScorerId && topScorerId === p.id && U.safeInt(p.goals, 0) >= (cfg.scorerMinGoals || 4));
+    const isCap = sc.captain ? (sc.captain === p.id) : Boolean(rank === 1 && p.id === top1Id);
     const isStarter = rank <= (cfg.starters || 11);
     const notForSale = !p.forSale;
 
-    const pSec = (C.EXACT_CAT && (p.pos in C.EXACT_CAT)) ? C.EXACT_CAT[p.pos] : p.pos;
-    const sameSector = sPlayers.filter(x => {
-      const xp = x.pos || x.position;
-      const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
-      return xs === pSec;
-    });
     const isWorldTop = Boolean(p.top);
     const isCraque = Boolean(p.star || p.starAwarded);
     const reasons = [];
@@ -2521,7 +2601,6 @@
       const hasCover = sameSector.some(x => x.id !== p.id && (U.safeNum(x.force, 0) + (cfg.scarceGap || 10)) >= U.safeNum(p.force, 0));
       if (!hasCover) reasons.push({ key: 'onlyOne', delta: cfg.onlyOne || 0.06 });
     }
-    const teamGames = sPlayers.reduce((m, x) => Math.max(m, U.safeInt(x.gamesPlayed, 0)), 0);
     if (notForSale && teamGames >= (cfg.midGames || 10) && teamGames <= (cfg.endGames || 30)) {
       reasons.push({ key: 'midSeason', delta: cfg.midSeason || 0.04 });
     }
@@ -2529,10 +2608,10 @@
     const sLv = U.safeInt(sc.level, 7);
     const bLv = U.safeInt(bc.level, 7);
     const lvlScales = cfg.levelScale || [1, 0.5, 0.2, 0.1];
-    let scale = lvlScales[Math.min(lvlScales.length - 1, Math.max(0, sLv - bLv))];
+    let scale = lvlScales[Math.min(lvlScales.length - 1, Math.max(0, bLv - sLv))];
     const sDiv = U.safeInt(sc.division, 0);
     const bDiv = U.safeInt(bc.division, 0);
-    const betterDiv = Boolean(sDiv > 0 && bDiv > 0 && sDiv < bDiv);
+    const betterDiv = Boolean(sDiv > 0 && bDiv > 0 && bDiv < sDiv);
     if (betterDiv) scale = Math.min(scale, cfg.betterDivisionScale || 0.2);
 
     const rawPosDelta = reasons.reduce((s, r) => s + r.delta, 0);
@@ -2543,7 +2622,6 @@
 
     let cashCrisis = false;
     const budget = U.safeNum(sc.budget, NaN);
-    const payroll = sPlayers.reduce((s, x) => s + U.safeNum(x.salary, 0), 0);
     if (Number.isFinite(budget)) {
       if (budget < 0) {
         reasons.push({ key: 'redCash', delta: -(cfg.redCash || 0.20) });
@@ -2565,23 +2643,16 @@
     }
 
     let scarceDelta = 0;
-    if (notForSale) {
-      const allSec = [...sPlayers, ...bPlayers].filter(x => {
-        const xp = x.pos || x.position;
-        const xs = (C.EXACT_CAT && (xp in C.EXACT_CAT)) ? C.EXACT_CAT[xp] : xp;
-        return xs === pSec;
-      });
-      if (allSec.length === 2) {
-        const other = allSec.find(x => x.id !== p.id);
-        const scCfg = cfg.scarce || { starter: 0.50, backup: 0.30 };
-        scarceDelta = (other && U.safeNum(other.force, 0) > U.safeNum(p.force, 0)) ? (scCfg.backup || 0.30) : (scCfg.starter || 0.50);
-        if (scarceDelta > 0) reasons.push({ key: 'scarce', delta: scarceDelta });
-      }
+    if (notForSale && allSec.length === 2) {
+      const other = allSec.find(x => x.id !== p.id);
+      const scCfg = cfg.scarce || { starter: 0.50, backup: 0.30 };
+      scarceDelta = (other && U.safeNum(other.force, 0) > U.safeNum(p.force, 0)) ? (scCfg.backup || 0.30) : (scCfg.starter || 0.50);
+      if (scarceDelta > 0) reasons.push({ key: 'scarce', delta: scarceDelta });
     }
 
     const baseSum = reasons.filter(r => r.key !== 'scarce').reduce((s, r) => s + r.delta, 0);
     const clampedBase = U.clamp(1 + baseSum, 1 - (cfg.maxDiscount || 0.30), 1 + (cfg.maxPremium || 0.50));
-    let mult = clampedBase + scarceDelta;
+    const mult = clampedBase + scarceDelta;
 
     const paidIn = p.paidIn;
     if (paidIn && sc.id && paidIn.teamId === sc.id && todayDays !== null && todayDays <= paidIn.until && (paidIn.price || 0) > Math.round((p.marketValue || 0) * mult)) {
@@ -2589,7 +2660,7 @@
     }
 
     const out = { mult: U.roundTo(mult, 2), reasons };
-    if (notForSale && !cashCrisis && rank <= (cfg.refuseTop || 3) && (isWorldTop || isTopScorer) && bLv >= sLv && !betterDiv) {
+    if (notForSale && !cashCrisis && rank <= (cfg.refuseTop || 3) && (isWorldTop || isTopScorer) && sLv >= bLv && !betterDiv) {
       const rc = U.releaseClauseOf(p.marketValue, sc.country || p.nationality, (paidIn && paidIn.price) || 0);
       out.refuse = 'keyPlayer';
       out.buyout = rc.amount;
@@ -2600,11 +2671,18 @@
 
   // Bytecode #24934 transferPolicy: matriks reputasi Eropa (cg=0) & non-Eropa
   // Mengembalikan string status ('ok'|'doubleSalary'|'refuse') atau objek compat jika dipanggil dengan signature lama
-  function transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers = null, posCount = null, playerRankInClub = 99, sellerRep = 50, buyerRep = 50, sellerDiv = 1) {
+  function transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers = null, posCount = null, playerRankInClub = 99, sellerRep = 50, buyerRep = 50, sellerDiv = 1, sellerCtxOpt = null, buyerCtxOpt = null) {
     if (!p && !sellerCountry) return { status: 'OK', mult: 1.0, reason: null, clubPolicy: 'ok' };
 
     const sPlayers = Array.isArray(sellerPlayers) ? sellerPlayers : [];
-    if (p && sPlayers.length > 0 && lastInPosition(p, sPlayers)) {
+    const sMeta = sellerCtxOpt && sellerCtxOpt._meta;
+    if (p && !p.forSale && sMeta) {
+      const pSec = (C.EXACT_CAT && (p.pos in C.EXACT_CAT)) ? C.EXACT_CAT[p.pos] : p.pos;
+      const same = sMeta.allSecPlayersMap.get(pSec) || [];
+      if (same.length === 1 && same[0].id === p.id) {
+        return { status: 'REFUSE', mult: 2.0, reason: 'lastInPosition', clubPolicy: 'refuse' };
+      }
+    } else if (p && sPlayers.length > 0 && lastInPosition(p, sPlayers)) {
       return { status: 'REFUSE', mult: 2.0, reason: 'lastInPosition', clubPolicy: 'refuse' };
     }
     if (p && posCount !== null && posCount !== undefined && posCount <= 1 && !p.forSale) {
@@ -2638,7 +2716,7 @@
     }
 
     const stance = sPlayers.length
-      ? sellerStance(p, { level: sellerLevel, division: sellerDiv, country: sellerCountry, players: sPlayers }, { level: buyerLevel })
+      ? sellerStance(p, sellerCtxOpt || { level: sellerLevel, division: sellerDiv, country: sellerCountry, players: sPlayers }, buyerCtxOpt || { level: buyerLevel })
       : null;
 
     let mult = stance ? stance.mult : (p && p.forSale ? 1.0 : 1.0);
@@ -2666,6 +2744,7 @@
       clubPolicy,
       isKeyTop,
       isYoungStar,
+      stance,
     };
   }
 
@@ -2708,8 +2787,8 @@
     const ctLevel = U.safeInt(ex.ctLevel, 1);
 
     const pol = isUnattached
-      ? { status: 'OK', mult: 1.0, reason: null, clubPolicy: 'ok', isKeyTop: Boolean(p.top || p.star), isYoungStar: false }
-      : transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers, posCount, rankInClub, ex.sellerRep, buyerRep, ex.sellerDiv);
+      ? { status: 'OK', mult: 1.0, reason: null, clubPolicy: 'ok', isKeyTop: Boolean(p.top || p.star), isYoungStar: false, stance: null }
+      : transferPolicy(p, sellerCountry, buyerCountry, buyerLevel, sellerLevel, sellerPlayers, posCount, rankInClub, ex.sellerRep, buyerRep, ex.sellerDiv, ex.sellerClubCtx || null, ex.buyerClubCtx || null);
     if (pol.status === 'REFUSE') {
       return { ...pol, code: pol.reason === 'lastInPosition' ? 'LAST_POS' : 'REFUSE_POLICY' };
     }
@@ -2720,16 +2799,16 @@
     const bDiv = U.safeInt(buyerDiv, 1);
 
     if (refusesStatus(p, sLv, bLv, rankInClub, 0)) {
-      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseLevel', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
+      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseLevel', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar, stance: pol.stance || null };
     }
     if (!isUnattached && refusesDistance(p, sCountry, buyerCountry, sLv, bLv, 0, bDiv, ex.contSlack || 0)) {
-      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseDistance', code: 'REFUSE_DIST', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
+      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseDistance', code: 'REFUSE_DIST', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar, stance: pol.stance || null };
     }
 
     const ceil = buyerForceCeiling(buyerRep, buyerDiv, avgTop11, ctLevel);
     let doubleSalary = pol.clubPolicy === 'doubleSalary';
     if ((p.force || 0) > ceil + 5) {
-      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseLevel', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar };
+      return { status: 'REFUSE', mult: pol.mult, reason: 'refuseLevel', code: 'REFUSE_LVL', isKeyTop: pol.isKeyTop, isYoungStar: pol.isYoungStar, stance: pol.stance || null };
     }
     if ((p.force || 0) > ceil) {
       doubleSalary = true;
@@ -2747,6 +2826,7 @@
       ceilMult: 1.0,
       isKeyTop: pol.isKeyTop,
       isYoungStar: pol.isYoungStar,
+      stance: pol.stance || null,
     };
   }
 
@@ -2989,6 +3069,7 @@
     detectSquadHoles,
     buyerForceCeiling,
     lastInPosition,
+    precomputeSellerMeta,
     sellerStance,
     transferPolicy,
     refusesDistance,

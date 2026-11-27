@@ -371,7 +371,18 @@
     if (!('serviceWorker' in navigator)) return;
     const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (!isSecure) return;
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      if (!reg) return;
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller && typeof showToast === 'function') {
+            showToast('✨ Update versi baru siap — muat ulang halaman untuk menerapkan.');
+          }
+        });
+      });
+    }).catch(() => {});
   }
 
   function wireEvents() {
@@ -669,10 +680,6 @@
   window.addEventListener('DOMContentLoaded', async () => {
     registerServiceWorker();
     wireEvents();
-    if (window.innerWidth <= 768) {
-      const sf = $('scout-filter-details');
-      if (sf) sf.removeAttribute('open');
-    }
 
     // Impor konfigurasi Google Drive otomatis jika dibuka lewat link #gd=... dari HP lain
     let importedFromUrl = null;

@@ -62,6 +62,7 @@
     const star = Boolean((('star' in dyn) ? dyn.star : stat.star) || starAwarded);
     const top = Boolean(dyn.top);
     const forSale = Boolean(dyn.forSale);
+    const forSalePrice = Math.round(U.safeNum(dyn.forSalePrice, 0));
     const freeSigned = Boolean(dyn.freeSigned);
     const loanable = Boolean(dyn.loanable);
     const loanedFrom = dyn.loanedFrom || null;
@@ -115,72 +116,81 @@
     );
 
     // #25088 saleFeeRate (terminationFeeRate kontrak untuk jual manual) vs #25025/#25089/#25091 (incoming & Arab 0% fee!)
-    const termFeeRate = U.terminationFeeRate(contractDays);
-    const effMV = Math.round(marketValue * injurySaleMul);
-    const aiOfferMap = C.AI_OFFER_MUL || { young: 1.50, mid: 1.35, old: 1.30 };
-    const aiOfferMul = age < 20 ? aiOfferMap.young : (age <= 24 ? aiOfferMap.mid : aiOfferMap.old);
-    const gross25 = Math.round(effMV * C.COUNTER_AVG_REALIZED);
-    const gross40 = Math.round(effMV * C.COUNTER_MAX_NORMAL);
-    const arabLowGross = Math.round(effMV * (C.ARAB_OFFER_MIN_MUL || 2.50));
-    const arabHighGross = Math.round(effMV * (C.ARAB_OFFER_MAX_MUL || 3.00));
-    // Incoming offer (normal & Arab) memiliki noTerminationFee: true (0% potongan); Arab negotiated: true (tidak bisa di-counter!)
-    const estCounter25 = calcNetSaleProceeds(gross25, contractDays, true);
-    const estCounter40 = calcNetSaleProceeds(gross40, contractDays, true);
-    const estArabLow = calcNetSaleProceeds(arabLowGross, contractDays, true);
-    const estArabHigh = calcNetSaleProceeds(arabHighGross, contractDays, true);
-    const estArabNet = estArabLow;
+    let termFeeRate = 0, directSaleTaxRate = 0, estDirectSaleNet = 0, estFixedMaxNet = 0;
+    let estAuctionLowNet = 0, estAuctionHighNet = 0, estIncomingBase = 0;
+    let estCounter25 = 0, estCounter40 = 0, estArabLow = 0, estArabHigh = 0, estArabNet = 0;
+    let estTerminationCost = 0, renew3yrSaveMonth = 0, doubleDipSaveYear = 0;
+    if (isUserTeam) {
+      termFeeRate = U.terminationFeeRate(contractDays);
+      const effMV = Math.round(marketValue * injurySaleMul);
+      const aiOfferMap = C.AI_OFFER_MUL || { young: 1.50, mid: 1.35, old: 1.30 };
+      const aiOfferMul = age < 20 ? aiOfferMap.young : (age <= 24 ? aiOfferMap.mid : aiOfferMap.old);
+      const gross25 = Math.round(effMV * C.COUNTER_AVG_REALIZED);
+      const gross40 = Math.round(effMV * C.COUNTER_MAX_NORMAL);
+      const arabLowGross = Math.round(effMV * (C.ARAB_OFFER_MIN_MUL || 2.50));
+      const arabHighGross = Math.round(effMV * (C.ARAB_OFFER_MAX_MUL || 3.00));
+      // Incoming offer (normal & Arab) memiliki noTerminationFee: true (0% potongan); Arab negotiated: true (tidak bisa di-counter!)
+      estCounter25 = calcNetSaleProceeds(gross25, contractDays, true);
+      estCounter40 = calcNetSaleProceeds(gross40, contractDays, true);
+      estArabLow = calcNetSaleProceeds(arabLowGross, contractDays, true);
+      estArabHigh = calcNetSaleProceeds(arabHighGross, contractDays, true);
+      estArabNet = estArabLow;
 
-    // Jual langsung / Purchase Offers / Fixed / Auction dikenai saleFeeRate = terminationFeeRate(contractDays)
-    const directSaleTaxRate = termFeeRate;
-    const estDirectSaleNet = calcNetSaleProceeds(effMV, contractDays, false);
-    const estFixedMaxNet = calcNetSaleProceeds(Math.round(effMV * (C.PURCHASE_OFFER_MAX_ASK_MUL || 1.10)), contractDays, false);
-    const estAuctionLowNet = calcNetSaleProceeds(Math.round(effMV * 0.85), contractDays, false);
-    const estAuctionHighNet = calcNetSaleProceeds(Math.round(effMV * (C.AUCTION_MAX_MUL || 1.20)), contractDays, false);
-    const estIncomingBase = Math.round(effMV * aiOfferMul);
+      // Jual langsung / Purchase Offers / Fixed / Auction dikenai saleFeeRate = terminationFeeRate(contractDays)
+      directSaleTaxRate = termFeeRate;
+      estDirectSaleNet = calcNetSaleProceeds(effMV, contractDays, false);
+      estFixedMaxNet = calcNetSaleProceeds(Math.round(effMV * (C.PURCHASE_OFFER_MAX_ASK_MUL || 1.10)), contractDays, false);
+      estAuctionLowNet = calcNetSaleProceeds(Math.round(effMV * 0.85), contractDays, false);
+      estAuctionHighNet = calcNetSaleProceeds(Math.round(effMV * (C.AUCTION_MAX_MUL || 1.20)), contractDays, false);
+      estIncomingBase = Math.round(effMV * aiOfferMul);
 
-    // Pesangon Pemutusan Kontrak (#20274 terminationFeeRate)
-    const estTerminationCost = Math.round(salary * (Math.max(0, contractDays) / 30.0) * termFeeRate);
+      // Pesangon Pemutusan Kontrak (#20274 terminationFeeRate)
+      estTerminationCost = Math.round(salary * (Math.max(0, contractDays) / 30.0) * termFeeRate);
 
-    // Perpanjang 3 th (#24161): sisa >= 60 hari = -12% gaji; < 60 hari justru minta NAIK (+5% s.d. +20%)
-    const renew3yrDelta = U.renewalSalaryDelta(contractDays, 3);
-    const renew3yrSaveMonth = Math.round(salary * -renew3yrDelta); // negatif = tambahan biaya
-    const doubleDipSaveYear = Math.round(salary * (1.0 - 0.88 * 0.88) * 12);
+      // Perpanjang 3 th (#24161): sisa >= 60 hari = -12% gaji; < 60 hari justru minta NAIK (+5% s.d. +20%)
+      const renew3yrDelta = U.renewalSalaryDelta(contractDays, 3);
+      renew3yrSaveMonth = Math.round(salary * -renew3yrDelta); // negatif = tambahan biaya
+      doubleDipSaveYear = Math.round(salary * (1.0 - 0.88 * 0.88) * 12);
+    }
 
     // Valuasi Olheiro da Base U-21 (#25091: incoming AI scout offer max(potentialMV * 0.6, MV * 2))
     const youthScoutGap = potential - force;
     const youthScoutEligible = Boolean(!isUserTeam && age <= C.YOUTH_SCOUT.maxAge && youthScoutGap >= C.YOUTH_SCOUT.minGrowthMargin && !forSale);
-    const youthScoutPrice = Math.round(Math.max(10000, marketValue) * C.YOUTH_SCOUT.priceFactor);
+    const youthScoutPrice = youthScoutEligible ? Math.round(Math.max(10000, marketValue) * C.YOUTH_SCOUT.priceFactor) : 0;
 
-    const retChance = U.retirementChance(age, pos, force, { top: Boolean(dyn.top), star: Boolean(dyn.star || stat.star || starAwarded) });
+    const retChance = isUserTeam ? U.retirementChance(age, pos, force, { top: Boolean(dyn.top), star: Boolean(dyn.star || stat.star || starAwarded) }) : 0;
     const gamesPlayed = U.safeInt(dyn.gamesPlayed, Math.max(0, Math.round(seasonMinutes / 90.0)));
-    const matchRatings = Array.isArray(dyn.matchRatings) ? dyn.matchRatings : [];
+    const matchRatings = (isUserTeam && Array.isArray(dyn.matchRatings)) ? dyn.matchRatings : [];
     const rawAvgR = U.safeNum(dyn.avgRating, 0.0);
     const avgRating = rawAvgR > 0
       ? U.roundTo(rawAvgR, 2)
       : (matchRatings.length
         ? U.roundTo(matchRatings.reduce((s, x) => s + U.safeNum(Array.isArray(x) ? x[0] : (x && x.rating), 6.5), 0) / matchRatings.length, 2)
         : 0.0);
-    const loanBuyChance = U.loanBuyDecisionChance({
-      loanedFrom,
-      loanBuyPrice: loanBuyFee,
-      loanBuyFee,
-      seasonGames: gamesPlayed,
-      avgRating,
-      forceTo: force,
-      forceFrom: U.safeNum(dyn.loanForceFrom ?? dyn.forceFrom, force),
-      marketValue,
-    });
-    const matchRatingsArr = matchRatings;
+    const loanBuyChance = (isUserTeam || loanedFrom)
+      ? U.loanBuyDecisionChance({
+          loanedFrom,
+          loanBuyPrice: loanBuyFee,
+          loanBuyFee,
+          seasonGames: gamesPlayed,
+          avgRating,
+          forceTo: force,
+          forceFrom: U.safeNum(dyn.loanForceFrom ?? dyn.forceFrom, force),
+          marketValue,
+        })
+      : 0;
     const salPerForce = Math.round(salary / Math.max(1, force));
-    const clubHistory = Array.isArray(dyn.clubHistory) ? dyn.clubHistory : [];
-    const honors = Array.isArray(dyn.honors) ? dyn.honors : [];
-    const moodFrom = dyn.moodFrom || null;
+    const clubHistory = isUserTeam && Array.isArray(dyn.clubHistory) ? dyn.clubHistory : [];
+    const honors = isUserTeam && Array.isArray(dyn.honors) ? dyn.honors : [];
+    const moodFrom = isUserTeam ? (dyn.moodFrom || null) : null;
     const roleSore = Boolean(dyn.roleSore);
     const raiseSore = Boolean(dyn.raiseSore);
     const nearDrop = growthFrac <= -0.75;
-    const stackNote = stackInfo.nonStack
-      ? 'Skill duplikat (tidak menumpuk di Match Engine v1.2.0)'
-      : `Kombinasi skill memberi +${stackInfo.stackPct}% kontribusi sektor (Grade ${stackInfo.grade})`;
+    const stackNote = isUserTeam
+      ? (stackInfo.nonStack
+        ? 'Skill duplikat (tidak menumpuk di Match Engine v1.2.0)'
+        : `Kombinasi skill memberi +${stackInfo.stackPct}% kontribusi sektor (Grade ${stackInfo.grade})`)
+      : '';
 
     return {
       id: pid,
@@ -222,6 +232,7 @@
       starAwarded,
       top,
       forSale,
+      forSalePrice,
       freeSigned,
       loanable,
       loanedFrom,
@@ -327,7 +338,7 @@
     }
 
     if (isTop5Arab && p.age >= p.sellWarnAge) {
-      return { action: 'JUAL ARAB 1.4x + COUNTER +40%', cls: 'b-gold' };
+      return { action: 'ARAB WATCH (2.5–3.0x MV, 0% FEE)', cls: 'b-gold' };
     }
     if (rankIdx < 5 && p.age === 25 && p.force >= 42) {
       return { action: 'TAHAN S.D. 26TH (BUKA ARAB 2.5–3x)', cls: 'b-gold' };

@@ -179,6 +179,13 @@ function runStage2Engine(savePath) {
   assert(D.scoutPool.some(r => String(r[18] || '').split(',').includes('SGEM')), 'Pasar Global (scoutPool) harus menandai flag SGEM pada Super Gem U-22');
   assert.strictEqual(typeof D.bTeamInfo.superGemCount, 'number', 'D.bTeamInfo.superGemCount harus bertipe number');
   assert.strictEqual(typeof D.meta.maxAiBudgetOpen, 'number', 'D.meta.maxAiBudgetOpen harus bertipe number');
+  // Regresi v8.11.0: forSalePrice, contSlack & index.html #webapp-dashboard-shell nesting
+  assert(D.roster.every(p => typeof p.forSalePrice === 'number'), 'Semua roster harus mengekstrak angka forSalePrice');
+  const idxHtml = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
+  const shellOpenIdx = idxHtml.indexOf('id="webapp-dashboard-shell"');
+  const navBnavIdx = idxHtml.indexOf('class="mobile-bnav"');
+  const gdModalIdx = idxHtml.indexOf('id="gdrive-folder-modal"');
+  assert(shellOpenIdx > 0 && navBnavIdx > shellOpenIdx && gdModalIdx > navBnavIdx, 'index.html: mobile-bnav harus berada DI DALAM #webapp-dashboard-shell sebelum penutup');
 
   // Regresi v8.10.6 (Batch 2 Match Engine, Tactics & Formations Parity - OTA 2.1.0)
 {
@@ -485,6 +492,21 @@ function runStage2Engine(savePath) {
   const f9GateSt = T.computeEngineSectorPower(f9GateXi, '4-3-3', { falseNineId: 'st1' });
   assert.strictEqual(f9GateWing.MID, f9GateBase.MID, 'Winger PD/PE TIDAK boleh memakai False Nine (MID harus tetap)');
   assert(f9GateSt.MID > f9GateBase.MID && f9GateSt.rawATK < f9GateBase.rawATK, 'False Nine pada ST/SS/CAM harus transfer ATK->MID');
+
+  // Regresi v8.11.0: sellerStance (#25402) + precomputeSellerMeta zero-diff
+  {
+    const pTop1 = { id: 'top1', pos: 'MC', force: 70, age: 23, top: true, forSale: false, marketValue: 1000000 };
+    const stPool = [pTop1, { id: 'p2', pos: 'MC', force: 60, age: 24, goals: 0 }, { id: 'p3', pos: 'ZD', force: 58, age: 25 }];
+    const bigBuyFromSmall = T.sellerStance(pTop1, { level: 8, division: 2, country: 'BR', players: stPool }, { level: 14, division: 1 });
+    assert(bigBuyFromSmall.reasons.some(r => r.key === 'bigBuyer'), 'Klub besar Div 1 beli dari Div 2 harus mendapat diskon bigBuyer (#25402)');
+    assert.notStrictEqual(bigBuyFromSmall.refuse, 'keyPlayer', 'Klub kecil level 8 tidak boleh menolak keyPlayer ke klub level 14 Div 1');
+    const smallBuyFromBig = T.sellerStance(pTop1, { level: 14, division: 1, country: 'BR', players: stPool }, { level: 10, division: 1 });
+    assert.strictEqual(smallBuyFromBig.refuse, 'keyPlayer', 'Klub besar level 14 harus mengaktifkan keyPlayer buyout terhadap pembeli level 10');
+    assert(smallBuyFromBig.buyout > 0, 'keyPlayer buyout harus positif');
+    const sMeta = T.precomputeSellerMeta(stPool, []);
+    const stanceWithMeta = T.sellerStance(pTop1, { level: 8, division: 2, country: 'BR', players: stPool, _meta: sMeta }, { level: 14, division: 1 });
+    assert.deepStrictEqual(stanceWithMeta, bigBuyFromSmall, 'precomputeSellerMeta harus menghasilkan output 100% identik');
+  }
 
   console.log(
     `  PASS: Parse ${D.meta.parseSec}s | Skuad ${D.roster.length} | BestXI ${D.bestXi.avgScore} | ` +

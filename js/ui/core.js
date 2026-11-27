@@ -360,6 +360,12 @@ function goToView(tab, sub) {
     if (panel) {
       panel.querySelectorAll('.subpanel').forEach(sp => sp.classList.toggle('active', sp.id === 'sub-' + targetSub));
     }
+    if (t === 't4' && typeof flushTab7Dirty === 'function') {
+      try { flushTab7Dirty(targetSub); } catch (e) { console.error(e); }
+    } else if (t === 't3' && targetSub === 't3-train' && typeof renderTrainingAudit === 'function') {
+      const trEl = document.getElementById('t4-training');
+      if (trEl && !trEl.innerHTML.trim()) { try { renderTrainingAudit(); } catch (e) { console.error(e); } }
+    }
   }
   if (t === 't2' && typeof renderTab2 === 'function') {
     const am = document.getElementById('t2-active-match');
@@ -498,8 +504,119 @@ function openWarRoomOfficial(idx) {
 }// ==================== PLAYER DRAWER (v8.0 TAHAP 2) ====================
 let activeDrawer = null; // { kind: 'roster'|'youth'|'scout', id: string }
 
+let compareSlots = []; // [{ kind: 'roster'|'bteam'|'scout', id: string }]
+
+function closeCompareModal() {
+  const el = document.getElementById('compare-modal');
+  if (el) el.classList.remove('open');
+}
+
+function clearCompare() {
+  compareSlots = [];
+  closeCompareModal();
+  if (activeDrawer) openPlayerDrawer(activeDrawer.kind, activeDrawer.id);
+}
+
+function resolveCompareRecord(kind, id) {
+  if (kind === 'roster') {
+    const p = (D.roster || []).find(x => x.id === id);
+    if (!p) return null;
+    return {
+      kind, id, originLbl: 'SKUAD SENIOR', name: p.name, pos: p.pos, age: p.age, foot: p.foot, nat: p.nationality || '-', club: D.meta.teamName || 'Klub Saya',
+      force: p.force, potCap: p.potCap, gap: Math.max(0, p.potCap - p.force), s1: p.s1, s2: p.s2, stackPct: p.stackPct || 0, nonStack: Boolean(p.nonStack),
+      salary: p.salary || 0, marketValue: p.marketValue || 0, estCost: p.estRealSale || p.marketValue || 0, costLbl: 'Est. Jual 1.25x',
+      contractDays: p.contractDays || 0, energy: p.energy ?? 100, tag: p.isSuperGem ? '⭐ SUPER GEM' : (p.isGem ? 'GEM' : (p.isTrap ? 'TRAP' : (p.stackGrade || 'STD'))),
+    };
+  }
+  if (kind === 'bteam') {
+    const bt = (D.bTeamInfo && D.bTeamInfo.roster) || [];
+    const p = bt.find(x => x.id === id);
+    if (!p) return null;
+    return {
+      kind, id, originLbl: 'TIM B (0€)', name: p.name, pos: p.pos, age: p.age, foot: p.foot, nat: p.nationality || '-', club: (D.bTeamInfo && D.bTeamInfo.bTeamName) || 'Tim B',
+      force: p.force, potCap: p.potCap, gap: Math.max(0, (p.potCap || p.force) - p.force), s1: p.s1, s2: p.s2, stackPct: p.stackPct || 0, nonStack: Boolean(p.nonStack),
+      salary: p.salary || 0, marketValue: p.marketValue || 0, estCost: 0, costLbl: 'Promosi 0€',
+      contractDays: p.contractDays || 0, energy: p.energy ?? 100, tag: p.isSuperGem ? '⭐ SUPER GEM' : (p.isGem ? 'GEM' : (p.isTrap ? 'TRAP' : (p.stackGrade || 'STD'))),
+    };
+  }
+  const r = (D.scoutPool || []).find(x => x[19] === id);
+  if (!r) return null;
+  const fl = String(r[18] || '');
+  const isBos = r[15] <= 180 || fl.includes('BOSMAN');
+  return {
+    kind: 'scout', id, originLbl: 'SCOUT GLOBAL', name: r[0], pos: r[1], age: r[2], foot: r[3], nat: r[4] || '-', club: r[16] || 'Free Agent',
+    force: r[5], potCap: r[7], gap: Math.max(0, r[7] - r[5]), s1: r[8], s2: r[9], stackPct: r[10] || 0, nonStack: Boolean(r[11]),
+    salary: Math.round((r[12] || 0) * 0.95), marketValue: r[13] || 0, estCost: isBos ? 0 : (r[14] || 0), costLbl: isBos ? 'Bosman 0€' : 'Est. Beli',
+    contractDays: r[15] || 0, energy: 100, tag: fl.includes('SGEM') ? '⭐ SUPER GEM' : (fl.includes('GEM') ? 'GEM' : (fl.includes('TRAP') ? 'TRAP' : (fl.includes('GOD') ? 'GOD' : 'SCOUT'))),
+  };
+}
+
+function toggleComparePlayer(kind, id) {
+  const idx = compareSlots.findIndex(s => s.kind === kind && s.id === id);
+  if (idx >= 0) {
+    compareSlots.splice(idx, 1);
+    showToast('Dihapus dari daftar banding');
+  } else {
+    if (compareSlots.length >= 2) compareSlots.shift();
+    compareSlots.push({ kind, id });
+    if (compareSlots.length === 2) openCompareModal();
+    else showToast('Slot Banding 1/2 dipilih — pilih 1 pemain lagi untuk membandingkan');
+  }
+  if (activeDrawer) openPlayerDrawer(activeDrawer.kind, activeDrawer.id);
+}
+
+function openCompareModal() {
+  const modal = document.getElementById('compare-modal');
+  const body = document.getElementById('compare-body');
+  if (!modal || !body) return;
+  const items = compareSlots.map(s => resolveCompareRecord(s.kind, s.id)).filter(Boolean);
+  if (items.length < 2) {
+    body.innerHTML = '<div class="c-muted">Pilih 2 pemain dari profil (Drawer) dengan tombol <b>⚖️ Bandingkan</b>.</div>';
+    modal.classList.add('open');
+    return;
+  }
+  const [a, b] = items;
+  const cmpRow = (lbl, va, vb, rawA, rawB, higherBetter = true, fmtFn = x => String(x)) => {
+    const winA = rawA !== rawB && (higherBetter ? rawA > rawB : rawA < rawB);
+    const winB = rawA !== rawB && (higherBetter ? rawB > rawA : rawB < rawA);
+    return `<tr><td class="c-muted">${lbl}</td><td class="mono ${winA ? 'c-green' : ''}"><b>${fmtFn(va)}</b></td><td class="mono ${winB ? 'c-green' : ''}"><b>${fmtFn(vb)}</b></td></tr>`;
+  };
+  body.innerHTML = `
+    <div class="tbl-wrap"><table class="tbl" style="font-size:12px">
+      <thead><tr>
+        <th>Atribut</th>
+        <th><a class="clickable-name" onclick="closeCompareModal();openPlayerDrawer('${escJs(a.kind)}','${escJs(a.id)}')">${esc(a.name)}</a> <span class="badge b-info">${esc(a.originLbl)}</span></th>
+        <th><a class="clickable-name" onclick="closeCompareModal();openPlayerDrawer('${escJs(b.kind)}','${escJs(b.id)}')">${esc(b.name)}</a> <span class="badge b-info">${esc(b.originLbl)}</span></th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="c-muted">Pos · Kaki · Negara</td><td class="mono">${fmtPos(a.pos)} · ${fmtFoot(a.foot)} · ${esc(a.nat)}</td><td class="mono">${fmtPos(b.pos)} · ${fmtFoot(b.foot)} · ${esc(b.nat)}</td></tr>
+        <tr><td class="c-muted">Klub &amp; Status</td><td>${esc(a.club)} <span class="badge b-accent">${esc(a.tag)}</span></td><td>${esc(b.club)} <span class="badge b-accent">${esc(b.tag)}</span></td></tr>
+        ${cmpRow('Force Saat Ini', a.force, b.force, a.force, b.force, true)}
+        ${cmpRow('PotCap (Plafon)', a.potCap, b.potCap, a.potCap, b.potCap, true)}
+        ${cmpRow('Ruang Tumbuh (+Gap)', '+' + a.gap, '+' + b.gap, a.gap, b.gap, true)}
+        ${cmpRow('Usia', a.age + ' th', b.age + ' th', a.age, b.age, false)}
+        ${cmpRow('Skill Stack', `${fmtSkills(a.s1, a.s2)} (+${a.stackPct}%)`, `${fmtSkills(b.s1, b.s2)} (+${b.stackPct}%)`, a.nonStack ? -1 : a.stackPct, b.nonStack ? -1 : b.stackPct, true)}
+        ${cmpRow('Gaji / Bulan', a.salary, b.salary, a.salary, b.salary, false, fmtM)}
+        ${cmpRow('Market Value', a.marketValue, b.marketValue, a.marketValue, b.marketValue, true, fmtM)}
+        ${cmpRow('Harga (Beli/Jual)', `${fmtM(a.estCost)} (${a.costLbl})`, `${fmtM(b.estCost)} (${b.costLbl})`, a.estCost, b.estCost, false)}
+        ${cmpRow('Sisa Kontrak', a.contractDays + ' hari', b.contractDays + ' hari', a.contractDays, b.contractDays, true)}
+      </tbody>
+    </table></div>`;
+  modal.classList.add('open');
+}
+
+function compareBtnHtml(kind, id) {
+  const inCmp = compareSlots.some(s => s.kind === kind && s.id === id);
+  const viewReady = compareSlots.length === 2
+    ? `<button type="button" class="btn btn-sm btn-accent" onclick="openCompareModal()">⚖️ Hasil (2/2)</button>`
+    : '';
+  return `<button type="button" class="btn btn-sm ${inCmp ? 'btn-amber' : ''}" onclick="toggleComparePlayer('${escJs(kind)}','${escJs(id)}')" title="Bandingkan 2 pemain side-by-side">${inCmp ? '✓ Banding' : `⚖️ Banding (${compareSlots.length}/2)`}</button>${viewReady}`;
+}
+
 function closePlayerDrawer() {
   activeDrawer = null;
+  compareSlots = [];
+  if (typeof closeCompareModal === 'function') closeCompareModal();
   const bg = document.getElementById('player-drawer-bg');
   if (bg) bg.classList.remove('open');
 }
@@ -710,6 +827,7 @@ function openPlayerDrawer(kind, id) {
         <button class="btn ${inSell ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartOut('${escJs(p.id)}');openPlayerDrawer('roster','${escJs(p.id)}')">
           ${inSell ? '✓ Sudah di Cart Jual (Lepas)' : '📤 Masukkan ke Cart Jual'}
         </button>
+        ${compareBtnHtml('roster', p.id)}
         <button class="btn" onclick="closePlayerDrawer();goToView('t4','t4-cart')">🛒 Buka Cart</button>
       </div>`;
   } else if (kind === 'youth') {
@@ -824,7 +942,8 @@ function openPlayerDrawer(kind, id) {
       <div class="pill-row mt-12">
         <button class="star-btn ${isShortlisted(r[19]) ? 'pinned' : ''}" style="padding:7px 11px;font-size:13px" onclick="toggleShortlist('${pidJs}')">${isShortlisted(r[19]) ? '★ Shortlisted' : '☆ Shortlist'}</button>
         <button class="btn ${inC ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="toggleCartIn('${pidJs}', ${r[15] <= 180 ? 'true' : 'false'});openPlayerDrawer('scout','${pidJs}')">${inC ? (cartInBosman[r[19]] ? '✓ Bosman 0€' : '✓ Di Cart Beli') : (r[15] <= 180 ? '🆓 + Bosman 0€' : '+ Beli Saja')}</button>
-        ${sw ? `<button class="btn" style="flex:1;border-color:rgba(56,189,248,.6)" onclick="swapToCart('${pidJs}','${repIdJs}');openPlayerDrawer('scout','${pidJs}')">⇄ Swap</button>` : ''}
+        ${sw ? `<button class="btn" style="flex:1;border-color:rgba(56,189,248,.6)" onclick="swapToCart('${pidJs}','${repIdJs}', ${it && it.isBosman ? 'true' : 'false'});openPlayerDrawer('scout','${pidJs}')">⇄ Swap</button>` : ''}
+        ${compareBtnHtml('scout', r[19])}
       </div>`;
   } else if (kind === 'bteam') {
     const bt = D.bTeamInfo || {};
@@ -881,6 +1000,7 @@ function openPlayerDrawer(kind, id) {
         <button class="btn ${cartBIn[p.id] ? 'btn-amber' : 'btn-green'}" style="flex:1" onclick="if(typeof toggleCartBIn==='function'){toggleCartBIn('${escJs(p.id)}');openPlayerDrawer('bteam','${escJs(p.id)}');}">
           ${cartBIn[p.id] ? '✓ Di Simulasi Cart (Lepas)' : '🧪 + Promosi ke Simulasi Cart (0€)'}
         </button>
+        ${compareBtnHtml('bteam', p.id)}
         <button class="btn" onclick="closePlayerDrawer();goToView('t4','t4-cart')">🛒 Buka Cart</button>
       </div>`;
   }
@@ -1010,6 +1130,8 @@ window.LFResetUIState = function () {
   if (typeof yScoutTab !== 'undefined') yScoutTab = 'LOCAL';
   if (typeof calRangeMode !== 'undefined') calRangeMode = (typeof window !== 'undefined' && window.innerWidth <= 768) ? '4m' : '12m';
   activeDrawer = null;
+  compareSlots = [];
+  if (typeof closeCompareModal === 'function') closeCompareModal();
   if (D && D.stadium && D.stadium.optLigaPrices) {
     simPrices = { ...D.stadium.optLigaPrices };
   }

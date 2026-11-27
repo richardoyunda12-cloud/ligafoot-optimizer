@@ -1017,10 +1017,20 @@ function onScoutPosSelectChange(val) {
   resetScoutLimitAndRender();
 }
 
-function syncScoutQuick(kind, val) {
+let _scoutDebT = null;
+function debouncedResetScout() {
+  clearTimeout(_scoutDebT);
+  _scoutDebT = setTimeout(resetScoutLimitAndRender, 180);
+}
+
+function syncScoutQuick(kind, val, useDebounce = false) {
   if (kind === 'q') {
     const el = document.getElementById('s-q');
     if (el) el.value = val;
+    if (useDebounce) {
+      debouncedResetScout();
+      return;
+    }
   } else if (kind === 'pos') {
     scoutPosSet.clear();
     if (val) scoutPosSet.add(val);
@@ -1126,7 +1136,7 @@ function applyScoutPreset(preset) {
   setChk('s-only-stack', preset === 'FLIP');
   setChk('s-hide-trap', true);
   if (preset === 'STAR' || preset === 'POT60') setChk('s-only-reach', true);
-  setVal('s-sort', preset === 'MONEYBALL' ? 'WINPCT' : (preset === 'FLIP' ? 'ROI' : (preset === 'POT60' ? 'POT' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART'))));
+  setVal('s-sort', preset === 'MONEYBALL' ? 'WINPCT' : (preset === 'FLIP' ? 'ROI' : (preset === 'POT60' ? 'POTCAP' : (preset === 'HOLES' ? 'UPGRADE' : 'SMART'))));
   syncScoutDesktopToMob();
   renderScout();
   showToast('Preset Scout: ' + preset);
@@ -1335,11 +1345,37 @@ function exportScoutCsv() {
   downloadCsv('ligafoot_scout.csv', lines.join('\n'));
 }
 
-function renderTab7All() {
-  renderCart();
-  renderScoutBlueprint();
-  renderShortlistTab();
-  renderScout();
+window._t7Dirty = { bp: false, exp: false, short: false, cart: false };
+
+function flushTab7Dirty(sub) {
+  const dirty = window._t7Dirty || {};
+  if (sub === 't4-bp' && dirty.bp) { dirty.bp = false; renderScoutBlueprint(); }
+  else if (sub === 't4-exp' && dirty.exp) { dirty.exp = false; renderScout(); }
+  else if (sub === 't4-short' && dirty.short) { dirty.short = false; renderShortlistTab(); }
+  else if (sub === 't4-cart' && dirty.cart) { dirty.cart = false; renderCart(); }
+}
+
+function renderTab7All(forceAll = false) {
+  const dirty = (window._t7Dirty = window._t7Dirty || { bp: false, exp: false, short: false, cart: false });
+  const curSub = (typeof activeTab !== 'undefined' && activeTab === 't4' && typeof activeSubTabs === 'object' && activeSubTabs)
+    ? (activeSubTabs.t4 || 't4-bp')
+    : null;
+  if (forceAll || !curSub) {
+    dirty.bp = dirty.exp = dirty.short = dirty.cart = false;
+    renderCart();
+    renderScoutBlueprint();
+    renderShortlistTab();
+    renderScout();
+  } else {
+    dirty.bp = curSub !== 't4-bp';
+    dirty.exp = curSub !== 't4-exp';
+    dirty.short = curSub !== 't4-short';
+    dirty.cart = curSub !== 't4-cart';
+    if (curSub === 't4-cart') renderCart();
+    else if (curSub === 't4-bp') renderScoutBlueprint();
+    else if (curSub === 't4-short') renderShortlistTab();
+    else if (curSub === 't4-exp') renderScout();
+  }
   if (typeof renderStickyCartBar === 'function') renderStickyCartBar();
   if (typeof renderShopAnalytics === 'function') renderShopAnalytics();
 }
@@ -1619,8 +1655,8 @@ function renderCart() {
         <div class="c-muted mono" style="font-size:10px">${fmtPos(r[1])} · ${r[5]}→${r[7]} · ${r[15]}d</div>
       </td>
       <td class="mono ${isBosOn ? 'c-green' : 'c-amber'}"><b>${isBosOn ? '0€ (Gratis)' : fmtM(effCost)}</b></td>
-      <td class="col-hide-mob">${canBos
-        ? `<button type="button" class="btn btn-sm ${isBosOn ? 'btn-green' : ''}" onclick="toggleCartInBosman('${pidJs}')">${isBosOn ? '🆓 0€ ON' : '0€ Off'}</button>`
+      <td>${canBos
+        ? `<button type="button" class="btn btn-sm ${isBosOn ? 'btn-green' : ''}" onclick="toggleCartInBosman('${pidJs}')">${isBosOn ? '🆓0€' : '0€ Off'}</button>`
         : '<span class="c-muted">-</span>'}</td>
       <td class="mono">${fmtM(Math.round(r[12] * 0.95))}</td>
       <td><button type="button" class="btn btn-sm" onclick="toggleCartIn('${pidJs}')">✕</button></td>
@@ -1635,13 +1671,13 @@ function renderCart() {
         <div class="c-muted mono" style="font-size:10px">${fmtPos(bp.pos)} · ${bp.force}→${bp.potCap} · ${bp.age}th</div>
       </td>
       <td class="mono c-green"><b>0€ (Promosi)</b></td>
-      <td class="col-hide-mob"><span class="badge b-good">GRATIS</span></td>
+      <td><span class="badge b-good">GRATIS</span></td>
       <td class="mono">${fmtM(bp.salary || 0)}</td>
       <td><button type="button" class="btn btn-sm" onclick="toggleCartBIn('${pidJs}')">✕</button></td>
     </tr>`;
   }).join('');
 
   const allInRows = scoutRowsHtml + bRowsHtml;
-  document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Biaya Beli</th><th class="col-hide-mob">Bosman 0€</th><th>Gaji 3Th</th><th>Hapus</th></tr></thead><tbody>` +
+  document.getElementById('t7-in-tbl').innerHTML = `<thead><tr><th>Target</th><th>Beli</th><th>0€ Bosman</th><th>Gaji</th><th>Hapus</th></tr></thead><tbody>` +
     (allInRows || `<tr><td colspan="5" class="c-muted">Belum ada target. Klik "+ Beli" atau <button type="button" class="btn btn-sm btn-green" onclick="goToView('t4','t4-bp')">🧠 Buka Belanja Pintar →</button></td></tr>`) + `</tbody>`;
 }

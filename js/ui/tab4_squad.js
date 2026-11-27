@@ -390,8 +390,6 @@ function renderRosterTable() {
       <td class="col-desk-only"><span class="badge ${actB}">${esc(p.action)}</span></td>
     </tr>`;
   }).join('') : '<tr><td colspan="13" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
-
-  renderTrainingAudit();
 }
 
 function renderTrainingAudit() {

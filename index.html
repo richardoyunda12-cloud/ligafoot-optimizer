@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LigaFoot Opt" />
-<title>LigaFoot Optimizer v8.10.11 — Web App &amp; PWA</title>
+<title>LigaFoot Optimizer v8.11.0 — Web App &amp; PWA</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
@@ -22,7 +22,7 @@
       <div class="brand">
         <div class="brand-ico">⚽</div>
         <div>
-          <h1>LigaFoot Optimizer <span class="c-green">v8.10.11 PWA</span></h1>
+          <h1>LigaFoot Optimizer <span class="c-green">v8.11.0 PWA</span></h1>
           <div class="sub">100% Lokal di HP/Browser • Engine v1.2.0 (Bytecode v9) • Tanpa Upload</div>
         </div>
       </div>
@@ -165,7 +165,7 @@
         <div class="brand">
           <div class="brand-ico">⚽</div>
           <div>
-            <h1 id="hdr-title">LigaFoot Optimizer v8.10.11</h1>
+            <h1 id="hdr-title">LigaFoot Optimizer v8.11.0</h1>
             <div class="sub" id="hdr-sub">Memuat data...</div>
           </div>
         </div>
@@ -178,7 +178,7 @@
             <div class="top-more-pop">
               <button type="button" class="btn btn-sm" style="width:100%;text-align:left" onclick="openGlossary();document.getElementById('top-more-menu').removeAttribute('open')">📖 Kamus Istilah</button>
               <button type="button" class="btn btn-sm" id="btn-density" style="width:100%;text-align:left" onclick="toggleDensity()">↕️ Mode: Lega</button>
-              <div class="top-more-ver"><span class="badge b-good" id="hdr-badge">v8.10.11 PWA</span></div>
+              <div class="top-more-ver"><span class="badge b-good" id="hdr-badge">v8.11.0 PWA</span></div>
             </div>
           </details>
         </div>
@@ -473,7 +473,7 @@
 
         <!-- Quick Bar Mobile (Tersinkron 2 Arah dengan Filter Asli!) -->
         <div class="scout-quick-bar">
-          <input id="s-q-mob" class="input" placeholder="Cari nama/klub..." oninput="syncScoutQuick('q', this.value)" />
+          <input id="s-q-mob" class="input" placeholder="Cari nama/klub..." oninput="syncScoutQuick('q', this.value, true)" />
           <select id="s-pos-mob" onchange="syncScoutQuick('pos', this.value)">
             <option value="">Pos: All</option>
             <option value="G">GK</option><option value="LD">RB</option><option value="LE">LB</option>
@@ -499,7 +499,7 @@
           <summary id="t4b-filter-summary"><span>🎛️ Filter Lanjutan</span><span>▼</span></summary>
           <div class="mobile-filter-body">
             <div class="pill-row">
-              <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="syncScoutDesktopToMob();resetScoutLimitAndRender()" />
+              <input id="s-q" class="input" placeholder="Cari nama / klub..." oninput="syncScoutDesktopToMob();debouncedResetScout()" />
               <select id="s-pos" onchange="onScoutPosSelectChange(this.value)">
                 <option value="">Semua Posisi</option>
                 <option value="G">GK — Kiper</option><option value="LD">RB — Bek Kanan</option><option value="LE">LB — Bek Kiri</option>
@@ -512,9 +512,9 @@
               <select id="s-foot" onchange="resetScoutLimitAndRender()">
                 <option value="">Semua Kaki</option><option value="D">Kanan (R)</option><option value="E">Kiri (L)</option>
               </select>
-              <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="resetScoutLimitAndRender()" />
-              <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="resetScoutLimitAndRender()" />
-              <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="resetScoutLimitAndRender()" />
+              <input id="s-max-age" class="input" type="number" style="width:82px" placeholder="Max Usia" oninput="debouncedResetScout()" />
+              <input id="s-min-f" class="input" type="number" style="width:82px" placeholder="Min Force" oninput="debouncedResetScout()" />
+              <input id="s-max-price" class="input" type="number" style="width:105px" placeholder="Harga Maks" oninput="debouncedResetScout()" />
               <select id="s-price-unit" onchange="resetScoutLimitAndRender()">
                 <option value="1000000">M (Juta)</option><option value="1000">K (Ribu)</option><option value="1">Penuh (€)</option>
               </select>
@@ -883,6 +883,19 @@
     <div id="qs-results" class="mt-12" style="max-height:52vh;overflow-y:auto;font-size:12px"></div>
   </div>
 </div>
+
+<!-- COMPARE 2 PEMAIN MODAL (v8.11.0) -->
+<div class="modal-bg" id="compare-modal" onclick="if(event.target===this)closeCompareModal()">
+  <div class="modal" style="width:min(740px,96vw);max-height:86vh;overflow-y:auto">
+    <div class="flex-between mb-8">
+      <strong style="font-size:14px">⚖️ Bandingkan 2 Pemain (Side-by-Side)</strong>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="btn btn-sm" onclick="clearCompare()">Reset</button>
+        <button type="button" class="btn btn-sm" onclick="closeCompareModal()">Tutup (ESC)</button>
+      </div>
+    </div>
+    <div id="compare-body"></div>
+  </div>
 </div>
 
 <!-- GLOSSARY / KAMUS ISTILAH MODAL -->
@@ -928,8 +941,25 @@
   </div>
 </div>
 
+<!-- SLIDE-OVER PLAYER DRAWER (v8.0 Tahap 2) -->
+<div class="drawer-bg" id="player-drawer-bg" onclick="if(event.target===this)closePlayerDrawer()">
+  <div class="drawer-panel" id="player-drawer-body"></div>
+</div>
 
-<!-- GOOGLE DRIVE FOLDER PICKER MODAL -->
+<div class="sticky-cart-bar" id="sticky-cart-bar"></div>
+
+  <!-- MOBILE BOTTOM NAVIGATION BAR (Aktif di layar HP <= 768px) -->
+  <nav class="mobile-bnav" aria-label="Navigasi Mobile">
+    <button class="bnav-item active" data-tab="t1" onclick="goToView('t1')"><span class="bnav-ico">🏠</span><span>Beranda</span></button>
+    <button class="bnav-item" data-tab="t2" onclick="goToView('t2')"><span class="bnav-ico">⚔️</span><span>War Room</span></button>
+    <button class="bnav-item" data-tab="t3" onclick="goToView('t3')"><span class="bnav-ico">⚽</span><span>Skuad</span></button>
+    <button class="bnav-item" data-tab="t4" onclick="goToView('t4')"><span class="bnav-ico">🛒</span><span>Scout</span></button>
+    <button class="bnav-item" data-tab="t5" onclick="goToView('t5')"><span class="bnav-ico">💰</span><span>Keuangan</span></button>
+    <button class="bnav-item" data-tab="t6" onclick="goToView('t6')"><span class="bnav-ico">🏆</span><span>Liga</span></button>
+  </nav>
+</div>
+
+<!-- GOOGLE DRIVE FOLDER PICKER MODAL (Aktif di Loader & Dashboard) -->
 <div class="modal-bg" id="gdrive-folder-modal" onclick="if(event.target===this)LFApp.closeGDriveFolderPicker()">
   <div class="modal" style="width:min(540px,95vw);max-height:82vh;display:flex;flex-direction:column;gap:8px">
     <div class="flex-between">
@@ -946,24 +976,7 @@
   </div>
 </div>
 
-<!-- SLIDE-OVER PLAYER DRAWER (v8.0 Tahap 2) -->
-<div class="drawer-bg" id="player-drawer-bg" onclick="if(event.target===this)closePlayerDrawer()">
-  <div class="drawer-panel" id="player-drawer-body"></div>
-</div>
-
-<div class="sticky-cart-bar" id="sticky-cart-bar"></div>
 <div class="toast" id="toast"></div>
-
-  <!-- MOBILE BOTTOM NAVIGATION BAR (Aktif di layar HP <= 768px) -->
-  <nav class="mobile-bnav" aria-label="Navigasi Mobile">
-    <button class="bnav-item active" data-tab="t1" onclick="goToView('t1')"><span class="bnav-ico">🏠</span><span>Beranda</span></button>
-    <button class="bnav-item" data-tab="t2" onclick="goToView('t2')"><span class="bnav-ico">⚔️</span><span>War Room</span></button>
-    <button class="bnav-item" data-tab="t3" onclick="goToView('t3')"><span class="bnav-ico">⚽</span><span>Skuad</span></button>
-    <button class="bnav-item" data-tab="t4" onclick="goToView('t4')"><span class="bnav-ico">🛒</span><span>Scout</span></button>
-    <button class="bnav-item" data-tab="t5" onclick="goToView('t5')"><span class="bnav-ico">💰</span><span>Keuangan</span></button>
-    <button class="bnav-item" data-tab="t6" onclick="goToView('t6')"><span class="bnav-ico">🏆</span><span>Liga</span></button>
-  </nav>
-</div>
 
 <!-- 1. Engine Pure JS (Tahap 1 & 2) -->
 <script src="js/engine/config.js"></script>

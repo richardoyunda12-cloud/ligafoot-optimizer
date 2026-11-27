@@ -78,12 +78,24 @@
 
   // OTA 2.1.0 (#3611 & #24952 releaseClauseOf): Brasil 1.5x, Eropa 3.0x, Lainnya 2.0x
   const EXTRA_EU_CODES = new Set(['WL', 'NIR', 'IE', 'HU', 'BG', 'SK', 'SI', 'FI', 'IS', 'CY', 'IL', 'BA', 'ME', 'MK', 'AL', 'EE', 'LV', 'LT', 'BY', 'MD', 'GE', 'AM', 'AZ', 'LU', 'MT', 'FO', 'LI', 'AD', 'SM', 'GI', 'XK']);
+  const COUNTRY_GROUP_MAP = new Map();
+  if (C.COUNTRY_GROUPS && typeof C.COUNTRY_GROUPS === 'object') {
+    for (const [gId, list] of Object.entries(C.COUNTRY_GROUPS)) {
+      const gNum = Number(gId);
+      if (!Array.isArray(list)) continue;
+      for (let i = 0; i < list.length; i++) COUNTRY_GROUP_MAP.set(list[i], gNum);
+    }
+  }
+  const EU_COUNTRY_SET = new Set([
+    ...((C.COUNTRY_GROUPS && Array.isArray(C.COUNTRY_GROUPS[0])) ? C.COUNTRY_GROUPS[0] : []),
+    ...EXTRA_EU_CODES,
+  ]);
+
   function releaseClauseMul(countryCode) {
     const c = String(countryCode || '').trim().toUpperCase();
     const rc = C.RELEASE_CLAUSE || { europe: 3.0, brazil: 1.5, other: 2.0 };
     if (c === 'BR' || c === 'BRA' || c === 'BRASIL') return { mult: rc.brazil, region: 'BR', label: 'Brasil 1.5x' };
-    const euList = (C.COUNTRY_GROUPS && C.COUNTRY_GROUPS[0]) || [];
-    if (euList.includes(c) || EXTRA_EU_CODES.has(c)) return { mult: rc.europe, region: 'EU', label: 'Eropa 3.0x' };
+    if (EU_COUNTRY_SET.has(c)) return { mult: rc.europe, region: 'EU', label: 'Eropa 3.0x' };
     return { mult: rc.other, region: 'OTHER', label: 'Standar 2.0x' };
   }
 
@@ -133,11 +145,8 @@
   // Bytecode #21513/#21904 countryGroup (6 grup resmi 0..5, default -1 jika tidak ditemukan)
   function countryGroup(code) {
     const c = String(code || '').trim().toUpperCase();
-    const groups = C.COUNTRY_GROUPS || {};
-    for (const [gId, list] of Object.entries(groups)) {
-      if (Array.isArray(list) && list.includes(c)) return Number(gId);
-    }
-    return -1;
+    const g = COUNTRY_GROUP_MAP.get(c);
+    return g !== undefined ? g : -1;
   }
 
   // Bytecode #21515 sameCountry (UK_CODES diperlakukan satu negara)

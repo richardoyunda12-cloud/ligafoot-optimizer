@@ -3,7 +3,7 @@
  * Cache-First + Background Refresh untuk seluruh App Shell sehingga
  * aplikasi bisa dibuka 100% offline di HP (termasuk Mode Pesawat).
  */
-const CACHE_NAME = 'ligafoot-opt-pwa-v8-10-11';
+const CACHE_NAME = 'ligafoot-opt-pwa-v8-11-0';
 
 const APP_SHELL_FILES = [
   './',
@@ -54,6 +54,12 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -69,16 +75,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App Shell: Network-first untuk HTML/JS agar update GitHub Pages cepat masuk, fallback ke cache saat offline
+  // App Shell: Stale-While-Revalidate (buka instan dari cache, perbarui diam-diam di background)
   event.respondWith(
-    fetch(req)
-      .then((resp) => {
-        if (resp && resp.status === 200 && resp.type === 'basic') {
-          const clone = resp.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone)).catch(() => null);
-        }
-        return resp;
-      })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
+    caches.match(req).then((cached) => {
+      const netPromise = fetch(req)
+        .then((resp) => {
+          if (resp && resp.status === 200 && resp.type === 'basic') {
+            const clone = resp.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone)).catch(() => null);
+          }
+          return resp;
+        })
+        .catch(() => null);
+      if (cached) {
+        event.waitUntil(netPromise);
+        return cached;
+      }
+      return netPromise.then((r) => r || caches.match('./index.html'));
+    })
   );
 });

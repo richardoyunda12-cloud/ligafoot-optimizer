@@ -263,7 +263,7 @@ async function renderPwaManager() {
   } catch (_) {}
 
   const shortCnt = (typeof shortlistMap === 'object' && shortlistMap) ? Object.keys(shortlistMap).length : 0;
-  const verTxt = (D.meta && D.meta.version) || 'v8.10.11 PWA';
+  const verTxt = (D.meta && D.meta.version) || 'v8.11.0 PWA';
   const gd = window.LFGDrive;
   const gdCfg = gd ? gd.loadConfig() : null;
   const gdReady = Boolean(gd && gd.isConfigured(gdCfg));
@@ -938,7 +938,12 @@ function runQuickSearch() {
 
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); }
-  if (e.key === 'Escape') { closeSearch(); closeGlossary(); closePlayerDrawer(); }
+  if (e.key === 'Escape') {
+    closeSearch();
+    closeGlossary();
+    if (typeof closeCompareModal === 'function') closeCompareModal();
+    closePlayerDrawer();
+  }
 });
 
 function downloadCsv(filename, content) {
@@ -957,24 +962,25 @@ window.LFInitDashboard = function () {
   calcSelectedRenewPlayer = null;
   calcSelectedOfferPlayer = null;
 
-  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.10.11`;
-  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.10.11</span>`;
+  document.title = `${D.meta.teamName} — LigaFoot Optimizer v8.11.0`;
+  document.getElementById('hdr-title').innerHTML = `${esc(D.meta.teamName)} <span class="hdr-app-suffix">— LigaFoot Optimizer v8.11.0</span>`;
   const rsTag = D.meta.realScale ? ' • 📏 Real 0–100' : '';
   document.getElementById('hdr-sub').innerHTML =
     `<span class="hdr-sub-mob">${esc(D.meta.currentDate)} • M${D.meta.season} P${D.meta.week}${rsTag}</span>` +
     `<span class="hdr-sub-desk">${esc(D.meta.currentDate)} • Musim ${D.meta.season} Pekan ${D.meta.week} • Div ${D.meta.division} (${esc(D.meta.country)})${rsTag} • ${esc(D.meta.version)}</span>`;
-  document.getElementById('hdr-badge').textContent = `v8.10.11 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
+  document.getElementById('hdr-badge').textContent = `v8.11.0 • ${D.meta.parseSec}s • ${D.meta.scoutPoolCount} Scout`;
 
   const _steps = [
     ['Tab1', renderTab1],
     ['Tab2', renderTab2],
     ['Tab3', initTab3],
     ['Tab4', renderRosterTable],
+    ['Tab3Train', renderTrainingAudit],
     ['Tab3Growth', renderWonderkidTracker],
     ['Tab3BTeam', renderBTeamPanel],
     ['Tab5', renderTab5],
     ['Tab6', renderTab6],
-    ['Tab7', renderTab7All],
+    ['Tab7', () => renderTab7All(true)],
     ['Tab8', renderTab8Extras],
     ['Tab6Tel', renderMatchTelemetry],
     ['Calc', calcAll],

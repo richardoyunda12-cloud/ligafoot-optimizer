@@ -1633,7 +1633,7 @@
 
     prog(75, 'Memindai Global Auto-Scout Moneyball (1.185+ klub AI)...');
     const { scoutPool, youthScoutTargets, rivalYouthTargets, aiUnhappyTotal, aiBosmanTotal } = S.buildGlobalScoutPool(
-      save, staticPlayers, clubsMeta, userId, userCountry, holePositions, bestXi.avgScore
+      save, staticPlayers, clubsMeta, userId, userCountry, holePositions, avgTop11Force
     );
 
     prog(88, 'Menyusun mutasi keuangan, kontrak pinjaman & status timnas...');
@@ -2274,7 +2274,7 @@
       : null;
     const matchTelemetry = buildMatchTelemetry(save, userId, userRoster, U.safeInt(save.season, 1));
     const ratingFbMap = new Map();
-    const curTel = matchTelemetry && Array.isArray(matchTelemetry.seasons) && matchTelemetry.seasons[0];
+    const curTel = matchTelemetry && (matchTelemetry.season && matchTelemetry.season.games > 0 ? matchTelemetry.season : matchTelemetry.all);
     const telPlayers = curTel && curTel.playerTelemetry && Array.isArray(curTel.playerTelemetry.allPlayers)
       ? curTel.playerTelemetry.allPlayers
       : [];
@@ -2673,7 +2673,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.10.11 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.11.0 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,

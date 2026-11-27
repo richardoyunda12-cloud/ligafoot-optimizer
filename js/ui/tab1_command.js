@@ -12,6 +12,7 @@ function toggleAqShowAll() {
 function dismissWhatsNew() {
   whatsNewDismissed = true;
   renderWhatsNewCard();
+  if (typeof renderTab1 === 'function') renderTab1();
 }
 
 function renderWhatsNewCard() {
@@ -465,6 +466,11 @@ function renderTab1() {
   if (!dl.prevDate) {
     dEl.innerHTML = `<div class="flex-between" style="border-top:1px solid var(--border);padding-top:8px;gap:8px;flex-wrap:wrap">
       <div class="c-muted">Snapshot #${snapCnt} tersimpan (<b>${esc(m.currentDate || '-')}</b>). Delta otomatis tampil di save berikutnya.</div>
+      ${wkTrackLink}
+    </div>`;
+  } else if (!whatsNewDismissed) {
+    dEl.innerHTML = `<div class="flex-between" style="border-top:1px solid var(--border);padding-top:8px;gap:8px;flex-wrap:wrap">
+      <div class="c-muted" style="font-size:11.5px"><b>Snapshot #${snapCnt} (${esc(dl.prevDate)}):</b> ringkasan lengkap tampil di kartu atas.</div>
       ${wkTrackLink}
     </div>`;
   } else {

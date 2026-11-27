@@ -367,7 +367,7 @@
         userRoster, oppXi, fx.isHome, isKo, isBig,
         foreignCap, userCountry, activeFormation,
         yellowIds, safeRotatePrelim, userRepLv,
-        autoCond, activeFormationRaw
+        autoCond, activeFormationRaw, Boolean(fx.neutral)
       );
 
       const recEdge = (matchup && matchup.recEdge !== undefined)
@@ -458,6 +458,7 @@
       buyerDiv: userDiv,
       avgTop11: U.safeNum(userAvgForce, 0),
       ctLevel: userCtLv,
+      contSlack: U.safeInt(uTeam.contSlack, 0),
     };
 
     const holesSet = new Set(holePositions || []);
@@ -531,13 +532,18 @@
 
       const futAge = p.age + (projGain >= 4 ? 2 : 1);
       // #21911: Estimasi resale memakai formula kuadratik resmi computeMarketValue
-      const futClubCtx = sellerClubCtx || { level: userLevel, country: userCountry, europeTop5: U.countryGroup(userCountry) === 0 && userLevel >= 21 };
-      const futMvNow = U.computeMarketValue({ ...p, isYouth: false }, futClubCtx);
-      const futMvGain = U.computeMarketValue({ ...p, force: p.force + projGain, age: futAge, isYouth: false }, futClubCtx);
-      const scaleAnchor = (p.marketValue > 0 && futMvNow > 0) ? (futMvGain / futMvNow) : 1.0;
-      const baseResaleMv = (p.marketValue > 0 && projGain > 0)
-        ? Math.round(Math.max(futMvGain, p.marketValue * scaleAnchor))
-        : (p.marketValue > 0 ? p.marketValue : futMvGain);
+      let baseResaleMv = p.marketValue;
+      if (projGain > 0 || p.marketValue <= 0) {
+        const futClubCtx = sellerClubCtx || { level: userLevel, country: userCountry, europeTop5: U.countryGroup(userCountry) === 0 && userLevel >= 21 };
+        const futMvGain = U.computeMarketValue({ ...p, force: p.force + projGain, age: futAge, isYouth: false }, futClubCtx);
+        if (p.marketValue > 0 && projGain > 0) {
+          const futMvNow = U.computeMarketValue({ ...p, isYouth: false }, futClubCtx);
+          const scaleAnchor = futMvNow > 0 ? (futMvGain / futMvNow) : 1.0;
+          baseResaleMv = Math.round(Math.max(futMvGain, p.marketValue * scaleAnchor));
+        } else {
+          baseResaleMv = futMvGain;
+        }
+      }
       const estResale = Math.round(baseResaleMv * C.COUNTER_AVG_REALIZED);
       const rel = flip
         + (p.force - userAvgForce) * 1.3
@@ -598,6 +604,7 @@
       const { roster: cRoster, youth: cYouth } = R.extractTeamRoster(cobj, staticPlayers, false, cid, cname, ccountry);
       if (!cRoster.length && !cYouth.length) continue;
 
+      const sellerMeta = typeof T.precomputeSellerMeta === 'function' ? T.precomputeSellerMeta(cRoster, []) : null;
       const sellerClubCtx = {
         id: cid,
         level: sellerLevel,
@@ -608,15 +615,20 @@
         players: cRoster,
         bPlayers: [],
         europeTop5: U.countryGroup(ccountry) === 0 && sellerLevel >= 21,
+        _meta: sellerMeta,
       };
 
       const posStock = {};
       for (const p of cRoster) {
         if (!p.injured) posStock[p.pos] = (posStock[p.pos] || 0) + 1;
       }
-      const cSortedByForce = [...cRoster].sort((a, b) => (b.force - a.force) || String(a.id).localeCompare(String(b.id)));
-      const cRankMap = new Map();
-      cSortedByForce.forEach((p, idx) => cRankMap.set(p.id, idx + 1));
+      const cRankMap = sellerMeta
+        ? sellerMeta.rankMap
+        : (() => {
+            const m = new Map();
+            [...cRoster].sort((a, b) => (b.force - a.force) || String(a.id).localeCompare(String(b.id))).forEach((p, idx) => m.set(p.id, idx + 1));
+            return m;
+          })();
       const { moods: cMoods } = T.computeSquadMoodsV9(cRoster, true);
 
       for (const p of cRoster) {
@@ -631,6 +643,8 @@
           isUnhappy: isUnh,
           sellerRep,
           sellerDiv: cDiv,
+          sellerClubCtx,
+          buyerClubCtx,
         };
         const pol = T.userBuyPolicy(
           p, ccountry, userCountry, sellerLevel, userLevel,
@@ -640,10 +654,12 @@
           ? T.buyPersuadable(p, ccountry, userCountry, sellerLevel, userLevel, pol, pExtra)
           : false;
         const isReachable = (pol.status === 'OK') || persuadable;
-        const stance = typeof T.sellerStance === 'function' ? T.sellerStance(p, sellerClubCtx, buyerClubCtx) : null;
+        const stance = pol.stance || (typeof T.sellerStance === 'function' ? T.sellerStance(p, sellerClubCtx, buyerClubCtx) : null);
 
         // #25603 preContractInfo: endOfSeason window <= 180 hari (atau hash%3===0 saat mendekati akhir musim) & keyLock (top/star/keyTop)
-        const idSum = String(p.id || '').split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+        const pidStr = String(p.id || '');
+        let idSum = 0;
+        for (let si = 0; si < pidStr.length; si++) idSum += pidStr.charCodeAt(si);
         const endsThisSeason = Boolean(
           p.contractDays > 0 && (
             p.contractDays <= Math.max(daysToSeasonEnd, C.PRECONTRACT_DAYS)
