@@ -1222,6 +1222,10 @@ tr.mini-sep-row td {
   gap: 8px;
 }
 
+.mob-only-btn { display: none; }
+.stack-cell { white-space: nowrap; }
+.stack-cell .stack-sk { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+
 @media (max-width: 768px) {
   .wr-sub-desk { display: none !important; }
   .wr-top-head { gap: 6px; margin-bottom: 8px; }
@@ -1235,6 +1239,10 @@ tr.mini-sep-row td {
 
   /* Sembunyikan seluruh kolom sekunder bertanda .col-hide-mob secara global di HP */
   .col-hide-mob { display: none !important; }
+  .mob-only-btn { display: inline-flex; }
+  .tbl-show-all-cols .col-hide-mob,
+  .tbl-show-all-cols .col-desk-only { display: table-cell !important; }
+  .tbl-show-all-cols { min-width: max-content; }
   .wr-form-mod-sub { display: block; }
   .wr-top3-tbl th, .wr-top3-tbl td { padding: 6px 4px; font-size: 11px; }
   .wr-xi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

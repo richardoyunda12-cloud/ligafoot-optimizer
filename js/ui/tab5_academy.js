@@ -95,7 +95,7 @@ function renderTab5() {
     ${acadTh('age', 'Usia', 'col-hide-mob')}
     ${acadTh('force', 'Force')}
     ${acadTh('estPotCap', 'Est. PotCap')}
-    <th class="col-hide-mob">Skill Stack</th>
+    ${acadTh('stackPct', 'Skill Stack')}
     ${acadTh('pipeScore', 'Skor', 'col-hide-mob')}
     <th class="col-desk-only">Aksi</th>
   </tr></thead><tbody>` + (rows.length ? rows.map(y => {
@@ -103,6 +103,7 @@ function renderTab5() {
     const devCol = devPct >= 90 ? 'var(--green)' : (devPct >= 60 ? 'var(--sky)' : 'var(--amber)');
     const actCls = y.action.includes('PROMO') ? 'b-good' : (y.action.includes('TAHAN') ? 'b-info' : 'b-muted');
     const age20Badge = (y.age || 0) > 20 ? '<span class="badge b-crit">⚠ STALLED 21+</span>' : ((y.age || 0) === 20 ? '<span class="badge b-warn">⏳ LAMBAT 20th</span>' : '');
+    const stackCell = typeof skillStackCellHtml === 'function' ? skillStackCellHtml(y) : `<span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span>`;
     return `<tr>
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('youth','${escJs(y.id)}')"><b>${esc(y.name)}</b></a></div>
@@ -118,11 +119,12 @@ function renderTab5() {
       <td class="mono col-hide-mob ${y.age >= 20 ? 'c-amber' : ''}"><b>${y.age}</b></td>
       <td class="mono"><b>${y.force}</b></td>
       <td class="mono"><b class="c-green">${y.estPotCap || y.potCap || y.force}</b>${Array.isArray(y.estPotRange) ? `<div class="c-muted" style="font-size:10px">Est ${y.estPotRange[0]}–${y.estPotRange[1]}</div>` : ''}</td>
-      <td class="col-hide-mob"><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></td>
+      <td>${stackCell}</td>
       <td class="mono col-hide-mob"><b>${y.pipeScore}</b></td>
       <td class="col-desk-only"><span class="badge ${actCls}">${esc(y.action)}</span></td>
     </tr>`;
   }).join('') : '<tr><td colspan="10" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  if (typeof syncTableAllColsClass === 'function') syncTableAllColsClass('t5-tbl');
 
   // Panel Olheiro da Base Rival Junior (#25334–#25338)
   let ysBox = document.getElementById('t5-yscout-box');

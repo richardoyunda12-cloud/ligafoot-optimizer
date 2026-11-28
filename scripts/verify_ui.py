@@ -328,10 +328,23 @@ def run_mobile_checks(browser, url, save_path, expected_ver):
         if ov > 0:
             overflows.append((sub or tab, ov))
 
-    # Cek global .col-hide-mob berfungsi di luar War Room & tombol Kondisi War Room >= 32px saat dibuka
+    # Cek global .col-hide-mob berfungsi di luar War Room, Skill Stack selalu tampil di HP, & toggle Semua Kolom aman 0px overflow
+    page.evaluate("() => { goToView('t3', 't3-squad'); }")
+    senior_stack_vis = page.evaluate("() => { const th = document.querySelector('#t4-tbl th[data-sort-col=\"stackPct\"]'); return Boolean(th && getComputedStyle(th).display !== 'none'); }")
+    assert senior_stack_vis, 'Kolom Skill Stack di Audit Skuad Senior harus terlihat di Mobile'
+
     page.evaluate("() => { goToView('t3', 't3-bteam'); }")
+    bteam_stack_vis = page.evaluate("() => { const th = document.querySelector('#t3b-tbl th[data-sort-col=\"stackPct\"]'); return Boolean(th && getComputedStyle(th).display !== 'none'); }")
+    assert bteam_stack_vis, 'Kolom Skill Stack di Audit Tim B harus terlihat di Mobile'
     hidden_bteam = page.evaluate("() => Array.from(document.querySelectorAll('#t3b-tbl .col-hide-mob')).every(el => getComputedStyle(el).display === 'none')")
     assert hidden_bteam, 'Global .col-hide-mob tidak menyembunyikan kolom sekunder di Mobile'
+
+    page.locator('#t3b-cols-btn').click()
+    shown_bteam = page.evaluate("() => Array.from(document.querySelectorAll('#t3b-tbl .col-hide-mob')).every(el => getComputedStyle(el).display === 'table-cell')")
+    assert shown_bteam, 'Tombol Semua Kolom tidak menampilkan kolom .col-hide-mob di Mobile'
+    ov_all_cols = page.evaluate("() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth)")
+    assert ov_all_cols == 0, f'Mode Semua Kolom Tim B menyebabkan overflow dokumen {ov_all_cols}px'
+    page.locator('#t3b-cols-btn').click()
 
     page.evaluate("() => { goToView('t2'); document.getElementById('wr-cond-details').setAttribute('open',''); }")
     small_t2_btns = page.evaluate("""() => {

@@ -19,6 +19,34 @@ function defaultSortDir(col) {
   return ['name', 'pos', 'contractDays', 'age', 'action', 'bAction'].includes(col) ? 1 : -1;
 }
 
+const tableAllColsState = {};
+function syncTableAllColsClass(tblId) {
+  const tbl = document.getElementById(tblId);
+  if (tbl) tbl.classList.toggle('tbl-show-all-cols', Boolean(tableAllColsState[tblId]));
+}
+function toggleTableAllCols(tblId, btn) {
+  const next = !tableAllColsState[tblId];
+  tableAllColsState[tblId] = next;
+  syncTableAllColsClass(tblId);
+  if (btn) {
+    btn.classList.toggle('btn-accent', next);
+    btn.textContent = next ? '📋 Ringkas' : '📋 Semua Kolom';
+  }
+}
+
+function skillStackCellHtml(p) {
+  const pct = Number(p && p.stackPct) || 0;
+  const nonSt = Boolean(p && p.nonStack);
+  const grade = (p && p.stackGrade) || (nonSt ? 'NON-STACK' : (pct >= 5 ? 'GOD' : (pct >= 3 ? 'GOOD' : 'STD')));
+  let cls = 'b-muted';
+  let lbl = pct > 0 ? `STD +${pct}%` : '0%';
+  if (nonSt) { cls = 'b-crit'; lbl = 'NON-STACK'; }
+  else if (grade === 'GOD') { cls = 'b-good'; lbl = `GOD +${pct}%`; }
+  else if (grade === 'GOOD') { cls = 'b-info'; lbl = `GOOD +${pct}%`; }
+  const tip = (p && p.stackNote) || (nonSt ? tipFor('NONSTACK') : (grade === 'GOD' ? tipFor('GOD') : ''));
+  return `<div class="stack-cell" title="${esc(tip)}"><span class="badge ${cls}">${lbl}</span><span class="stack-sk">${fmtSkills(p && p.s1, p && p.s2)}</span></div>`;
+}
+
 function compareAuditRows(a, b, sortObj) {
   const col = (sortObj && sortObj.col) || 'force';
   const dir = (sortObj && sortObj.dir) || -1;
@@ -26,6 +54,13 @@ function compareAuditRows(a, b, sortObj) {
     || ((b.potCap || 0) - (a.potCap || 0))
     || ((b.effForce || 0) - (a.effForce || 0))
     || String(a.name || '').localeCompare(String(b.name || ''));
+
+  if (col === 'stackPct') {
+    const sa = a.nonStack ? -1 : (Number(a.stackPct) || 0);
+    const sb = b.nonStack ? -1 : (Number(b.stackPct) || 0);
+    if (sa !== sb) return (sa - sb) * dir;
+    return fTie();
+  }
 
   if (col === 'pos') {
     const ca = (typeof EXACT_CAT !== 'undefined' && EXACT_CAT[a.pos] !== undefined) ? EXACT_CAT[a.pos] : 9;
@@ -91,6 +126,7 @@ function matchRosterFilter(p, flt) {
   if (flt === 'LOCAL') return !isRosterForeign(p);
   if (flt === 'GOLDEN') return p.contractDays >= 60 && p.contractDays <= 120;
   if (flt === 'DECLINE') return p.isDeclining || p.age >= p.sellWarnAge;
+  if (flt === 'GOD') return !p.nonStack && p.stackGrade === 'GOD';
   if (flt === 'NONSTACK') return p.nonStack;
   if (flt === 'TRAP') return p.isTrap;
   if (flt === 'SGEM') return Boolean(p.isSuperGem);
@@ -178,6 +214,7 @@ function renderRosterQuickChips() {
     ['DECLINE', '📉 Regresi'],
     ['SGEM', '⭐ Super Gem'],
     ['GEM', '💎 Gem'],
+    ['GOD', '🔥 GOD'],
     ['INJURED', '🏥 Cedera'],
     ['NONSTACK', '⚠ Non-Stack'],
     ['TRAP', '🚨 Trap'],
@@ -343,17 +380,16 @@ function renderRosterTable() {
     ${thSort('pos', 'Pos')}
     ${thSort('force', 'Force')}
     ${thSort('potCap', 'PotCap')}
+    ${thSort('stackPct', 'Skill Stack')}
     ${thSort('contractDays', 'Kontrak')}
     ${thSort('salary', 'Gaji/Bln')}
     ${thSort('energy', 'Energi', 'col-hide-mob')}
     ${thSort('age', 'Usia', 'col-hide-mob')}
     ${thSort('growthFrac', 'Growth', 'col-hide-mob')}
-    ${thSort('stackPct', 'Skill Stack', 'col-hide-mob')}
     ${thSort('marketValue', 'Nilai (Jual)', 'col-hide-mob')}
     ${thSort('estBuyersCount', 'Peminat', 'col-hide-mob')}
     ${thSort('action', 'Rekomendasi Aksi', 'col-desk-only')}
   </tr></thead><tbody>` + (rows.length ? rows.map(p => {
-    const stB = p.nonStack ? 'b-crit' : (p.stackGrade === 'GOD' ? 'b-good' : 'b-muted');
     const cB = p.contractDays <= 10 ? 'b-crit' : (p.contractDays < 60 ? 'b-warn' : (p.contractDays <= 120 ? 'b-good' : 'b-muted'));
     const actB = { crit: 'b-crit', warn: 'b-warn', good: 'b-good', accent: 'b-accent', info: 'b-info', muted: 'b-muted' }[p.actionCls] || 'b-muted';
     const slumpBadge = (p.fineSlump > 0) ? ` <span class="badge b-crit" title="${esc(tipFor('SLUMP'))}">SLUMP -${p.fineSlumpPct}%</span>` : '';
@@ -379,17 +415,18 @@ function renderRosterTable() {
       <td><b>${fmtPos(p.pos)}</b> <span class="c-muted" style="font-size:10px">${fmtFoot(p.foot)}</span></td>
       <td class="mono"><b>${p.force}</b></td>
       <td class="mono"><b class="c-green">${p.potCap}</b><div class="c-muted" style="font-size:10px">UI ${p.potential}${gap > 0 ? ` · +${gap}` : ' · max'}</div></td>
+      <td>${skillStackCellHtml(p)}</td>
       <td><span class="badge ${cB} mono">${p.contractDays}d</span>${loopTag}${p.benchCutSave ? `<div class="c-sky" style="font-size:10px">Bangku -${fmtM(p.benchCutSave)}</div>` : ''}${narTag}</td>
       <td class="mono">${fmtM(p.salary)}</td>
       <td class="col-hide-mob">${energyPillHtml(p.energy)}</td>
       <td class="mono col-hide-mob ${p.age >= p.sellWarnAge ? 'c-amber' : ''}">${p.age} <span class="c-muted">(@${p.declineAge})</span></td>
       <td class="col-hide-mob">${growthBarHtml(p.growthFrac, p.nearDrop)}</td>
-      <td class="col-hide-mob"><span class="badge ${stB}" title="${esc(p.stackNote || (p.nonStack ? tipFor('NONSTACK') : ''))}">${fmtSkills(p.s1, p.s2)} (+${p.stackPct}%)</span></td>
       <td class="mono col-hide-mob">${fmtM(p.marketValue)} <div class="c-muted" style="font-size:10px">Real ~${fmtM(p.estRealSale)}</div></td>
       <td class="col-hide-mob">${demFull}</td>
       <td class="col-desk-only"><span class="badge ${actB}">${esc(p.action)}</span></td>
     </tr>`;
   }).join('') : '<tr><td colspan="13" class="c-muted">Tidak ada pemain yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  syncTableAllColsClass('t4-tbl');
 }
 
 function renderTrainingAudit() {
@@ -721,6 +758,8 @@ function getFilteredBTeamRoster() {
   let res = list;
   if (bTeamFilter === 'PROMOTE') res = list.filter(p => p.bAction === 'SIAP PROMOSI');
   else if (bTeamFilter === 'SGEM') res = list.filter(p => p.isSuperGem);
+  else if (bTeamFilter === 'GOD') res = list.filter(p => !p.nonStack && p.stackGrade === 'GOD');
+  else if (bTeamFilter === 'NONSTACK') res = list.filter(p => p.nonStack);
   else if (bTeamFilter === 'LEAK') res = list.filter(p => p.zeroMin);
   else if (bTeamFilter === 'CONTRACT') res = list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom);
   else if (bTeamFilter === 'FOREIGN') res = list.filter(p => isRosterForeign(p));
@@ -813,6 +852,8 @@ function renderBTeamPanel() {
     ALL: list.length,
     PROMOTE: list.filter(p => p.bAction === 'SIAP PROMOSI').length,
     SGEM: list.filter(p => p.isSuperGem).length,
+    GOD: list.filter(p => !p.nonStack && p.stackGrade === 'GOD').length,
+    NONSTACK: list.filter(p => p.nonStack).length,
     LEAK: list.filter(p => p.zeroMin).length,
     CONTRACT: list.filter(p => (p.contractDays <= 30 || (p.contractDays >= 60 && p.contractDays <= 120)) && !p.loanedFrom).length,
     FOREIGN: list.filter(p => isRosterForeign(p)).length,
@@ -823,6 +864,8 @@ function renderBTeamPanel() {
     ['ALL', `Semua (${counts.ALL})`],
     ['PROMOTE', `⬆ Siap Promosi (${counts.PROMOTE})`],
     ...(counts.SGEM > 0 ? [['SGEM', `⭐ Super Gem (${counts.SGEM})`]] : []),
+    ['GOD', `🔥 GOD (${counts.GOD})`],
+    ...(counts.NONSTACK > 0 ? [['NONSTACK', `⚠ Non-Stack (${counts.NONSTACK})`]] : []),
     ['LEAK', `💸 0 Menit (${counts.LEAK})`],
     ['CONTRACT', `⏳ Kontrak (${counts.CONTRACT})`],
     ['HIGHPOT', `🚀 Gap ≥12 (${counts.HIGHPOT})`],
@@ -838,6 +881,7 @@ function renderBTeamPanel() {
     ${thSortB('pos', 'Pos')}
     ${thSortB('force', 'Force')}
     ${thSortB('potCap', 'PotCap')}
+    ${thSortB('stackPct', 'Skill Stack')}
     ${thSortB('age', 'Usia', 'col-hide-mob')}
     ${thSortB('seasonMinutes', 'Laga/Mnt', 'col-hide-mob')}
     ${thSortB('salary', 'Gaji')}
@@ -851,11 +895,12 @@ function renderBTeamPanel() {
     return `<tr data-force="${p.force}" data-potcap="${p.potCap}" data-foreign="${isF ? '1' : '0'}">
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('bteam','${escJs(p.id)}')"><b>${esc(p.name)}</b></a> ${p.injured ? `<span class="badge b-crit" style="font-size:9px">🏥${p.injuryDays}d</span>` : ''}</div>
-        <div class="origin-meta">${originNoteHtml(p)}${p.bLineupRole === 'XI' ? '<span class="badge b-good origin-note" title="Starter XI di formasi Tim B saat ini">⚡ XI B</span>' : (p.bLineupRole === 'BENCH' ? '<span class="badge b-muted origin-note" title="Cadangan di bangku Tim B">🪑 Bench B</span>' : '')}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}${p.isTrap ? `<span class="badge b-crit" style="font-size:9px" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isSuperGem ? `<span class="badge b-accent" style="font-size:9px" title="${esc(tipFor('SGEM'))}">⭐ SUPER GEM</span>` : (p.isGem ? `<span class="badge b-good" style="font-size:9px" title="${esc(tipFor('GEM'))}">GEM</span>` : ''))}${p.stackGrade === 'GOD' ? `<span class="badge b-good" style="font-size:9px" title="${esc(tipFor('GOD'))}">GOD</span>` : ''}</div>
+        <div class="origin-meta">${originNoteHtml(p)}${p.bLineupRole === 'XI' ? '<span class="badge b-good origin-note" title="Starter XI di formasi Tim B saat ini">⚡ XI B</span>' : (p.bLineupRole === 'BENCH' ? '<span class="badge b-muted origin-note" title="Cadangan di bangku Tim B">🪑 Bench B</span>' : '')}${p.fillsHole ? '<span class="badge b-good origin-note">LUBANG</span>' : ''}${p.isTrap ? `<span class="badge b-crit" style="font-size:9px" title="${esc(tipFor('TRAP'))}">TRAP</span>` : (p.isSuperGem ? `<span class="badge b-accent" style="font-size:9px" title="${esc(tipFor('SGEM'))}">⭐ SUPER GEM</span>` : (p.isGem ? `<span class="badge b-good" style="font-size:9px" title="${esc(tipFor('GEM'))}">GEM</span>` : ''))}</div>
       </td>
       <td><b>${fmtPos(p.pos)}</b></td>
       <td class="mono"><b>${p.force}</b></td>
       <td class="mono"><b class="c-green">${p.potCap}</b> <span class="c-muted">(+${gap})</span></td>
+      <td>${skillStackCellHtml(p)}</td>
       <td class="mono col-hide-mob">${p.age}th</td>
       <td class="mono col-hide-mob">${p.gamesPlayed || 0}g <span class="c-muted">(${p.seasonMinutes || 0}m · ${p.avgRating || '-'})</span></td>
       <td class="mono">${fmtM(p.salary)}</td>
@@ -867,14 +912,16 @@ function renderBTeamPanel() {
         </div>
       </td>
     </tr>`;
-  }).join('') : '<tr><td colspan="9" class="c-muted">Tidak ada pemain Tim B pada filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="10" class="c-muted">Tidak ada pemain Tim B pada filter ini.</td></tr>') + `</tbody>`;
+  syncTableAllColsClass('t3b-tbl');
 }
 
 function exportBTeamCsv() {
   const rows = getFilteredBTeamRoster();
-  const hdr = ['Name','Pos','Age','Force','PotCap','Gap','Games','Minutes','AvgRating','Salary','ContractDays','Foreign','Action'];
+  const hdr = ['Name','Pos','Age','Force','PotCap','Gap','S1','S2','StackPct','StackGrade','Games','Minutes','AvgRating','Salary','ContractDays','Foreign','Action'];
   const lines = [hdr.join(',')].concat(rows.map(p => [
     `"${String(p.name || '').replace(/"/g,'""')}"`, fmtPos(p.pos), p.age, p.force, p.potCap, p.gap || 0,
+    fmtSkill(p.s1), fmtSkill(p.s2), p.stackPct || 0, p.nonStack ? 'NON-STACK' : (p.stackGrade || 'STD'),
     p.gamesPlayed || 0, p.seasonMinutes || 0, p.avgRating || 0, p.salary || 0, p.contractDays || 0,
     p.isForeign ? 'YES' : 'NO', `"${p.bAction || ''}"`
   ].join(',')));
