@@ -277,7 +277,7 @@ function buildBadgeTips() {
   const C = (window.LFEngine && window.LFEngine.config) || {};
   const inj = C.INJURED_SALE || { minorMaxDays: 10, moderateMaxDays: 28, majorMaxDays: 70, minorFactor: 0.70, moderateFactor: 0.55, majorFactor: 0.40, severeFactor: 0.25 };
   const sc = (C.SELLER_STANCE && C.SELLER_STANCE.scarce) || { starter: 0.50, backup: 0.30 };
-  const bp = C.BUY_PERSUADE || { levelGap: 2, forceOver: 5, wageFloor: 2.5, base: 0.25, max: 0.85 };
+  const bp = C.BUY_PERSUADE || { levelGap: 2, forceOver: 5, wageFloor: 1.8, base: 0.25, max: 0.85 };
   const sp = C.STAR_PULL || { minGap: 5, top: 5 };
   const preDays = C.PRECONTRACT_DAYS || 180;
   const ctrPct = Math.round(((C.COUNTER_MAX_NORMAL || 1.40) - 1) * 100);

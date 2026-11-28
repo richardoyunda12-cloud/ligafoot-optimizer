@@ -541,10 +541,23 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
     }
   }
 
-  const finalPowRaw = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
-    isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id, ...uCondOpts,
+  const lpEval = (typeof Tac.evaluateLinePassCombos === 'function')
+    ? Tac.evaluateLinePassCombos(
+      uXiObj,
+      rec.formation,
+      oPowLive,
+      { isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: newCondF.missMul },
+      { isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id, ...uCondOpts }
+    )
+    : null;
+  const liveLine = lpEval ? lpEval.defenseLine : (m.defenseLine || 'normal');
+  const livePass = lpEval ? lpEval.passStyle : (m.passStyle || 'mixed');
+
+  const finalPowRaw = lpEval ? lpEval.chosenPow : Tac.computeEngineSectorPower(uXiObj, rec.formation, {
+    isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id,
+    defenseLine: liveLine, passStyle: livePass, ...uCondOpts,
   });
-  const finalSim = styleSims[liveStyle];
+  const finalSim = lpEval ? lpEval.chosenSim : styleSims[liveStyle];
 
   let moraleDelta = null;
   if (hasMoraleOv) {
@@ -580,6 +593,7 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
   const oPowClean = scalePow(m.oppPow, oCleanRatio);
   const uPowClean = Tac.computeEngineSectorPower(uXiObj, rec.formation, {
     isHome: fx.isHome, crowdOver70: true, style: liveStyle, marking: liveMarking, falseNineId: f9Id,
+    defenseLine: liveLine, passStyle: livePass,
   });
   const cleanSim = Tac.simulateMatchExpectation(uPowClean, oPowClean, {
     isHome: fx.isHome, neutral: Boolean(fx.neutral), focus: recFocus, oppFocus, style: liveStyle, oppStyle, missMul: 1.0,
@@ -597,6 +611,14 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
     oShots: finalSim.oShots,
     playStyle: liveStyle,
     styleCompare,
+    defenseLine: liveLine,
+    passStyle: livePass,
+    defenseLineLabel: lpEval ? lpEval.defenseLineLabel : (m.defenseLineLabel || 'Normal'),
+    passStyleLabel: lpEval ? lpEval.passStyleLabel : (m.passStyleLabel || 'Campuran'),
+    linePassCompare: lpEval ? lpEval.compare : (m.linePassCompare || []),
+    linePassDeltaWin: lpEval ? lpEval.deltaWin : (m.linePassDeltaWin || 0),
+    linePassDeltaPts: lpEval ? lpEval.deltaPts : (m.linePassDeltaPts || 0),
+    linePassWhy: lpEval ? lpEval.why : (m.linePassWhy || ''),
     enginePow,
     oppPow: oPowLive,
     moraleDelta,
@@ -614,7 +636,7 @@ function computeLiveWarSim(fx, rec, m, activeWeather, activeRef, moraleOverride 
  * Checklist Diff Pra-Laga (#save.lastLineup vs Rencana War Room):
  * Menampilkan perbedaan konkrit sebelum menekan Kickoff di game.
  */
-function renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, activeStyle) {
+function renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, activeStyle, activeLineLbl, activePassLbl) {
   if (!fx || fx.isSim || !D.lastLineup || !m || !rec) return '';
   const ll = D.lastLineup;
 
@@ -631,6 +653,18 @@ function renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, active
     if (k.includes('very')) return 'very';
     if (k.includes('heavy')) return 'heavy';
     return 'light';
+  };
+  const normLine = s => {
+    const k = String(s || '').toLowerCase();
+    if (k.includes('low') || k.includes('rendah')) return 'low';
+    if (k.includes('high') || k.includes('tinggi')) return 'high';
+    return 'normal';
+  };
+  const normPass = s => {
+    const k = String(s || '').toLowerCase();
+    if (k.includes('short') || k.includes('pendek')) return 'short';
+    if (k.includes('long') || k.includes('panjang')) return 'long';
+    return 'mixed';
   };
   const stripParen = s => String(s || '').replace(/\s*\([^)]*\)\s*/g, '').replace(/\s*\[[^\]]*\]\s*/g, '').trim();
 
@@ -668,6 +702,24 @@ function renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, active
     cur: curMark,
     target: recMk,
     diff: normMark(curMark) !== normMark(recMk),
+  });
+
+  const curLineLbl = normLine(ll.defenseLine) === 'high' ? 'Tinggi' : (normLine(ll.defenseLine) === 'low' ? 'Rendah' : 'Normal');
+  const recLineLbl = activeLineLbl || m.defenseLineLabel || 'Normal';
+  items.push({
+    lbl: 'Garis Pertahanan',
+    cur: curLineLbl,
+    target: recLineLbl,
+    diff: normLine(curLineLbl) !== normLine(recLineLbl),
+  });
+
+  const curPassLbl = normPass(ll.passStyle) === 'short' ? 'Pendek' : (normPass(ll.passStyle) === 'long' ? 'Panjang' : 'Campuran');
+  const recPassLbl = activePassLbl || m.passStyleLabel || 'Campuran';
+  items.push({
+    lbl: 'Gaya Umpan',
+    cur: curPassLbl,
+    target: recPassLbl,
+    diff: normPass(curPassLbl) !== normPass(recPassLbl),
   });
 
   const curF9Id = ll.falseNine ? String(ll.falseNine) : null;
@@ -776,6 +828,11 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
   const viewOShots = liveSim ? liveSim.oShots : (rec ? rec.oShots : undefined);
   const viewStyle = liveSim ? liveSim.playStyle : (m ? m.playStyle : '-');
   const viewStyleCompare = liveSim ? liveSim.styleCompare : (m ? m.styleCompare : []);
+  const viewLineLbl = liveSim ? liveSim.defenseLineLabel : (m ? (m.defenseLineLabel || 'Normal') : 'Normal');
+  const viewPassLbl = liveSim ? liveSim.passStyleLabel : (m ? (m.passStyleLabel || 'Campuran') : 'Campuran');
+  const viewLinePassCompare = liveSim ? (liveSim.linePassCompare || []) : (m ? (m.linePassCompare || []) : []);
+  const viewLinePassDeltaWin = liveSim ? (liveSim.linePassDeltaWin || 0) : (m ? (m.linePassDeltaWin || 0) : 0);
+  const viewLinePassWhy = liveSim ? (liveSim.linePassWhy || '') : (m ? (m.linePassWhy || '') : '');
   const viewEnginePow = liveSim ? liveSim.enginePow : (rec ? rec.enginePow : null);
   const viewOppPow = liveSim ? liveSim.oppPow : (m ? m.oppPow : null);
 
@@ -813,6 +870,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
         ${rec ? `<span class="badge b-good mono" style="font-size:11px">⚽ ${esc(fmtForm(rec.formation))}</span>` : ''}
         ${viewWin !== undefined ? `<span id="wr-cheat-win" class="badge ${viewWin >= viewLoss ? 'b-good' : 'b-warn'} mono" style="font-size:11px">📊 ${viewWin}% W · ${viewDraw}% D · ${viewLoss}% L</span>` : ''}
         <span class="badge b-info" style="font-size:11px">${esc(shortStyle)} · ${esc(m ? m.attackFocus : '-')}</span>
+        <span class="badge b-accent" style="font-size:11px">Garis: ${esc(viewLineLbl)} · Umpan: ${esc(viewPassLbl)}</span>
         <span class="badge ${refObj ? refObj.badge : 'b-muted'}" style="font-size:11px">Marking: ${esc(shortMark)}</span>
         <span class="badge ${isManualWeather ? 'b-warn' : 'b-info'}" style="font-size:11px">${wMeta.ico} ${wMeta.lbl}</span>
         <span class="badge ${isManualRef ? 'b-warn' : 'b-info'}" style="font-size:11px">${esc(refTitle)}</span>
@@ -828,7 +886,7 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
     </div>`;
 
-  const preMatchDiffHtml = renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, viewStyle);
+  const preMatchDiffHtml = renderPreMatchDiffChecklist(fx, m, rec, refObj, isFirstOfficial, viewStyle, viewLineLbl, viewPassLbl);
 
   // H2H Visual Bar + Peluang Menang (#48031)
   const simBar = (rec && viewWin !== undefined) ? `
@@ -972,6 +1030,22 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </tbody></table></div>
     </details>` : '';
 
+  const linePassCmpRows = (Array.isArray(viewLinePassCompare) && viewLinePassCompare.length) ? `
+    <details class="wr-xi-peek" style="margin-top:5px">
+      <summary>📊 Bandingkan Garis Pertahanan × Gaya Umpan (Top 5 &amp; Normal/Campuran)</summary>
+      <div class="tbl-wrap" style="margin-top:5px">
+        <table style="font-size:10px">
+          <thead><tr><th>Garis · Umpan</th><th>W / D / L</th><th>xPts</th><th>xG (Ball)</th></tr></thead>
+          <tbody>${viewLinePassCompare.map(lp => `<tr class="${lp.isRec ? 'hl-user' : ''}">
+            <td><b>${esc(lp.lineLabel)} · ${esc(lp.passLabel)}</b>${lp.isRec ? ' <span class="badge b-good">✓</span>' : (lp.isBase ? ' <span class="badge b-muted">Base</span>' : '')}</td>
+            <td class="mono"><b class="c-green">${lp.winPct}</b>/<span class="c-amber">${lp.drawPct}</span>/<span class="c-red">${lp.lossPct}%</span></td>
+            <td class="mono"><b>${lp.xPts}</b></td>
+            <td class="mono">${lp.xGF}–${lp.xGA} <span class="c-muted">(${lp.possPct}%)</span></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </details>` : '';
+
   const styleCmpRows = (Array.isArray(viewStyleCompare) && viewStyleCompare.length) ? `
     <details class="wr-xi-peek" style="margin-top:5px">
       <summary>📊 Bandingkan 4 Gaya Main (Balanced · Off · Counter · Def)</summary>
@@ -1020,6 +1094,10 @@ function renderWarRoomMatchCard(fx, isFirstOfficial) {
       </div>
       <div class="mb-8"><b>Fokus Serang:</b> <span class="badge b-info">${esc(m.attackFocus)}</span>
         <div class="c-muted" style="margin-top:2px">${esc(m.focusReason)}</div>
+      </div>
+      <div class="mb-8"><b>Garis &amp; Umpan (OTA 2.1.0):</b> <span class="badge b-accent">Garis ${esc(viewLineLbl)}</span> <span class="badge b-accent">Umpan ${esc(viewPassLbl)}</span>${viewLinePassDeltaWin > 0 ? ` <span class="badge b-good mono">+${viewLinePassDeltaWin}% W</span>` : ''}
+        <div class="c-muted" style="margin-top:2px">${esc(viewLinePassWhy || 'Normal + Campuran menjaga keseimbangan DEF/MID/ATK.')}</div>
+        ${linePassCmpRows}
       </div>
       <div class="mb-8"><b>False Nine:</b> <span class="badge ${m.falseNine ? 'b-accent' : 'b-muted'}">${m.falseNine && m.falseNineTarget ? `ON: ${esc(m.falseNineTarget.name)}` : 'OFF (Tidak Dipakai)'}</span>
         <div class="c-muted" style="margin-top:2px">${esc(m.falseNineWhy || 'OFF — Mempertahankan 100% bobot lini depan.')}</div>

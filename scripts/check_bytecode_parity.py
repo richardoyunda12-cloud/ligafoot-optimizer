@@ -425,6 +425,16 @@ def run_checks(hasm_path):
         chk("MATCH_HOME_SHOT", fx.get("homeShot"), js_cfg.get("MATCH_HOME_SHOT"))
         if isinstance(fx.get("shoutRepeat"), list):
             chk("SHOUT_DECAY", fx["shoutRepeat"], js_cfg.get("SHOUT_DECAY"))
+        if isinstance(fx.get("line"), dict):
+            js_line = js_cfg.get("MATCH_LINE_MUL") or {}
+            for lk in ("low", "high"):
+                if isinstance(fx["line"].get(lk), list):
+                    chk(f"MATCH_LINE_MUL.{lk}", fx["line"][lk], js_line.get(lk))
+        if isinstance(fx.get("pass"), dict):
+            js_pass = js_cfg.get("MATCH_PASS_MUL") or {}
+            for pk in ("short", "long"):
+                if isinstance(fx["pass"].get(pk), list):
+                    chk(f"MATCH_PASS_MUL.{pk}", fx["pass"][pk], js_pass.get(pk))
 
     return mismatches, len(m_econ)
 

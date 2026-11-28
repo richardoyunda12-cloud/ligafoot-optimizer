@@ -1140,6 +1140,17 @@
       convBonusPct = U.roundTo((0.06 + 0.06 * speedRatio) * 100.0, 1);
     }
 
+    // OTA 2.1.0 (#3988 FX.line & FX.pass + #23507 effectiveSectors): diterapkan setelah style & sebelum focus/clamp ±8%
+    const lineKey = normalizeDefenseLine(opts.defenseLine !== undefined ? opts.defenseLine : opts.line);
+    const passKey = normalizePassStyle(opts.passStyle !== undefined ? opts.passStyle : opts.pass);
+    const lineTable = C.MATCH_LINE_MUL || { low: [0.08, -0.06, -0.04], normal: [0, 0, 0], high: [-0.08, 0.06, 0.04] };
+    const passTable = C.MATCH_PASS_MUL || { short: [0, 0.06, -0.04], mixed: [0, 0, 0], long: [0, -0.06, 0.05] };
+    const lm = lineTable[lineKey] || [0, 0, 0];
+    const pm = passTable[passKey] || [0, 0, 0];
+    rawDef *= (1.0 + lm[0]) * (1.0 + pm[0]);
+    rawMid *= (1.0 + lm[1]) * (1.0 + pm[1]);
+    rawAtk *= (1.0 + lm[2]) * (1.0 + pm[2]);
+
     // #3700 & #22453 Marking card multipliers: Light 0.80x (+30 den), Heavy 1.05x (+10 den), Very Heavy 1.35x (+0 den)
     let cardRiskLabel = 'Rendah (merah 0.80×, kuning lebih jarang)';
     const staminaDrainLabel = 'Normal'; // #3700: Light/Heavy/Very Heavy semua memiliki kelelahan Normal
@@ -1288,6 +1299,124 @@
       chemistry: chem,
       hasFormationBug: Boolean(bugInfo && bugInfo.hasBug),
       formationBugInfo: bugInfo,
+      defenseLine: lineKey,
+      passStyle: passKey,
+    };
+  }
+
+  const LINE_LABELS = { low: 'Rendah', normal: 'Normal', high: 'Tinggi' };
+  const PASS_LABELS = { short: 'Pendek', mixed: 'Campuran', long: 'Panjang' };
+
+  function normalizeDefenseLine(val) {
+    const k = String(val || '').toLowerCase();
+    if (k.includes('low') || k.includes('rendah')) return 'low';
+    if (k.includes('high') || k.includes('tinggi')) return 'high';
+    return 'normal';
+  }
+
+  function normalizePassStyle(val) {
+    const k = String(val || '').toLowerCase();
+    if (k.includes('short') || k.includes('pendek')) return 'short';
+    if (k.includes('long') || k.includes('panjang')) return 'long';
+    return 'mixed';
+  }
+
+  /**
+   * Evaluasi seluruh 9 kombinasi Garis Pertahanan x Gaya Umpan (#3988/#23507) dengan sectorCap ±8%.
+   */
+  function evaluateLinePassCombos(xiObj, formationKey, oppPow, simOpts = {}, secOpts = {}) {
+    const lineKeys = ['low', 'normal', 'high'];
+    const passKeys = ['short', 'mixed', 'long'];
+    const combos = [];
+    for (const lnTry of lineKeys) {
+      for (const psTry of passKeys) {
+        const pow = computeEngineSectorPower(xiObj, formationKey, {
+          ...secOpts,
+          defenseLine: lnTry,
+          passStyle: psTry,
+        });
+        const sim = simulateMatchExpectation(pow, oppPow, simOpts);
+        combos.push({
+          line: lnTry,
+          pass: psTry,
+          lineLabel: LINE_LABELS[lnTry],
+          passLabel: PASS_LABELS[psTry],
+          pow,
+          sim,
+          winPct: sim.winPct,
+          drawPct: sim.drawPct,
+          lossPct: sim.lossPct,
+          xPts: sim.xPts,
+          xGF: sim.xGF,
+          xGA: sim.xGA,
+          possPct: sim.possPct,
+        });
+      }
+    }
+    const baseRow = combos.find(c => c.line === 'normal' && c.pass === 'mixed') || combos[4];
+    combos.sort((a, b) => (b.xPts - a.xPts) || (b.winPct - a.winPct) || ((a.line === 'normal' && a.pass === 'mixed') ? -1 : 0));
+    const top = combos[0];
+    const useTop = top && (top.xPts >= baseRow.xPts + 0.008);
+    const chosen = useTop ? top : baseRow;
+    const deltaWin = U.roundTo(chosen.winPct - baseRow.winPct, 1);
+    const deltaPts = U.roundTo(chosen.xPts - baseRow.xPts, 3);
+
+    const compare = combos.slice(0, 5).map(c => ({
+      line: c.line,
+      pass: c.pass,
+      lineLabel: c.lineLabel,
+      passLabel: c.passLabel,
+      winPct: c.winPct,
+      drawPct: c.drawPct,
+      lossPct: c.lossPct,
+      xPts: c.xPts,
+      xGF: c.xGF,
+      xGA: c.xGA,
+      possPct: c.possPct,
+      isRec: c.line === chosen.line && c.pass === chosen.pass,
+      isBase: c.line === 'normal' && c.pass === 'mixed',
+    }));
+    if (!compare.some(c => c.isBase)) {
+      compare.push({
+        line: baseRow.line,
+        pass: baseRow.pass,
+        lineLabel: baseRow.lineLabel,
+        passLabel: baseRow.passLabel,
+        winPct: baseRow.winPct,
+        drawPct: baseRow.drawPct,
+        lossPct: baseRow.lossPct,
+        xPts: baseRow.xPts,
+        xGF: baseRow.xGF,
+        xGA: baseRow.xGA,
+        possPct: baseRow.possPct,
+        isRec: chosen === baseRow,
+        isBase: true,
+      });
+    }
+
+    const dMid = U.roundTo(chosen.pow.MID - baseRow.pow.MID, 1);
+    const dDef = U.roundTo(chosen.pow.DEF - baseRow.pow.DEF, 1);
+    const dAtk = U.roundTo(chosen.sim.effAtkUser - baseRow.sim.effAtkUser, 1);
+    let why = '';
+    if (chosen.line === 'high' && chosen.pass === 'short') {
+      why = `Tinggi + Pendek mendorong MID (+${dMid}, dipotong batas ±8% #23507) sambil menjaga ATK (${dAtk >= 0 ? '+' : ''}${dAtk}) dan hanya melepas DEF (${dDef >= 0 ? '+' : ''}${dDef}): +${deltaWin}% Win vs Normal/Campuran.`;
+    } else if (chosen.line === 'normal' && chosen.pass === 'mixed') {
+      why = `Normal + Campuran paling efisien (${chosen.winPct}% Win) — opsi lain terbentur batas cap ±8% atau penalti sektor tidak sebanding.`;
+    } else {
+      why = `Simulasi tertinggi di Garis ${chosen.lineLabel} + Umpan ${chosen.passLabel} (${chosen.winPct}% Win · ${deltaWin >= 0 ? '+' : ''}${deltaWin}% vs Normal/Campuran; ΔMID ${dMid >= 0 ? '+' : ''}${dMid}, ΔATK ${dAtk >= 0 ? '+' : ''}${dAtk}, ΔDEF ${dDef >= 0 ? '+' : ''}${dDef}).`;
+    }
+
+    return {
+      defenseLine: chosen.line,
+      passStyle: chosen.pass,
+      defenseLineLabel: chosen.lineLabel,
+      passStyleLabel: chosen.passLabel,
+      chosenPow: chosen.pow,
+      chosenSim: chosen.sim,
+      deltaWin,
+      deltaPts,
+      why,
+      compare,
     };
   }
 
@@ -1614,6 +1743,8 @@
     const oppFocus = opts.oppFocus || 'Center';
     const oppStyle = opts.oppStyle || 'Balanced';
     const missMul = U.safeNum(opts.missMul, 1.0);
+    const defenseLine = opts.defenseLine || opts.line || 'normal';
+    const passStyle = opts.passStyle || opts.pass || 'mixed';
     const uCondOpts = {
       altHit: U.safeNum(opts.altHit, 0),
       energyMul: U.safeNum(opts.energyMul, 1.0),
@@ -1623,7 +1754,7 @@
     function evalKey(fk) {
       const res = solveBestXi(userRoster, fk, foreignCap, userCountry, excludeIds, rotationMode, repLevel);
       const uPow = computeEngineSectorPower(res, fk, {
-        isHome, crowdOver70: true, style, marking, ...uCondOpts,
+        isHome, crowdOver70: true, style, marking, defenseLine, passStyle, ...uCondOpts,
       });
       const simC = simulateMatchExpectation(uPow, oppPow, {
         isHome, neutral: false, focus: 'Center', oppFocus, style, oppStyle, missMul,
@@ -2015,16 +2146,28 @@
     const useFalseNine = Boolean(bestF9Pick && bestF9Pick.sim.xPts >= baseStyleSim.xPts + 0.005);
     const finalF9Id = (useFalseNine && bestF9Pick) ? bestF9Pick.player.id : null;
 
-    // Sinkronkan styleCompare dengan konfigurasi False Nine aktif agar konsisten 100% dengan finalRecSim
+    // OTA 2.1.0 (#3988/#23507): Evaluasi 9 kombinasi Garis Pertahanan x Gaya Umpan
+    const lpEval = evaluateLinePassCombos(
+      bestXiObj,
+      best.formation,
+      effectiveOppPow,
+      { isHome, neutral, focus: best.optFocus, oppFocus, style: recStyle, oppStyle: finalAi.aiStyle, missMul: condF.missMul },
+      { isHome, neutral, crowdOver70: true, style: recStyle, marking: recMarking, falseNineId: finalF9Id, ...uCondOpts }
+    );
+    const recLine = lpEval.defenseLine;
+    const recPass = lpEval.passStyle;
+
+    // Sinkronkan styleCompare dengan konfigurasi False Nine + Line/Pass aktif agar konsisten 100% dengan finalRecSim
     const compareStyleSims = {};
     for (const stName of ['Balanced', 'Offensive', 'Counter-Attack', 'Defensive']) {
-      if (!finalF9Id) {
+      if (!finalF9Id && recLine === 'normal' && recPass === 'mixed') {
         compareStyleSims[stName] = styleSims[stName];
       } else if (stName === recStyle) {
-        compareStyleSims[stName] = bestF9Pick.sim;
+        compareStyleSims[stName] = lpEval.chosenSim;
       } else {
         const pF9St = computeEngineSectorPower(bestXiObj, best.formation, {
-          isHome, neutral, style: stName, marking: bestMark, falseNineId: finalF9Id, ...uCondOpts,
+          isHome, neutral, crowdOver70: true, style: stName, marking: recMarking, falseNineId: finalF9Id,
+          defenseLine: recLine, passStyle: recPass, ...uCondOpts,
         });
         compareStyleSims[stName] = simulateMatchExpectation(pF9St, effectiveOppPow, {
           isHome, neutral, focus: best.optFocus, oppFocus, style: stName, oppStyle: finalAi.aiStyle, missMul: condF.missMul,
@@ -2060,15 +2203,8 @@
       };
     });
 
-    const finalRecPow = computeEngineSectorPower(bestXiObj, best.formation, {
-      isHome,
-      crowdOver70: true,
-      style: recStyle,
-      marking: recMarking,
-      falseNineId: finalF9Id,
-      ...uCondOpts,
-    });
-    const finalRecSim = compareStyleSims[recStyle];
+    const finalRecPow = lpEval.chosenPow;
+    const finalRecSim = lpEval.chosenSim;
     best.winPct = finalRecSim.winPct;
     best.drawPct = finalRecSim.drawPct;
     best.lossPct = finalRecSim.lossPct;
@@ -2152,6 +2288,8 @@
       repLevel,
       style: recStyle,
       marking: recMarking,
+      defenseLine: recLine,
+      passStyle: recPass,
       oppFocus,
       oppStyle: finalAi.aiStyle,
       missMul: condF.missMul,
@@ -2166,6 +2304,7 @@
     if (condF.missMul !== 1.0 || condF.altHit > 0 || condF.userEnergyMul !== 1.0 || condF.oppEnergyMul !== 1.0 || condF.userCardMul !== 1.0 || condF.oppCardMul !== 1.0) {
       const uPowClean = computeEngineSectorPower(bestXiObj, best.formation, {
         isHome, crowdOver70: true, style: recStyle, marking: recMarking,
+        defenseLine: recLine, passStyle: recPass,
         falseNineId: useFalseNine && bestF9Pick ? bestF9Pick.player.id : null,
       });
       const oPowClean = computeEngineSectorPower(oppXi, (oppXi && oppXi.formation) || '4-4-2', {
@@ -2348,6 +2487,14 @@
       playReason: recStyleWhy,
       playStyleWhy: recStyleWhy,
       styleCompare,
+      defenseLine: recLine,
+      passStyle: recPass,
+      defenseLineLabel: lpEval.defenseLineLabel,
+      passStyleLabel: lpEval.passStyleLabel,
+      linePassWhy: lpEval.why,
+      linePassCompare: lpEval.compare,
+      linePassDeltaWin: lpEval.deltaWin,
+      linePassDeltaPts: lpEval.deltaPts,
       attackFocus: recFocus,
       focusReason: recFocusWhy,
       attackFocusWhy: recFocusWhy,
@@ -2830,7 +2977,7 @@
     };
   }
 
-  // Bytecode #24940 buyPersuadable: BUY_PERSUADE { levelGap: 2, forceOver: 5, wageFloor: 2.5 }
+  // Bytecode #3895 buyPersuadable: BUY_PERSUADE { levelGap: 2, forceOver: 5, wageFloor: 1.8 }
   function buyPersuadable(p, sellerCountry, buyerCountry, sellerLevel, buyerLevel, pol, extra = null) {
     if (!pol || pol.status !== 'REFUSE') return false;
     if (pol.reason === 'lastInPosition' || pol.reason === 'onlyGoalkeeper' || pol.reason === 'domesticRival' || pol.reason === 'transferPolicy') return false;
@@ -3060,6 +3207,9 @@
     resolveMatchCondFactors,
     solveBestXi,
     computeEngineSectorPower,
+    evaluateLinePassCombos,
+    normalizeDefenseLine,
+    normalizePassStyle,
     simulateMatchExpectation,
     optimizeCustomSlots,
     predictAiTacticsDetail,

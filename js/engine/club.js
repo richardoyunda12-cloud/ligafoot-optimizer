@@ -2432,6 +2432,8 @@
       playStyle: String(rawLastLineup.playStyle || ''),
       marking: String(rawLastLineup.marking || ''),
       attackFocus: String(rawLastLineup.attackFocus || ''),
+      defenseLine: String(rawLastLineup.defenseLine || ''),
+      passStyle: String(rawLastLineup.passStyle || ''),
       falseNine: Boolean(rawLastLineup.falseNine || rawLastLineup.falseNineId),
       falseNineId: rawLastLineup.falseNineId || null,
       captainId: rawLastLineup.captain || null,
@@ -2792,7 +2794,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.12.0 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.13.0 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,

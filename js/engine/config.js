@@ -718,10 +718,11 @@
     scarce: { starter: 0.50, backup: 0.30 },
   };
 
+  // OTA 2.1.0 (#3895): BUY_PERSUADE.wageFloor turun dari 2.5 -> 1.8
   const BUY_PERSUADE = {
     levelGap: 2,
     forceOver: 5,
-    wageFloor: 2.5,
+    wageFloor: 1.8,
     base: 0.25,
     perWage: 0.05,
     perPrice: 0.06,
@@ -772,6 +773,18 @@
 
   // Bytecode #3640 & #35210: Shout Decay per pengulangan shout yang sama dalam 25 menit [1, 0.5, 0]
   const SHOUT_DECAY = [1.0, 0.5, 0.0];
+
+  // Bytecode #3988 FX.line & FX.pass (OTA 2026-11-28): [DEF, MID, ATK]
+  const MATCH_LINE_MUL = {
+    low: [0.08, -0.06, -0.04],
+    normal: [0, 0, 0],
+    high: [-0.08, 0.06, 0.04],
+  };
+  const MATCH_PASS_MUL = {
+    short: [0, 0.06, -0.04],
+    mixed: [0, 0, 0],
+    long: [0, -0.06, 0.05],
+  };
 
   const LIVE_COACH_GUIDE = {
     shouts: [
@@ -1072,6 +1085,8 @@
       FINE_CFG,
       LOAN_OPTION,
       SHOUT_DECAY,
+      MATCH_LINE_MUL,
+      MATCH_PASS_MUL,
       LIVE_COACH_GUIDE,
       DECLINE_START_AGE_SCALE100,
       RELEASE_CLAUSE,

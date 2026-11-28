@@ -14,9 +14,9 @@
   const STORE_NAME = 'kv';
 
   const KEYS = {
-    STATIC_DB: 'static_db_v13',
-    STATIC_DB_META: 'static_db_meta_v13',
-    LAST_DASHBOARD: 'last_dashboard_v17',
+    STATIC_DB: 'static_db_v14',
+    STATIC_DB_META: 'static_db_meta_v14',
+    LAST_DASHBOARD: 'last_dashboard_v18',
     HISTORY: 'history_snapshots_v1',
   };
 
@@ -251,9 +251,9 @@
     await idbDel(KEYS.STATIC_DB);
     await idbDel(KEYS.STATIC_DB_META);
     await idbDel(KEYS.LAST_DASHBOARD);
-    await idbDel('static_db_v13');
-    await idbDel('static_db_meta_v13');
-    await idbDel('last_dashboard_v17');
+    await idbDel('static_db_v14');
+    await idbDel('static_db_meta_v14');
+    await idbDel('last_dashboard_v18');
   }
 
   root.LFStorage = {
