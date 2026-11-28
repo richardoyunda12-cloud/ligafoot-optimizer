@@ -440,9 +440,10 @@
       const rawStar = U.safeInt(yRow.shownPotential !== undefined && yRow.shownPotential !== null ? yRow.shownPotential : yRec.hash, 1);
       const potStar = U.clamp(yRec.star ? Math.max(8, rawStar) : rawStar, 1, 10);
       const rng = YOUTH_PEAK_RANGES[potStar - 1] || [25, 30];
+      const starBump = yRec.star ? 4 : 0;
       const basePeak = Math.round(((rng[0] + rng[1]) / 2) / 5) * 5;
-      const estPeak = Math.min(100, Math.round((basePeak + (yRec.star ? 4 : 0)) / 5) * 5);
-      yRec.estPotRange = rng;
+      const estPeak = Math.min(86, Math.round((basePeak + starBump) / 5) * 5);
+      yRec.estPotRange = [Math.min(86, rng[0] + starBump), Math.min(86, rng[1] + starBump)];
       yRec.estPotCap = Math.max(yRec.force, estPeak);
       if (yRow.potential === undefined || yRow.potential === null) {
         yRec.potential = Math.max(yRec.force, Math.round((rng[0] + rng[1]) / 2));

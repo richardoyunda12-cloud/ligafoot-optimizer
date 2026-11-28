@@ -1,5 +1,5 @@
-// ==================== RENDER TAB 3D: AKADEMI (v8.2.2) ====================
-let acadFilter = 'ALL'; // ALL | PROMO | HOLE | STAR6 | AGE20
+// ==================== RENDER TAB 3D: AKADEMI (v8.13.2) ====================
+let acadFilter = 'ALL'; // ALL | PROMO | HOLE | STAR | STAR6 | AGE20
 let acadSort = { col: 'pipeScore', dir: -1 };
 let yScoutTab = 'LOCAL'; // LOCAL | FOREIGN
 
@@ -22,6 +22,7 @@ function sortAcad(col) {
 function matchAcadFilter(y, flt) {
   if (flt === 'PROMO') return String(y.action || '').includes('PROMO');
   if (flt === 'HOLE') return Boolean(y.fillsHole);
+  if (flt === 'STAR') return Boolean(y.star);
   if (flt === 'STAR6') return (y.hash || 0) >= 6;
   if (flt === 'AGE20') return (y.age || 0) >= 20;
   return true;
@@ -39,13 +40,14 @@ function renderTab5() {
   const holeCnt = youth.filter(y => y.fillsHole).length;
   const age20Cnt = youth.filter(y => (y.age || 0) >= 20).length;
   const star6Cnt = youth.filter(y => (y.hash || 0) >= 6).length;
+  const starCnt = youth.filter(y => Boolean(y.star)).length;
 
   // 4 Mini KPI Akademi (2x2 di HP)
   const kpiEl = document.getElementById('t5-kpis');
   if (kpiEl) {
     kpiEl.innerHTML = `
       <div class="t3-mini-strip">
-        <div class="t3-mini-card"><div class="kpi-lbl">Total Prospek</div><div class="kpi-val mono c-sky">${youth.length}</div><div class="kpi-sub">★6+: ${star6Cnt} pemain</div></div>
+        <div class="t3-mini-card"><div class="kpi-lbl">Total Prospek</div><div class="kpi-val mono c-sky">${youth.length}</div><div class="kpi-sub">★6+: ${star6Cnt} · ⭐ Star: ${starCnt}</div></div>
         <div class="t3-mini-card"><div class="kpi-lbl">Siap Promosi</div><div class="kpi-val mono c-green">${promoCnt}</div><div class="kpi-sub">Dev ≥90 atau 20th+</div></div>
         <div class="t3-mini-card"><div class="kpi-lbl">Tambal Lubang</div><div class="kpi-val mono c-purple">${holeCnt}</div><div class="kpi-sub">Cocok lubang senior</div></div>
         <div class="t3-mini-card"><div class="kpi-lbl">Usia 20+ (Puncak)</div><div class="kpi-val mono ${age20Cnt ? 'c-amber' : 'c-muted'}">${age20Cnt}</div><div class="kpi-sub">Rate 0.35 @20, stop @21+</div></div>
@@ -64,6 +66,7 @@ function renderTab5() {
       ['ALL', 'Semua', youth.length],
       ['PROMO', '🚀 Promosikan', promoCnt],
       ['HOLE', '✓ Tambal Lubang', holeCnt],
+      ['STAR', '⭐ Star 1%', starCnt],
       ['STAR6', '★6+ Elite', star6Cnt],
       ['AGE20', '⚠ Usia 20', age20Cnt],
     ];
@@ -95,6 +98,7 @@ function renderTab5() {
     ${acadTh('age', 'Usia', 'col-hide-mob')}
     ${acadTh('force', 'Force')}
     ${acadTh('estPotCap', 'Est. PotCap')}
+    ${acadTh('marketValue', 'Value', 'col-hide-mob')}
     ${acadTh('stackPct', 'Skill Stack')}
     ${acadTh('pipeScore', 'Skor', 'col-hide-mob')}
     <th class="col-desk-only">Aksi</th>
@@ -103,12 +107,14 @@ function renderTab5() {
     const devCol = devPct >= 90 ? 'var(--green)' : (devPct >= 60 ? 'var(--sky)' : 'var(--amber)');
     const actCls = y.action.includes('PROMO') ? 'b-good' : (y.action.includes('TAHAN') ? 'b-info' : 'b-muted');
     const age20Badge = (y.age || 0) > 20 ? '<span class="badge b-crit">⚠ STALLED 21+</span>' : ((y.age || 0) === 20 ? '<span class="badge b-warn">⏳ LAMBAT 20th</span>' : '');
+    const starBadge = y.star ? '<span class="badge b-warn" style="border-color:rgba(251,191,36,.6);color:#fde68a" title="Status STAR langka (1%): +4 plafon PotCap &amp; +5% bonus permanen Match Engine (Value ×1,7)">⭐ STAR</span>' : '';
     const stackCell = typeof skillStackCellHtml === 'function' ? skillStackCellHtml(y) : `<span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span>`;
     return `<tr>
       <td>
         <div><a class="clickable-name" onclick="openPlayerDrawer('youth','${escJs(y.id)}')"><b>${esc(y.name)}</b></a></div>
         <div class="inline-sticky-meta">
           <span class="badge ${actCls}">${esc(y.action)}</span>
+          ${starBadge}
           ${y.fillsHole ? '<span class="badge b-good">✓ TAMBAL</span>' : ''}
           ${age20Badge}
         </div>
@@ -117,13 +123,14 @@ function renderTab5() {
       <td class="mono c-amber"><b>★${y.hash}</b></td>
       <td><div class="mini-bar-wrap"><div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${devPct}%;background:${devCol}"></div></div><span class="mono" style="font-size:11px;min-width:28px;text-align:right">${devPct}%</span></div></td>
       <td class="mono col-hide-mob ${y.age >= 20 ? 'c-amber' : ''}"><b>${y.age}</b></td>
-      <td class="mono"><b>${y.force}</b></td>
+      <td class="mono"><b>${y.force}</b><div class="c-muted" style="font-size:10px">${fmtM(y.marketValue)}</div></td>
       <td class="mono"><b class="c-green">${y.estPotCap || y.potCap || y.force}</b>${Array.isArray(y.estPotRange) ? `<div class="c-muted" style="font-size:10px">Est ${y.estPotRange[0]}–${y.estPotRange[1]}</div>` : ''}</td>
+      <td class="mono col-hide-mob"><b>${fmtM(y.marketValue)}</b>${y.star ? '<div class="c-amber" style="font-size:10px">×1.7 STAR</div>' : ''}</td>
       <td>${stackCell}</td>
       <td class="mono col-hide-mob"><b>${y.pipeScore}</b></td>
       <td class="col-desk-only"><span class="badge ${actCls}">${esc(y.action)}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="10" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
+  }).join('') : '<tr><td colspan="11" class="c-muted">Tidak ada prospek akademi yang cocok dengan filter ini.</td></tr>') + `</tbody>`;
   if (typeof syncTableAllColsClass === 'function') syncTableAllColsClass('t5-tbl');
 
   // Panel Olheiro da Base Rival Junior (#25334–#25338)
@@ -151,19 +158,23 @@ function renderTab5() {
     const renderYsRows = (arr) => arr.length ? arr.map(t => {
       const priceVal = t.price || t.scoutPrice || 0;
       const dp25 = t.dp25 || Math.round(priceVal * 0.25);
+      const starPill = t.star ? ` <span class="badge b-warn" style="border-color:rgba(251,191,36,.6);color:#fde68a">⭐ STAR</span>` : '';
       const nameHtml = isRivalAcad
-        ? `<b>${esc(t.name)}</b>`
-        : `<a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>`;
+        ? `<b>${esc(t.name)}</b>${starPill}`
+        : `<a class="clickable-name" onclick="openPlayerDrawer('scout','${escJs(t.id)}')"><b>${esc(t.name)}</b></a>${starPill}`;
       const extraCol = isRivalAcad
         ? `<td class="mono c-sky col-hide-mob"><b>${t.development || 50}%</b></td>`
         : `<td class="mono c-sky col-hide-mob"><b>+${t.youthScoutGap}</b></td>`;
+      const ysStackHtml = typeof skillStackCellHtml === 'function'
+        ? skillStackCellHtml(t)
+        : `<span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span>`;
       return `<tr>
       <td>${nameHtml}</td>
       <td class="mono"><b>${fmtPos(t.pos)}</b> · ${t.age}th · ${fmtFoot(t.foot)}</td>
       <td class="mono"><b>${t.force}</b>→<b class="c-green">${t.potCap}</b> <span class="c-muted">(★${t.hash})</span></td>
       ${extraCol}
-      <td class="col-hide-mob"><span class="badge b-good">${fmtSkills(t.s1, t.s2)} (+${t.stackPct}%)</span></td>
-      <td class="mono"><b class="c-amber">${fmtM(priceVal)}</b><div class="c-sky" style="font-size:10.5px">DP 25%: ${fmtM(dp25)}</div></td>
+      <td class="col-hide-mob">${ysStackHtml}</td>
+      <td class="mono"><b class="c-amber">${fmtM(priceVal)}</b><div class="c-sky" style="font-size:10.5px">DP 25%: ${fmtM(dp25)}</div><div class="c-muted" style="font-size:10px">MV: ${fmtM(t.marketValue)}</div></td>
       <td class="col-hide-mob">${esc(t.teamName)} <span class="c-muted">(${esc(t.teamCountry)})</span></td>
     </tr>`;
     }).join('') : '<tr><td colspan="7" class="c-muted">Tidak ada kandidat.</td></tr>';

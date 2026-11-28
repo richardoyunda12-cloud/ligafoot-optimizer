@@ -798,9 +798,12 @@
             potRange: y.estPotRange || null,
             development: y.development || 50,
             hash: y.hash,
+            star: Boolean(y.star),
             s1: y.s1,
             s2: y.s2,
             stackPct: y.stackPct,
+            stackGrade: y.stackGrade,
+            nonStack: Boolean(y.nonStack),
             marketValue: baseMv,
             price: rivalPrice,
             dp25: Math.round(rivalPrice * 0.25),
@@ -837,7 +840,7 @@
     const ysLocal = youthScoutCandidates.filter(x => x.isLocal).slice(0, 30);
     const ysForeign = youthScoutCandidates.filter(x => !x.isLocal).slice(0, 30);
 
-    rivalYouthTargets.sort((a, b) => (b.hash - a.hash) || (b.potCap - a.potCap) || (a.price - b.price));
+    rivalYouthTargets.sort((a, b) => (b.hash - a.hash) || ((b.star ? 1 : 0) - (a.star ? 1 : 0)) || (b.potCap - a.potCap) || (a.price - b.price));
     const ryLocal = rivalYouthTargets.filter(x => x.isLocal).slice(0, 30);
     const ryForeign = rivalYouthTargets.filter(x => !x.isLocal).slice(0, 30);
 

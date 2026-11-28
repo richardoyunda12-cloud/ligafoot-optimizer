@@ -1,7 +1,7 @@
 {
-  "name": "LigaFoot Optimizer v8.13.1",
+  "name": "LigaFoot Optimizer v8.13.2",
   "short_name": "LigaFoot Opt",
-  "description": "Optimizer 360° LigaFoot Manager v8.13.1 (War Room, Best XI, Auto-Scout Moneyball, Quant Monte Carlo, & Ekonomi Bytecode v9) — 100% lokal & offline di HP.",
+  "description": "Optimizer 360° LigaFoot Manager v8.13.2 (War Room, Best XI, Auto-Scout Moneyball, Quant Monte Carlo, & Ekonomi Bytecode v9) — 100% lokal & offline di HP.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

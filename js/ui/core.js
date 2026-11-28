@@ -835,10 +835,14 @@ function openPlayerDrawer(kind, id) {
   } else if (kind === 'youth') {
     const y = (D.youth || []).find(x => x.id === id);
     if (!y) return;
+    const yStackHtml = typeof skillStackCellHtml === 'function'
+      ? skillStackCellHtml(y)
+      : `<span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span>`;
     body.innerHTML = `
       <div class="flex-between mb-8">
         <div>
           <span class="badge b-accent">AKADEMI (YOUTH)</span>
+          ${y.star ? '<span class="badge b-warn" style="border-color:rgba(251,191,36,.6);color:#fde68a">⭐ STAR 1%</span>' : ''}
           ${y.fillsHole ? '<span class="badge b-good">✓ TAMBAL LUBANG</span>' : ''}
         </div>
         <button class="btn btn-sm" onclick="closePlayerDrawer()">Tutup (ESC)</button>
@@ -850,11 +854,14 @@ function openPlayerDrawer(kind, id) {
       <div class="pill-row"><span class="badge ${y.action.includes('PROMO') ? 'b-good' : 'b-info'}">${esc(y.action)}</span></div>
       <div class="drawer-sec">
         <h3>🌱 Progres Akademi</h3>
+        <div class="drawer-kv"><span>Status STAR (1%)</span>${y.star ? '<b class="c-amber">⭐ YA (+4 PotCap &amp; +5% Match Engine · Value ×1,7)</b>' : '<span class="c-muted">Normal</span>'}</div>
         <div class="drawer-kv"><span>Force Saat Ini</span><b class="mono">${y.force}</b></div>
         <div class="drawer-kv"><span>Est. Pot / PotCap</span><b class="mono c-green">${y.estPotCap || y.potCap || y.force}${Array.isArray(y.estPotRange) ? ` (rentang ${y.estPotRange[0]}–${y.estPotRange[1]})` : ''}</b></div>
+        <div class="drawer-kv"><span>Value (Market Value)</span><b class="mono">${fmtM(y.marketValue)}</b></div>
+        <div class="drawer-kv"><span>Gaji Akademi</span><b class="mono">${fmtM(y.salary)}/bln</b></div>
         <div class="drawer-kv"><span>Development</span><b class="mono c-green">${y.development}%</b></div>
         <div class="mini-bar-bg" style="height:9px;margin:4px 0 8px"><div class="mini-bar-fill" style="width:${Math.min(100, y.development)}%;background:var(--green)"></div></div>
-        <div class="drawer-kv"><span>Skill &amp; Stacking</span><span class="badge ${y.nonStack ? 'b-crit' : 'b-good'}">${fmtSkills(y.s1, y.s2)} (+${y.stackPct}%)</span></div>
+        <div class="drawer-kv"><span>Skill &amp; Stacking</span>${yStackHtml}</div>
         <div class="drawer-kv"><span>Skor Pipeline Akademi</span><b class="mono">${y.pipeScore}</b></div>
       </div>
       <div class="c-muted mt-12" style="font-size:11px">Catatan engine (#22569): Laju development melambat di usia 20 (rate 0.35) dan berhenti bertambah pada usia 21+. Jika ★≥5 dan Dev ≥90 atau usia 20, promosikan untuk menambal skuad atau dijadikan aset flip.</div>`;

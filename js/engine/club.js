@@ -1488,6 +1488,7 @@
       const fillsHole = holePosSet.has(y.pos);
       const yScore = U.roundTo(
         y.hash * 10.0 + y.development * 0.45 + y.stackPct * 1.5
+        + (y.star ? 25.0 : 0.0)
         + (fillsHole ? 15.0 : 0.0) + (y.age >= 19 ? 10.0 : 0.0)
         - (y.nonStack ? 8.0 : 0.0),
         1
@@ -2794,7 +2795,7 @@
     const data = {
       cfg: C.getClientConfig(),
       meta: {
-        version: 'v8.13.1 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
+        version: 'v8.13.2 Web PWA (Engine v1.2.0 • OTA 2.1.0 Verified)',
         realScale: isRealScale,
         generatedAt,
         parseSec,
